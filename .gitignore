@@ -1,0 +1,33 @@
+# Local secrets and runtime/user data
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.jks
+*.keystore
+*.pem
+*.p12
+*.pfx
+google-services.json
+local.properties
+credentials.json
+uploads/
+private_uploads/
+# Generated files
+.gradle/
+.kotlin/
+build/
+node_modules/
+.expo/
+dist/
+web-build/
+*.apk
+*.aab
+*.log
+hs_err_pid*
+replay_pid*
+output/

@@ -1,0 +1,86 @@
+/**
+ * Global Stylesheet - SCS360
+ * Integrates Normalize CSS Reset, Design Tokens & 48px Minimum Touch Target Rules
+ */
+
+@import url('./normalize.css');
+@import url('./design-tokens.css');
+
+/* ==========================================================================
+   1. Global Interactive Elements & 48px Touch Target Standard
+   ========================================================================== */
+
+button,
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+.btn,
+.interactive-element,
+[role="button"] {
+  min-height: var(--touch-target-min, 48px);
+  min-width: var(--touch-target-min, 48px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--button-padding-y) var(--button-padding-x);
+  touch-action: manipulation;
+  user-select: none;
+  border-radius: var(--radius-md);
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Icon-only buttons */
+.icon-btn,
+button[aria-label]:not(:has(span)) {
+  min-height: var(--icon-button-size, 48px);
+  min-width: var(--icon-button-size, 48px);
+  padding: 0;
+}
+
+/* Form Inputs */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="tel"],
+select,
+textarea {
+  min-height: var(--input-min-height, 48px);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  width: 100%;
+  max-width: 100%;
+}
+
+/* ==========================================================================
+   2. Container Layouts & Word Wrapping Protection
+   ========================================================================== */
+
+.content-container {
+  width: 100%;
+  max-width: 100%;
+  padding: var(--screen-padding);
+  box-sizing: border-box;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--row-gap);
+  width: 100%;
+  max-width: 100%;
+}
+
+.action-row > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Global Text Word-Break & Overflow Prevention */
+p, span, h1, h2, h3, h4, h5, h6, label, a, button {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}

@@ -1,0 +1,11 @@
+.gradle/
+.kotlin/
+build/
+local.properties
+*.jks
+*.keystore
+*.apk
+*.aab
+hs_err_pid*.log
+replay_pid*.log
+google-services.json
