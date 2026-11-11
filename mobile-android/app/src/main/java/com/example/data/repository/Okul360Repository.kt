@@ -169,9 +169,9 @@ class Okul360Repository(private val context: Context) {
     }
 
     private suspend fun <T> requestContext(block: suspend kotlinx.coroutines.CoroutineScope.() -> T): T {
-        val scope = ApiClientProvider.interceptor.captureScope()
+        val scope = com.example.data.remote.NativeRequestScope.operation()
         try {
-            val result = withContext(Dispatchers.IO, block)
+            val result = scope.io(block)
             scope.ensureCurrent()
             return result
         } catch (failure: Exception) {

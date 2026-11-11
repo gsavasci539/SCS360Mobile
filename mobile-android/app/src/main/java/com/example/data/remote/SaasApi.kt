@@ -1,8 +1,6 @@
 package com.example.data.remote
 
 import com.example.data.model.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -17,19 +15,20 @@ import java.util.UUID
 
 /** Actual platform records only; no sample catalog, locally paid invoice or period arithmetic. */
 class SaasApi {
+    private val scope = NativeRequestScope.bound() ?: ApiClientProvider.interceptor.captureScope()
     private val token = ApiClientProvider.interceptor.authToken
     private val workspace = ApiClientProvider.interceptor.workspaceOrganizationId
     private val base = ApiClientProvider.activeBaseUrl
-    fun current() = token == ApiClientProvider.interceptor.authToken && workspace == ApiClientProvider.interceptor.workspaceOrganizationId && base == ApiClientProvider.activeBaseUrl
+    fun current() = scope.current()
     private val client = ApiClientProvider.createOkHttpClient().newBuilder().addInterceptor { chain ->
         check(current() && !token.isNullOrBlank()) { "Oturum değişti" }
         val builder = chain.request().newBuilder().header("Authorization", "Bearer $token")
         if (workspace == null) builder.removeHeader("X-SCS360-Organization-Id") else builder.header("X-SCS360-Organization-Id", workspace)
         chain.proceed(builder.build())
     }.build()
-    suspend fun request(path: String, method: String = "GET", body: JSONObject? = null): Any = withContext(Dispatchers.IO) {
+    suspend fun request(path: String, method: String = "GET", body: JSONObject? = null): Any = scope.io {
         check(current()) { "Oturum değişti" }
-        val builder = Request.Builder().url(base + path)
+        val builder = Request.Builder().url(base + path).tag(NativeRequestScope::class.java, scope)
         if (method != "GET") builder.method(method, (body ?: JSONObject()).toString().toRequestBody("application/json".toMediaType()))
         client.newCall(builder.build()).execute().use { response ->
             check(response.isSuccessful) { "Üyelik isteği doğrulanamadı (HTTP ${response.code})" }

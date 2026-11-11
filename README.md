@@ -6,11 +6,11 @@
 
 ## Android geliştirme
 
-JDK17, Gradle9.3.1 ve Android SDK36.1 gerekir. Kaynakta Gradle wrapper yoktur; belirtilen Gradle sürümünü kurun. `mobile-android/` içinde:
+Uygulama derlemesi JDK17 ile geçti; Android36 Robolectric testleri Java21+ gerektirir (yerelde Java23 kullanılıyor). Gradle9.3.1 ve Android SDK36.1 gerekir. Resmî Gradle9.3.1 wrapper kaynakta vardır ve dağıtım SHA256 değeri pinlidir. `mobile-android/` içinde (Windows PowerShell için `./gradlew` yerine `./gradlew.bat` kullanın):
 
 ```sh
-gradle --max-workers 1 --no-parallel :app:testDebugUnitTest
-gradle --max-workers 1 --no-parallel :app:assembleDebug -PAPI_BASE_URL=https://YOUR_BACKEND/api/
+./gradlew --max-workers 1 --no-parallel :app:testDebugUnitTest
+./gradlew --max-workers 1 --no-parallel :app:assembleDebug -PAPI_BASE_URL=https://YOUR_BACKEND/api/
 ```
 
 `YOUR_BACKEND` sahibi tarafından sağlanacak yer tutucudur. Varsayılan HTTP adresi yalnız yerel emülatör geliştirmesi içindir. Gerçek API adresini ve Firebase yapılandırmasını yerel olarak sağlayın. Merchant anahtarları mobil uygulamaya konulmaz.
@@ -21,8 +21,8 @@ gradle --max-workers 1 --no-parallel :app:assembleDebug -PAPI_BASE_URL=https://Y
 
 ## Kabul durumu
 
-Son doğrulanmış native responsive checkpoint40/40 testten geçti; bu sonuç daha sonraki API/oturum değişikliklerini kapsamaz. Güncel API/oturum kaynağının derlemesi ve yeni testleri devam ediyor. Ayrıntılar `docs/VERIFICATION_20261111.md` içindedir. Bütün native işlemler web ile henüz eşit değildir.
+Güncel native kaynak51/51 testten geçti; hata ve atlanan test yoktur. Bu paket responsive, API scope, Retrofit tanım ve token kasası regresyonlarını içerir. Aynı Kotlin kaynakla debug APK derlendi; imza ve paket metadata kontrolü geçti. APK yerelde tutulur; burada kaynaklar ve kabul kanıtı bulunur. Ayrıntılar `docs/VERIFICATION_20261111.md` içindedir. Bütün native işlemler web ile henüz eşit değildir.
 
-Gerçek A26 cihazı, sağlayıcı sandbox anahtarları/HTTPS callback ve mağaza abonelik ürünleri için kabul açık. Eski APK güncel kaynağın çıktısı değildir; bu depoda yayınlanmaz. App Store/Google Play ürünleri henüz tanımlı olmadığından native SaaS satın alımı kapalıdır. Kurumların kendi okul/kurs tahsilatları ayrı sunucu checkout hesabı kullanır.
+Gerçek A26 cihazı, sağlayıcı sandbox anahtarları/HTTPS callback ve mağaza abonelik ürünleri için kabul açık. Debug APK üretim sürümü değildir ve bu kaynak deposuna eklenmez. App Store/Google Play ürünleri henüz tanımlı olmadığından native SaaS satın alımı kapalıdır. Kurumların kendi okul/kurs tahsilatları ayrı sunucu checkout hesabı kullanır.
 
 Gizli anahtarlar, gerçek kullanıcı kayıtları, yerel veritabanları, imzalama dosyaları ve derleme önbellekleri bu kaynak aktarımına dahil edilmez.

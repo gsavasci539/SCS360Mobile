@@ -2,8 +2,7 @@ package com.example.data.payment
 
 import android.content.Context
 import com.example.data.remote.ApiClientProvider
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.example.data.remote.NativeRequestScope
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -12,6 +11,7 @@ import java.math.BigDecimal
 import java.util.UUID
 
 class SchoolCheckout(context: Context, private val debtId: String) {
+    private val scope = NativeRequestScope.bound() ?: ApiClientProvider.interceptor.captureScope()
     private val prefs = context.getSharedPreferences("school_checkout_v1", Context.MODE_PRIVATE)
     private val userId = com.example.data.local.SessionManager(context).getUser()?.id ?: error("Oturum gerekli")
     private val actor = ApiClientProvider.interceptor.authToken.orEmpty()
@@ -24,10 +24,10 @@ class SchoolCheckout(context: Context, private val debtId: String) {
     private val client = ApiClientProvider.createOkHttpClient()
     init { UUID.fromString(debtId); UUID.fromString(userId); require(actor.isNotBlank()) { "Oturum gerekli" } }
     fun saved(): JSONObject? = prefs.getString(fingerprint, null)?.let { JSONObject(it) }
-    private fun sameSession() = check(actor == ApiClientProvider.interceptor.authToken && tenant == ApiClientProvider.interceptor.tenantId && workspace == ApiClientProvider.interceptor.workspaceOrganizationId && baseUrl == ApiClientProvider.activeBaseUrl) { "Oturum değişti; ödeme ekranını yeniden açın" }
-    private suspend fun call(path: String, body: JSONObject? = null): JSONObject = withContext(Dispatchers.IO) {
+    private fun sameSession() = scope.ensureCurrent()
+    private suspend fun call(path: String, body: JSONObject? = null): JSONObject = scope.io {
         sameSession()
-        val request = Request.Builder().url(baseUrl + path).apply {
+        val request = Request.Builder().url(baseUrl + path).tag(NativeRequestScope::class.java, scope).apply {
             if (body != null) post(body.toString().toRequestBody("application/json".toMediaType()))
         }.build()
         client.newCall(request).execute().use { response ->

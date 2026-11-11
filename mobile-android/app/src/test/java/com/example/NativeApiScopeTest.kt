@@ -104,6 +104,63 @@ class NativeApiScopeTest {
         }
     }
 
+    @Test fun allRetrofitDeclarationsHaveResolvableRequestAndResponseTypes() {
+        retrofit2.Retrofit.Builder().baseUrl("https://example.test/api/")
+            .addConverterFactory(retrofit2.converter.moshi.MoshiConverterFactory.create(ApiClientProvider.moshi))
+            .validateEagerly(true).build().create(Okul360ApiService::class.java)
+    }
+
+    @Test fun oldOperationCannotCreateAWritingCallWithTheNewActorsToken() = runBlocking {
+        val calls = AtomicInteger()
+        withServer({ e -> calls.incrementAndGet(); reply(e, 200, "{}") }) { url ->
+            val api = ApiClientProvider.createService(url)
+            ApiClientProvider.interceptor.setSession("synthetic-actor-A")
+            val scope = ApiClientProvider.interceptor.captureScope()
+            val failure = runCatching {
+                scope.io {
+                    ApiClientProvider.interceptor.setSession("synthetic-actor-B")
+                    api.participateSurvey("synthetic-survey", mapOf("answers" to emptyMap<String, String>()))
+                }
+            }.exceptionOrNull()
+            assertTrue(failure is CancellationException)
+            assertEquals(0, calls.get())
+            assertEquals("synthetic-actor-B", ApiClientProvider.interceptor.authToken)
+        }
+    }
+
+    @Test fun aCreatedCallCannotAdoptAnotherSessionWhileWaitingToExecute() = runBlocking {
+        val calls = AtomicInteger()
+        withServer({ e -> calls.incrementAndGet(); reply(e, 200, "{}") }) { url ->
+            ApiClientProvider.createService(url)
+            ApiClientProvider.interceptor.setSession("synthetic-actor-A")
+            val scope = ApiClientProvider.interceptor.captureScope()
+            val request = okhttp3.Request.Builder().url(url + "synthetic-write")
+                .tag(NativeRequestScope::class.java, scope)
+                .post(okhttp3.RequestBody.create(null, "{}")).build()
+            val pending = ApiClientProvider.createOkHttpClient().newCall(request)
+            ApiClientProvider.interceptor.setSession("synthetic-actor-B")
+            try { pending.execute().use { fail("Obsolete call must not reach the server") } }
+            catch (_: NativeContextChangedException) { }
+            assertEquals(0, calls.get())
+            assertEquals("synthetic-actor-B", ApiClientProvider.interceptor.authToken)
+        }
+    }
+
+    @Test fun loggingOutAndBackInWithTheSameTokenDoesNotReviveOldSaasOperations() = runBlocking {
+        val calls = AtomicInteger()
+        withServer({ e -> calls.incrementAndGet(); reply(e, 200, "{}") }) { url ->
+            ApiClientProvider.createService(url)
+            ApiClientProvider.interceptor.setSession("synthetic-same-token")
+            val old = SaasApi()
+            ApiClientProvider.interceptor.setSession(null)
+            ApiClientProvider.interceptor.setSession("synthetic-same-token")
+            assertFalse(old.current())
+            val failure = runCatching { old.request("platform/tenants", "POST", JSONObject()) }.exceptionOrNull()
+            assertTrue(failure is CancellationException)
+            assertEquals(0, calls.get())
+        }
+    }
+
     @Test fun failedWritesAndReadsNeverReturnLocalSuccessOrSampleConsents() = runBlocking {
         withServer({ e -> reply(e, 503, """{"detail":"synthetic unavailable"}""") }) { url ->
             ApiClientProvider.createService(url)

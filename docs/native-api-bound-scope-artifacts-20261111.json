@@ -1,0 +1,35 @@
+{
+  "status": "DEBUG_ARTIFACT_VERIFIED_NOT_FULL_PARITY",
+  "tests": {
+    "tests": 51,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "test_log": "output/native-api-bound-scope-tests-20261111.log",
+  "source_sha_manifest": "native-api-bound-scope-accepted-20261111.json",
+  "kotlin_sources_unchanged_since_test": true,
+  "apk": {
+    "size": 37296299,
+    "sha256": "2844d7d8333b2509310912c127ba29a6e15f89db1a595f286d36ebe3d75526bd",
+    "build_log": "output/native-api-bound-scope-apk-20261111.log",
+    "build_duration": "3m16s",
+    "signer_verified": true,
+    "package": "com.aistudio.okul360.hdtcca",
+    "min_sdk": 24,
+    "target_sdk": 36,
+    "debug": true,
+    "default_api_is_emulator_only": true
+  },
+  "wrapper": {
+    "version": "9.3.1",
+    "distribution_sha256": "b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06",
+    "version_check_passed": true
+  },
+  "remaining": [
+    "canonical operation/API/payload/DTO parity",
+    "real A26 acceptance",
+    "real provider keys/HTTPS sandbox acceptance",
+    "store products/native billing and device acceptance"
+  ]
+}

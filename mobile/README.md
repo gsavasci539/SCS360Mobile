@@ -21,7 +21,7 @@ SCS360 Okul Yönetim Sistemi için mobil uygulama. Hem iOS hem de Android platfo
 
 ## Gereksinimler
 
-- Node.js 18+ 
+- Node.js (kilitli React Native0.86 engine koşulu): `^20.19.4 || ^22.13.0 || ^24.3.0 || >=25.0.0`
 - npm veya yarn
 - iOS geliştirme için macOS (Xcode)
 - Android geliştirme için Android Studio

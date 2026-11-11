@@ -12,6 +12,7 @@ import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.http.*
 import java.util.concurrent.TimeUnit
 
+@JvmSuppressWildcards
 interface Okul360ApiService {
 
     // System Health & Ready
@@ -1545,6 +1546,8 @@ class AuthAndTenantInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val snapshot = identity.get()
         val base = ApiClientProvider.activeBaseUrl
+        val scope = chain.request().tag(NativeRequestScope::class.java) ?: captureScope()
+        if (!scope.matches(snapshot, base)) throw NativeContextChangedException()
         val expected = java.net.URI(base)
         val target = chain.request().url
         val expectedPort = if (expected.port != -1) expected.port else if (expected.scheme == "https") 443 else 80
@@ -1633,9 +1636,15 @@ object ApiClientProvider {
             (endpoint.scheme == "https" || com.example.BuildConfig.DEBUG && endpoint.scheme == "http")) { "Geçerli HTTPS API adresi gerekli" }
         if (activeBaseUrl != normalizedUrl) interceptor.setSession(null)
         activeBaseUrl = normalizedUrl
+        val client = createOkHttpClient()
         val retrofit = Retrofit.Builder()
             .baseUrl(normalizedUrl)
-            .client(createOkHttpClient())
+            .callFactory { request ->
+                if (normalizedUrl != activeBaseUrl) throw NativeContextChangedException()
+                val scope = NativeRequestScope.bound() ?: interceptor.captureScope()
+                scope.ensureNetworkCurrent()
+                client.newCall(request.newBuilder().tag(NativeRequestScope::class.java, scope).build())
+            }
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
 
