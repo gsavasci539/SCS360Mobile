@@ -1,0 +1,13 @@
+{
+  "real_backend": true,
+  "temporary_db": true,
+  "native_tests": 1,
+  "paged_rows_before": 101,
+  "rows_after": 102,
+  "identical_retry_bytes": true,
+  "stale_version_status": 409,
+  "read_only_write_status": 403,
+  "foreign_class_status": 404,
+  "durable_audit_receipts": 1,
+  "notification_jobs_created": 0
+}

@@ -310,42 +310,29 @@ class Okul360Repository(private val context: Context) {
     }
 
     suspend fun getAttendance(classId: String, date: String): List<AttendanceRecord> = requestContext {
-        val cId = classId.takeIf { it != "all" && it.isNotBlank() }
-        try {
-            val records = try {
-                apiService.getAttendance(classId = cId, date = date)
-            } catch (failure: Exception) { throw failure }
-
-            if (records.isNotEmpty()) {
-                records
-            } else {
-                // Return default present records for class students from live API
-                val students = getStudents(null, cId, null)
-                students.map { std ->
-                    AttendanceRecord(
-                        id = "att-${std.id}-$date",
-                        student_id = std.id,
-                        student_name = std.full_name,
-                        class_id = classId,
-                        date = date,
-                        status = "PRESENT",
-                        check_in_time = "08:45",
-                        temperature_celsius = 36.5
-                    )
-                }
-            }
-        } catch (failure: Exception) { throw failure }
+        val id = classId.takeIf { it != "all" && it.isNotBlank() }
+        java.time.LocalDate.parse(date)
+        val result = mutableListOf<AttendanceRecord>()
+        var page = 1
+        while (true) {
+            val rows = apiService.getAttendance(classId = id, date = date, page = page)
+            check(rows.all { it.date == date } && result.size + rows.size <= 100000) { "Yoklama listesi doğrulanamadı" }
+            result.addAll(rows)
+            check(result.map { it.student_id to it.date }.toSet().size == result.size) { "Yoklama sayfalaması değişti" }
+            if (rows.size < 100) break
+            page++
+        }
+        result
     }
 
     suspend fun getAttendanceRecords(date: String, classId: String): List<AttendanceRecord> = getAttendance(classId, date)
-
     suspend fun submitBulkAttendance(submit: BulkAttendanceSubmit): Boolean = saveBulkAttendance(submit)
-
     suspend fun saveBulkAttendance(submit: BulkAttendanceSubmit): Boolean = requestContext {
-        try {
-            apiService.submitBulkAttendance(submit)
-            true
-        } catch (failure: Exception) { throw failure }
+        UUID.fromString(submit.request_id)
+        UUID.fromString(submit.class_id)
+        java.time.LocalDate.parse(submit.date)
+        apiService.submitBulkAttendance(submit)
+        true
     }
 
     suspend fun getFinanceSummary(branchId: String?): FinanceSummary = requestContext {

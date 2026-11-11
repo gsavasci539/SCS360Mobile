@@ -61,10 +61,15 @@ data class Okul360UiState(
     val studentToEdit: Student? = null,
 
     // Attendance State
-    val attendanceDate: String = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()),
+    val attendanceDate: String = java.time.LocalDate.now().toString(),
     val attendanceRecords: List<AttendanceRecord> = emptyList(),
     val attendanceClassId: String = "all",
     val isAttendanceLoading: Boolean = false,
+    val attendanceReady: Boolean = false,
+    val attendanceCanWrite: Boolean = false,
+    val isAttendanceSaving: Boolean = false,
+    val attendanceSavePending: Boolean = false,
+    val attendanceError: String? = null,
     val attendanceSaveSuccess: Boolean = false,
 
     // Finance State
@@ -338,6 +343,10 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
 
     private val _uiState = MutableStateFlow(Okul360UiState())
     val uiState: StateFlow<Okul360UiState> = _uiState.asStateFlow()
+
+    private var attendanceEditor: com.example.data.remote.NativeAttendanceEditor? = null
+    private var attendanceGeneration = 0L
+    private var attendanceLoadJob: kotlinx.coroutines.Job? = null
 
     private fun freshState(previous: Okul360UiState, actor: User = previous.currentUser,
         loggedIn: Boolean = previous.isLoggedIn, workspace: String? = previous.workspaceOrganizationId,
@@ -782,13 +791,11 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     fun loadClasses() {
         viewModelScope.launch(requestFailures) {
             val classList = repository.getClasses(_uiState.value.selectedBranchId)
-            _uiState.update {
-                it.copy(
-                    classes = classList,
-                    selectedClassId = classList.firstOrNull()?.id ?: "class-1",
-                    attendanceClassId = classList.firstOrNull()?.id ?: "class-1"
-                )
-            }
+            if (_uiState.value.isAttendanceSaving || _uiState.value.attendanceSavePending) return@launch
+            _uiState.update { state -> state.copy(classes = classList,
+                selectedClassId = state.selectedClassId.takeIf { id -> classList.any { it.id == id } } ?: classList.firstOrNull()?.id.orEmpty(),
+                attendanceClassId = state.attendanceClassId.takeIf { id -> classList.any { it.id == id } } ?: classList.firstOrNull()?.id.orEmpty()) }
+            loadAttendance()
         }
     }
 
@@ -1120,133 +1127,106 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    // Attendance Actions
+    // Attendance actions use one immutable class/day snapshot and backend row versions.
     fun loadAttendance() {
-        viewModelScope.launch(requestFailures) {
-            _uiState.update { it.copy(isAttendanceLoading = true) }
+        val state = _uiState.value
+        if (state.isAttendanceSaving || state.attendanceSavePending) return
+        attendanceLoadJob?.cancel()
+        val generation = ++attendanceGeneration
+        attendanceEditor = null
+        _uiState.update { it.copy(attendanceRecords = emptyList(), attendanceReady = false, attendanceCanWrite = false, attendanceError = null, isAttendanceLoading = false) }
+        if (!state.isLoggedIn || state.classes.none { it.id == state.attendanceClassId }) return
+        val editor = try { com.example.data.remote.NativeAttendanceEditor(getApplication(), state.currentUser.id, state.attendanceClassId, state.attendanceDate) }
+            catch (_: Exception) { _uiState.update { it.copy(attendanceError = "Geçerli sınıf ve tarih seçin.") }; return }
+        attendanceEditor = editor
+        fun owned() = generation == attendanceGeneration && editor.current() && attendanceEditor === editor &&
+            _uiState.value.attendanceClassId == editor.classId && _uiState.value.attendanceDate == editor.day
+        _uiState.update { it.copy(isAttendanceLoading = true) }
+        attendanceLoadJob = viewModelScope.launch(requestFailures) {
             try {
-                val records = repository.getAttendanceRecords(
-                    date = _uiState.value.attendanceDate,
-                    classId = _uiState.value.attendanceClassId
-                )
-                if (records.isNotEmpty()) {
-                    repository.cacheAttendanceLocally(records, _uiState.value.attendanceDate)
-                    _uiState.update {
-                        it.copy(
-                            attendanceRecords = records,
-                            isAttendanceLoading = false
-                        )
-                    }
-                } else {
-                    val cached = repository.getCachedAttendance(
-                        classId = _uiState.value.attendanceClassId,
-                        date = _uiState.value.attendanceDate
-                    )
-                    _uiState.update {
-                        it.copy(
-                            attendanceRecords = cached,
-                            isAttendanceLoading = false
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                val cached = repository.getCachedAttendance(
-                    classId = _uiState.value.attendanceClassId,
-                    date = _uiState.value.attendanceDate
-                )
-                _uiState.update {
-                    it.copy(
-                        attendanceRecords = cached,
-                        isAttendanceLoading = false
-                    )
+                val rows = editor.load()
+                if (owned()) _uiState.update { it.copy(attendanceRecords = rows, attendanceReady = true, isAttendanceLoading = false,
+                    attendanceCanWrite = it.currentUser.is_super_admin == true || it.currentUser.permissions.any { p -> p == "attendance.write" || p == "*" }) }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (failure: Exception) {
+                if (owned()) {
+                    if ((failure as? com.example.data.remote.AttendanceHttpException)?.code == 401) logout()
+                    else _uiState.update { it.copy(isAttendanceLoading = false, attendanceReady = false,
+                        attendanceError = "Yoklama sunucudan yüklenemedi. Yeniden deneyin.") }
                 }
             }
         }
     }
 
     fun selectAttendanceClass(classId: String) {
+        if (_uiState.value.isAttendanceSaving || _uiState.value.attendanceSavePending) return
+        if (_uiState.value.classes.none { it.id == classId }) return
         _uiState.update { it.copy(attendanceClassId = classId) }
         loadAttendance()
     }
 
+    fun selectAttendanceDate(day: String) {
+        if (_uiState.value.isAttendanceSaving || _uiState.value.attendanceSavePending) return
+        try { java.time.LocalDate.parse(day) } catch (_: Exception) { return }
+        _uiState.update { it.copy(attendanceDate = day) }
+        loadAttendance()
+    }
+
+    fun retryAttendance() {
+        if (_uiState.value.attendanceSavePending) saveAttendance() else if (_uiState.value.classes.isEmpty()) loadClasses() else loadAttendance()
+    }
+
+    private fun attendanceEditable() = _uiState.value.attendanceCanWrite && _uiState.value.attendanceReady && !_uiState.value.isAttendanceSaving &&
+        !_uiState.value.attendanceSavePending && attendanceEditor?.ready == true
+
     fun updateSingleAttendanceStatus(studentId: String, newStatus: String) {
-        val updated = _uiState.value.attendanceRecords.map { record ->
-            if (record.student_id == studentId) {
-                record.copy(status = newStatus)
-            } else record
-        }
-        _uiState.update { it.copy(attendanceRecords = updated) }
+        if (!attendanceEditable() || newStatus !in com.example.data.remote.NativeAttendanceEditor.STATUSES) return
+        _uiState.update { it.copy(attendanceRecords = it.attendanceRecords.map { row ->
+            if (row.student_id == studentId) row.copy(status = newStatus) else row }, attendanceError = null) }
+    }
+
+    fun updateAttendanceNote(studentId: String, note: String?) {
+        if (!attendanceEditable() || (note?.length ?: 0) > 5000) return
+        _uiState.update { it.copy(attendanceRecords = it.attendanceRecords.map { row ->
+            if (row.student_id == studentId) row.copy(note = note) else row }, attendanceError = null) }
     }
 
     fun markAllPresent() {
-        val updated = _uiState.value.attendanceRecords.map { it.copy(status = "PRESENT") }
-        _uiState.update {
-            it.copy(
-                attendanceRecords = updated,
-                toastMessage = "Tüm sınıf 'Geldi' olarak işaretlendi."
-            )
-        }
+        if (!attendanceEditable()) return
+        _uiState.update { it.copy(attendanceRecords = it.attendanceRecords.map { row -> row.copy(status = "PRESENT") },
+            toastMessage = "Tümünü 'Geldi' taslağına aldınız. Sunucuya kaydetmek için Kaydet'i kullanın.") }
     }
 
     fun saveAttendance() {
+        val state = _uiState.value
+        val editor = attendanceEditor ?: return
+        if (!state.attendanceCanWrite || !state.attendanceReady || state.isAttendanceSaving || !editor.ready || state.attendanceClassId != editor.classId || state.attendanceDate != editor.day) return
+        val rows = state.attendanceRecords.toList()
+        _uiState.update { it.copy(isAttendanceSaving = true, attendanceError = null) }
         viewModelScope.launch(requestFailures) {
-            _uiState.update { it.copy(isAttendanceLoading = true) }
-            val submitList = _uiState.value.attendanceRecords.map {
-                AttendanceRecordSubmit(
-                    student_id = it.student_id,
-                    status = it.status,
-                    note = it.note,
-                    check_in_time = it.check_in_time,
-                    temperature_celsius = it.temperature_celsius
-                )
-            }
-            val bulkSubmit = BulkAttendanceSubmit(
-                date = _uiState.value.attendanceDate,
-                class_id = _uiState.value.attendanceClassId,
-                records = submitList
-            )
-            repository.submitBulkAttendance(bulkSubmit)
-            // Trigger Android System Push Notifications for Attendance
-            val absentOrLate = _uiState.value.attendanceRecords.filter { it.status != "PRESENT" }
-            if (absentOrLate.isNotEmpty()) {
-                val firstAbsent = absentOrLate.firstOrNull()
-                val student = _uiState.value.students.find { it.id == firstAbsent?.student_id }
-                val stdName = student?.full_name ?: "Öğrenci"
-                val statusTr = when (firstAbsent?.status) {
-                    "ABSENT" -> "Yok / Okula Gelmedi"
-                    "LATE" -> "Geç Geldi"
-                    "EXCUSED" -> "İzinli / Raporlu"
-                    else -> firstAbsent?.status ?: ""
+            try {
+                editor.save(rows)
+                if (attendanceEditor === editor && editor.current()) {
+                    _uiState.update { it.copy(isAttendanceSaving = false, attendanceSavePending = false, attendanceReady = false,
+                        toastMessage = "Yoklama sunucuda kaydedildi.") }
+                    loadAttendance()
                 }
-                val clsName = _uiState.value.classes.find { it.id == _uiState.value.attendanceClassId }?.name ?: "Sınıf"
-                NotificationHelper.sendAttendancePush(
-                    context = getApplication(),
-                    studentName = stdName,
-                    statusText = statusTr,
-                    className = clsName
-                )
-            } else if (_uiState.value.attendanceRecords.isNotEmpty()) {
-                val firstStd = _uiState.value.students.find { it.id == _uiState.value.attendanceRecords.firstOrNull()?.student_id }
-                val clsName = _uiState.value.classes.find { it.id == _uiState.value.attendanceClassId }?.name ?: "Sınıf"
-                NotificationHelper.sendAttendancePush(
-                    context = getApplication(),
-                    studentName = firstStd?.full_name ?: "Tüm Sınıf",
-                    statusText = "Giriş yaptı (Geldi)",
-                    className = clsName
-                )
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (failure: Exception) {
+                if (attendanceEditor === editor && editor.current()) {
+                    if ((failure as? com.example.data.remote.AttendanceHttpException)?.code == 401) logout()
+                    else _uiState.update { it.copy(isAttendanceSaving = false, attendanceSavePending = editor.hasPending,
+                        attendanceReady = editor.ready, attendanceCanWrite = it.attendanceCanWrite && (failure as? com.example.data.remote.AttendanceHttpException)?.code != 403, attendanceError = when {
+                            (failure as? com.example.data.remote.AttendanceHttpException)?.code == 409 -> "Yoklama değişmiş. Yenileyip güncel kayıtları inceleyin."
+                            editor.hasPending -> "Sonuç belirsiz. Aynı isteği yeniden deneyin; yeni kayıt isteği başlatılmadı."
+                            failure is IllegalArgumentException || failure is IllegalStateException -> failure.message ?: "Yoklama doğrulanamadı."
+                            else -> "Yoklama kaydedilemedi. Bağlantı ve yetkilerinizi kontrol edin."
+                        }) }
+                }
             }
-            _uiState.update {
-                it.copy(
-                    isAttendanceLoading = false,
-                    toastMessage = "Yoklama kaydedildi ve Android push/SMS bildirimleri iletildi."
-                )
-            }
-            loadDashboard()
-            loadOutboxLogs()
         }
     }
 
-    // Finance & Invoices Actions
     fun loadFinance() {
         viewModelScope.launch(requestFailures) {
             _uiState.update { it.copy(isFinanceLoading = true) }

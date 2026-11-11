@@ -104,7 +104,10 @@ fun Okul360NavHost(
                 onClassSelected = { viewModel.selectAttendanceClass(it) },
                 onStatusChanged = { stdId, status -> viewModel.updateSingleAttendanceStatus(stdId, status) },
                 onMarkAllPresent = { viewModel.markAllPresent() },
-                onSaveAttendance = { viewModel.saveAttendance() }
+                onSaveAttendance = { viewModel.saveAttendance() },
+                                onDateSelected = { viewModel.selectAttendanceDate(it) },
+                                onRetry = { viewModel.retryAttendance() },
+                                onNoteChanged = { id, note -> viewModel.updateAttendanceNote(id, note) }
             )
         }
 

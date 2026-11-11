@@ -74,6 +74,11 @@ android {
       }
     }
   }
+  if (providers.gradleProperty("nativeBackendAcceptance").orNull == "true") {
+    sourceSets.named("test") {
+      kotlin.directories += "src/backendAcceptance/java"
+    }
+  }
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true

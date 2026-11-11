@@ -79,7 +79,11 @@ fun TeacherPortalScreen(
     onOpenAiNarrativeGenerator: ((studentName: String, meal: String, sleep: String, mood: String, activities: String) -> Unit)? = null,
     onOpenAiAnalyticsHub: (() -> Unit)? = null,
     onOpenChatbot: (() -> Unit)? = null,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onAttendanceClassSelected: (String) -> Unit = {},
+    onAttendanceDateSelected: (String) -> Unit = {},
+    onAttendanceRetry: () -> Unit = {},
+    onAttendanceNoteChanged: (String, String?) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     var selectedTab by remember { mutableStateOf(TeacherNavTab.ATTENDANCE) }
@@ -89,15 +93,14 @@ fun TeacherPortalScreen(
         listOf(
             SpeedDialAction(
                 id = "teacher_save_attendance",
-                title = "Yoklama Kaydet",
-                description = "Sınıf yoklamasını onayla & kaydet",
+                title = "Yoklamayı Aç",
+                description = "Günün kayıtlarını incele ve düzenle",
                 icon = Icons.Default.FactCheck,
                 containerColor = SecondaryEmerald,
                 testTag = "teacher_fab_action_attendance",
                 onClick = {
                     teacherFabExpanded = false
                     selectedTab = TeacherNavTab.ATTENDANCE
-                    onSaveAttendance()
                 }
             ),
             SpeedDialAction(
@@ -332,13 +335,11 @@ fun TeacherPortalScreen(
                 .padding(padding)
         ) {
             when (selectedTab) {
-                TeacherNavTab.ATTENDANCE -> TeacherAttendanceTab(
-                    state = state,
-                    students = classStudents,
-                    className = teacherClass.name,
-                    onUpdateAttendanceStatus = onUpdateAttendanceStatus,
-                    onMarkAllPresent = onMarkAllPresent,
-                    onSaveAttendance = onSaveAttendance
+                TeacherNavTab.ATTENDANCE -> AttendanceScreen(
+                    state = state, onClassSelected = onAttendanceClassSelected,
+                    onStatusChanged = onUpdateAttendanceStatus, onMarkAllPresent = onMarkAllPresent,
+                    onSaveAttendance = onSaveAttendance, onDateSelected = onAttendanceDateSelected,
+                    onRetry = onAttendanceRetry, onNoteChanged = onAttendanceNoteChanged
                 )
                 TeacherNavTab.MATERIALS -> CourseMaterialsScreen(
                     state = state,
@@ -387,297 +388,7 @@ fun TeacherPortalScreen(
 // -------------------------------------------------------------
 // 1. TEACHER ATTENDANCE TAB
 // -------------------------------------------------------------
-@Composable
-private fun TeacherAttendanceTab(
-    state: Okul360UiState,
-    students: List<Student>,
-    className: String,
-    onUpdateAttendanceStatus: (String, String) -> Unit,
-    onMarkAllPresent: () -> Unit,
-    onSaveAttendance: () -> Unit
-) {
-    val context = LocalContext.current
-    val todayDate = SimpleDateFormat("d MMMM yyyy, EEEE", Locale("tr")).format(Date())
-    var attendanceViewSubTab by remember { mutableStateOf("DAILY") } // "DAILY" or "SUBJECT_STATS"
-    var selectedStatsClassId by remember { mutableStateOf(state.attendanceClassId.ifBlank { state.classes.firstOrNull()?.id ?: "" }) }
 
-    val recordsMap = remember(state.attendanceRecords) {
-        state.attendanceRecords.associateBy { it.student_id }
-    }
-
-    val presentCount = students.count { recordsMap[it.id]?.status == "PRESENT" || it.today_attendance_status == "PRESENT" }
-    val absentCount = students.count { recordsMap[it.id]?.status == "ABSENT" }
-    val lateCount = students.count { recordsMap[it.id]?.status == "LATE" }
-    val excusedCount = students.count { recordsMap[it.id]?.status == "EXCUSED" }
-
-    if (attendanceViewSubTab == "SUBJECT_STATS") {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.dp)
-        ) {
-            item {
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 1.dp,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = "📊 Ders Bazlı Devamsızlık",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = BrandNavy
-                            )
-                            Text(
-                                text = "Branş ve ders yükü katılım grafikleri",
-                                fontSize = 11.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        OutlinedButton(
-                            onClick = { attendanceViewSubTab = "DAILY" },
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                        ) {
-                            Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Günlük Yoklama", fontSize = 11.sp)
-                        }
-                    }
-                }
-            }
-
-            item {
-                SubjectAttendanceStatisticsView(
-                    classes = state.classes,
-                    selectedClassId = selectedStatsClassId,
-                    onClassSelected = { selectedStatsClassId = it },
-                    attendanceRecords = state.attendanceRecords
-                )
-            }
-        }
-    } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                        Text(
-                            text = "📋 Günlük Sınıf Yoklaması",
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Black,
-                            color = BrandNavy,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "$className • $todayDate",
-                            fontSize = 11.5.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilledTonalButton(
-                            onClick = { attendanceViewSubTab = "SUBJECT_STATS" },
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                            modifier = Modifier.height(38.dp)
-                        ) {
-                            Icon(Icons.Default.BarChart, contentDescription = null, modifier = Modifier.size(15.dp), tint = PrimaryBlue)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Grafik", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue, maxLines = 1)
-                        }
-
-                        FilledTonalButton(
-                            onClick = onMarkAllPresent,
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = SecondaryEmerald.copy(alpha = 0.18f),
-                                contentColor = SecondaryEmerald
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                            modifier = Modifier.height(38.dp)
-                        ) {
-                            Icon(Icons.Default.DoneAll, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Hepsi", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                        }
-                    }
-                }
-            }
-
-        // Teacher Attendance AI Analysis Card
-        item {
-            RoleContextualAiCard(
-                screenName = "ATTENDANCE",
-                state = state,
-                onQuickActionClick = { actionType ->
-                    if (actionType == "MARK_ALL_PRESENT") {
-                        onMarkAllPresent()
-                    }
-                }
-            )
-        }
-
-        // Summary Statistics Row
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                StatBadgeItem("Geldi", "$presentCount", SecondaryEmerald, Modifier.weight(1f))
-                StatBadgeItem("Gelmedi", "$absentCount", MaterialTheme.colorScheme.error, Modifier.weight(1f))
-                StatBadgeItem("Geç", "$lateCount", AccentAmber, Modifier.weight(1f))
-                StatBadgeItem("İzinli", "$excusedCount", PrimaryBlue, Modifier.weight(1f))
-            }
-        }
-
-        // Student List for Attendance
-        items(students) { std ->
-            val status = recordsMap[std.id]?.status ?: std.today_attendance_status ?: "PRESENT"
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = Color.White,
-                shape = RoundedCornerShape(16.dp),
-                tonalElevation = 1.dp,
-                shadowElevation = 1.dp
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f).padding(end = 6.dp)) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(std.avatar_color_hex).copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "${std.first_name.take(1)}${std.last_name.take(1)}",
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(std.avatar_color_hex),
-                                    fontSize = 14.sp
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = std.full_name,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = BrandNavy,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = "Veli: ${std.parent_name} • ${std.parent_phone}",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-
-                        IconButton(
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${std.parent_phone}"))
-                                context.startActivity(intent)
-                            },
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
-                                .background(PrimaryBlue.copy(alpha = 0.1f))
-                        ) {
-                            Icon(Icons.Default.Call, contentDescription = "Veliyi Ara", tint = PrimaryBlue, modifier = Modifier.size(16.dp))
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Status Chips
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        AttendanceChoiceChip(
-                            label = "Geldi",
-                            isSelected = status == "PRESENT",
-                            activeColor = SecondaryEmerald,
-                            onClick = { onUpdateAttendanceStatus(std.id, "PRESENT") },
-                            modifier = Modifier.weight(1f)
-                        )
-                        AttendanceChoiceChip(
-                            label = "Yok",
-                            isSelected = status == "ABSENT",
-                            activeColor = MaterialTheme.colorScheme.error,
-                            onClick = { onUpdateAttendanceStatus(std.id, "ABSENT") },
-                            modifier = Modifier.weight(1f)
-                        )
-                        AttendanceChoiceChip(
-                            label = "Geç",
-                            isSelected = status == "LATE",
-                            activeColor = AccentAmber,
-                            onClick = { onUpdateAttendanceStatus(std.id, "LATE") },
-                            modifier = Modifier.weight(1f)
-                        )
-                        AttendanceChoiceChip(
-                            label = "İzinli",
-                            isSelected = status == "EXCUSED",
-                            activeColor = PrimaryBlue,
-                            onClick = { onUpdateAttendanceStatus(std.id, "EXCUSED") },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-        }
-
-        // Save & Notify Parents Button
-        item {
-            Button(
-                onClick = onSaveAttendance,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
-                contentPadding = PaddingValues(vertical = 14.dp)
-            ) {
-                Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Yoklamayı Kaydet & Velilere Bildir", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            }
-        }
-    }
-}
-}
 
 @Composable
 private fun StatBadgeItem(label: String, value: String, color: Color, modifier: Modifier) {

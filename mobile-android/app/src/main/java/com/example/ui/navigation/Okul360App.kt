@@ -408,6 +408,10 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             TeacherPortalScreen(
                                 state = state,
                                 onSaveAttendance = { viewModel.saveAttendance() },
+                                onAttendanceClassSelected = { viewModel.selectAttendanceClass(it) },
+                                onAttendanceDateSelected = { viewModel.selectAttendanceDate(it) },
+                                onAttendanceRetry = { viewModel.retryAttendance() },
+                                onAttendanceNoteChanged = { id, note -> viewModel.updateAttendanceNote(id, note) },
                                 onUpdateAttendanceStatus = { stdId, status -> viewModel.updateSingleAttendanceStatus(stdId, status) },
                                 onMarkAllPresent = { viewModel.markAllPresent() },
                                 onSaveDailyReport = { report -> viewModel.saveStudentDailyReport(report) },
@@ -1595,7 +1599,10 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onClassSelected = { viewModel.selectAttendanceClass(it) },
                                 onStatusChanged = { stdId, status -> viewModel.updateSingleAttendanceStatus(stdId, status) },
                                 onMarkAllPresent = { viewModel.markAllPresent() },
-                                onSaveAttendance = { viewModel.saveAttendance() }
+                                onSaveAttendance = { viewModel.saveAttendance() },
+                                onDateSelected = { viewModel.selectAttendanceDate(it) },
+                                onRetry = { viewModel.retryAttendance() },
+                                onNoteChanged = { id, note -> viewModel.updateAttendanceNote(id, note) }
                             )
                             MainTab.FINANCE -> FinanceScreen(
                                 state = state,
@@ -1742,6 +1749,9 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                     onStatusChanged = { stdId, status -> viewModel.updateSingleAttendanceStatus(stdId, status) },
                     onMarkAllPresent = { viewModel.markAllPresent() },
                     onSaveAttendance = { viewModel.saveAttendance() },
+                    onDateSelected = { viewModel.selectAttendanceDate(it) },
+                    onRetry = { viewModel.retryAttendance() },
+                    onNoteChanged = { id, note -> viewModel.updateAttendanceNote(id, note) },
                     onNavigateToFullAttendance = {
                         showQuickAttendanceSheet = false
                         currentTab = MainTab.ATTENDANCE

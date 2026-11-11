@@ -143,38 +143,40 @@ enum class AttendanceStatus(val label: String, val shortCode: String, val colorH
     PRESENT("Geldi", "G", 0xFF059669),
     ABSENT("Gelmedi", "Y", 0xFFDC2626),
     LATE("Geç Kaldı", "GK", 0xFFD97706),
-    EXCUSED("İzinli / Raporlu", "İ", 0xFF2563EB)
+    EXCUSED("İzinli / Raporlu", "İ", 0xFF2563EB),
+    HALF_DAY("Yarım Gün", "YG", 0xFF7C3AED)
 }
 
 @JsonClass(generateAdapter = true)
 data class AttendanceRecord(
-    val id: String = "att-1",
+    val id: String = "",
     val student_id: String = "",
     val student_name: String = "",
     val class_id: String = "",
-    val date: String = "",
-    val status: String = "PRESENT", // PRESENT, ABSENT, LATE, EXCUSED
-    val note: String? = null,
+    @Json(name = "attendance_date") val date: String = "",
+    val status: String = "UNRECORDED",
+    @Json(name = "notes") val note: String? = null,
+    val version: String? = null,
     val check_in_time: String? = null,
     val check_out_time: String? = null,
-    val temperature_celsius: Double? = 36.5,
-    val parent_notified: Boolean = true
+    val temperature_celsius: Double? = null,
+    val parent_notified: Boolean? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class BulkAttendanceSubmit(
-    val date: String = "",
+    @Json(name = "attendance_date") val date: String = "",
     val class_id: String = "",
-    val records: List<AttendanceRecordSubmit> = emptyList()
+    val records: List<AttendanceRecordSubmit> = emptyList(),
+    val request_id: String = ""
 )
 
 @JsonClass(generateAdapter = true)
 data class AttendanceRecordSubmit(
     val student_id: String = "",
     val status: String = "PRESENT",
-    val note: String? = null,
-    val check_in_time: String? = null,
-    val temperature_celsius: Double? = 36.5
+    @Json(name = "notes") val note: String? = null,
+    val expected_version: String? = null
 )
 
 @JsonClass(generateAdapter = true)

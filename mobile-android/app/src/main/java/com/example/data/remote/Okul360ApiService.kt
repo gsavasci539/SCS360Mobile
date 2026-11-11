@@ -265,7 +265,9 @@ interface Okul360ApiService {
     @GET("attendance")
     suspend fun getAttendance(
         @Query("class_id") classId: String? = null,
-        @Query("date") date: String? = null
+        @Query("attendance_date") date: String? = null,
+        @Query("page") page: Int = 1,
+        @Query("page_size") pageSize: Int = 100
     ): List<AttendanceRecord>
 
     @GET("attendance")
@@ -286,7 +288,7 @@ interface Okul360ApiService {
     @GET("attendance/{attendance_id}")
     suspend fun getAttendanceById(@Path("attendance_id") attendanceId: String): AttendanceRecord
 
-    @POST("attendance/bulk")
+    @PUT("attendance/bulk")
     suspend fun submitBulkAttendance(@Body request: BulkAttendanceSubmit): Map<String, Any>
 
     @GET("attendance/reports/monthly")

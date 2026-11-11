@@ -26,3 +26,5 @@ Güncel native kaynak51/51 testten geçti; hata ve atlanan test yoktur. Bu paket
 Gerçek A26 cihazı, sağlayıcı sandbox anahtarları/HTTPS callback ve mağaza abonelik ürünleri için kabul açık. Debug APK üretim sürümü değildir ve bu kaynak deposuna eklenmez. App Store/Google Play ürünleri henüz tanımlı olmadığından native SaaS satın alımı kapalıdır. Kurumların kendi okul/kurs tahsilatları ayrı sunucu checkout hesabı kullanır.
 
 Gizli anahtarlar, gerçek kullanıcı kayıtları, yerel veritabanları, imzalama dosyaları ve derleme önbellekleri bu kaynak aktarımına dahil edilmez.
+
+> Yeni native yoklama checkpoint: gerçek FastAPI + geçici SQLite + Kotlin HTTP istemcisi kabulü geçti. 102 öğrenci/101 mevcut satır sayfalı yüklendi; mevcut not/HALF_DAY/sürüm korundu; kayıp yanıta aynı PUT gövdesi tek audit ile tekrarlandı; eski sürüm409, salt-okuma403, kurum dışı404, bildirim işi0. Tam yeni Android58 test paketi şu anda çalışıyor; aşağıdaki51PASS ve APK önceki kaynağa aittir. Güncel APK henüz üretilmedi. Aylık/derse ait native yoklama API bağlantısı açık; sahte takvim gösterilmez.
