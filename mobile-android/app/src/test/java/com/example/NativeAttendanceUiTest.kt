@@ -10,12 +10,14 @@ import com.example.data.model.*
 import com.example.ui.screens.AttendanceScreen
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.Okul360UiState
+import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
@@ -68,6 +70,8 @@ class NativeAttendanceUiTest {
     }
 
     @OptIn(ExperimentalTestApi::class)
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(sdk = [36], qualifiers = "w360dp-h780dp-mdpi")
     @Test fun saveRemainsReachableAtLargeFontInPortraitAndLandscape() {
         var size by mutableStateOf(DpSize(360.dp, 780.dp))
         val state = base.copy(attendanceReady = true, attendanceRecords = base.attendanceRecords.map { it.copy(status = "ABSENT") })
@@ -79,7 +83,9 @@ class NativeAttendanceUiTest {
         for (window in listOf(DpSize(360.dp, 780.dp), DpSize(780.dp, 360.dp), DpSize(320.dp, 600.dp))) {
             compose.runOnIdle { size = window }
             compose.onNodeWithTag("attendance_list").performScrollToNode(hasTestTag("attendance_save"))
-            compose.onNodeWithTag("attendance_save").assertIsDisplayed().assertWidthIsAtLeast(48.dp)
+            compose.onNodeWithTag("attendance_save").performScrollTo()
+                .assertIsDisplayed().assertWidthIsAtLeast(48.dp).assertHeightIsAtLeast(48.dp)
+            compose.onRoot().captureRoboImage("../../output/native-attendance-${window.width.value.toInt()}x${window.height.value.toInt()}-font2-20261111.png")
         }
     }
 }
