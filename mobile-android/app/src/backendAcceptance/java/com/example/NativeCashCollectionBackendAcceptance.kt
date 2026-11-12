@@ -31,6 +31,10 @@ class NativeCashCollectionBackendAcceptance {
             assertEquals(BigDecimal("70.00"), ack.remainingStudentDebt); assertTrue(ack.receiptNumber.startsWith("RCP-")); restored.finish()
             val next = editor(); next.load(); val second = next.collect("10.00", "EFT")
             assertNotEquals(ack.paymentId, second.paymentId); assertEquals(BigDecimal("60.00"), second.remainingStudentDebt); next.finish()
+            val receipts = NativeReceiptClient(env("NATIVE_TEST_DEBT"))
+            val documents = receipts.load(); assertEquals(2, documents.size)
+            assertEquals(setOf(ack.paymentId, second.paymentId), documents.map { it.paymentId }.toSet())
+            val pdf = receipts.pdf(documents.first()); assertTrue(pdf.copyOfRange(0, 5).contentEquals("%PDF-".toByteArray()))
             val fresh = editor(); assertEquals(BigDecimal("60.00"), fresh.load().remaining)
             try { fresh.collect("61.00", "CASH"); fail("Overpayment must fail") } catch (_: IllegalArgumentException) { }
             ApiClientProvider.interceptor.branchId = env("NATIVE_TEST_OTHER_BRANCH")

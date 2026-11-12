@@ -422,34 +422,7 @@ class Okul360Repository(private val context: Context) {
     }
 
     suspend fun getReceiptForInvoice(invoiceId: String): PaymentReceipt? = requestContext {
-        val currentDate = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
-        try {
-            val receipts = try {
-                apiService.getReceipts()
-            } catch (failure: Exception) { throw failure }
-            receipts.find { it.invoice_id == invoiceId || it.receipt_number == invoiceId || it.invoice_number == invoiceId } ?: run {
-                val invoice = try { apiService.getDebtById(invoiceId) } catch (failure: Exception) { throw failure }
-                PaymentReceipt(
-                    receipt_number = "MAK-${(invoice?.invoice_number ?: invoiceId).replace("FAT-", "").replace("inv-", "")}",
-                    invoice_id = invoice?.id ?: invoiceId,
-                    invoice_number = invoice?.invoice_number ?: "FAT-2026",
-                    student_id = invoice?.student_id ?: "std-1",
-                    student_name = invoice?.student_name ?: "Öğrenci",
-                    student_number = "2026-001",
-                    class_name = invoice?.class_name ?: "Sınıf",
-                    parent_name = "Veli",
-                    parent_phone = "+90 532 000 0000",
-                    amount = invoice?.amount ?: 0.0,
-                    payment_method = invoice?.payment_method ?: "CREDIT_CARD",
-                    payment_date = invoice?.due_date ?: currentDate,
-                    description = invoice?.description ?: "Eğitim ve Hizmet Bedeli Tahsilatı",
-                    collected_by = "Muhasebe Yetkilisi",
-                    institution_name = "SCS360",
-                    branch_name = "Merkez Kampüs",
-                    qr_code_text = "SCS360-RECEIPT-${invoice?.invoice_number ?: invoiceId}"
-                )
-            }
-        } catch (failure: Exception) { throw failure }
+        throw IllegalStateException("Makbuzları gerçek tahsilat bağlantısıyla sunucu makbuz ekranından açın")
     }
 
     suspend fun getAnnouncements(branchId: String?): List<Announcement> = requestContext {

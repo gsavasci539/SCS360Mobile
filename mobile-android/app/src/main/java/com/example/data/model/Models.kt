@@ -448,23 +448,23 @@ data class CommunicationTemplate(
 
 @JsonClass(generateAdapter = true)
 data class PaymentReceipt(
-    val receipt_number: String = "MAK-001",
-    val invoice_id: String = "inv-1",
-    val invoice_number: String = "FAT-001",
+    val receipt_number: String = "",
+    val invoice_id: String = "",
+    val invoice_number: String = "",
     val student_id: String = "",
     val student_name: String = "",
-    val student_number: String = "101",
-    val class_name: String = "Sınıf",
-    val parent_name: String = "Veli",
-    val parent_phone: String = "+90 532 000 0000",
+    val student_number: String = "",
+    val class_name: String = "",
+    val parent_name: String = "",
+    val parent_phone: String = "",
     val amount: Double = 0.0,
-    val payment_method: String = "CREDIT_CARD",
-    val payment_date: String = "2026-08-20",
-    val description: String = "Ödeme",
-    val collected_by: String = "Muhasebe",
-    val institution_name: String = "SCS360",
-    val branch_name: String = "Merkez Kampüs",
-    val qr_code_text: String = "SCS360-RECEIPT"
+    val payment_method: String = "",
+    val payment_date: String = "",
+    val description: String = "",
+    val collected_by: String = "",
+    val institution_name: String = "",
+    val branch_name: String = "",
+    val qr_code_text: String = ""
 )
 
 data class ReportsData(

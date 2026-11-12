@@ -72,7 +72,7 @@ fun FinancePortalScreen(
     var selectedTab by remember { mutableStateOf(FinanceNavTab.SUMMARY) }
     var showNewInvoiceDialog by remember { mutableStateOf(false) }
     var showPaymentDialogForInvoice by remember { mutableStateOf<Invoice?>(null) }
-    var viewingReceipt by remember { mutableStateOf<PaymentReceipt?>(null) }
+    var viewingReceipt by remember { mutableStateOf<Invoice?>(null) }
     var financeFabExpanded by remember { mutableStateOf(false) }
 
     val financeActions = remember(state.invoices) {
@@ -275,28 +275,7 @@ fun FinancePortalScreen(
                     currencyFormatter = currencyFormatter,
                     onOpenPayment = { showPaymentDialogForInvoice = it },
                     onOpenNewInvoice = { showNewInvoiceDialog = true },
-                    onViewReceipt = { inv ->
-                        val std = state.students.find { it.id == inv.student_id }
-                        viewingReceipt = PaymentReceipt(
-                            receipt_number = "RCPT-${inv.invoice_number}",
-                            invoice_id = inv.id,
-                            invoice_number = inv.invoice_number,
-                            student_id = inv.student_id,
-                            student_name = inv.student_name,
-                            student_number = std?.student_number ?: "2026-001",
-                            class_name = inv.class_name,
-                            parent_name = std?.parent_name ?: "Veli",
-                            parent_phone = std?.parent_phone ?: "0555 000 0000",
-                            amount = inv.amount,
-                            payment_method = inv.payment_method ?: "POS / Kredi Kartı",
-                            payment_date = inv.issue_date,
-                            description = inv.description,
-                            collected_by = state.currentUser.full_name,
-                            institution_name = state.currentUser.institution_name,
-                            branch_name = state.currentUser.branch_name,
-                            qr_code_text = "SCS360-MAKBUZ-${inv.invoice_number}"
-                        )
-                    }
+                    onViewReceipt = { viewingReceipt = it }
                 )
                 FinanceNavTab.DUNNING -> FinanceDunningTab(
                     state = state,
@@ -421,7 +400,7 @@ fun FinancePortalScreen(
     // Receipt Modal
     viewingReceipt?.let { receipt ->
         ReceiptDialog(
-            receipt = receipt,
+            invoice = receipt,
             onDismiss = { viewingReceipt = null },
             onPrintOrShare = { viewingReceipt = null }
         )
