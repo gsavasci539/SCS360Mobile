@@ -50,14 +50,14 @@ Uygulama derlemesi JDK17 ile geçti; Android36 Robolectric testleri Java21+ gere
 
 ## Kabul durumu
 
-Son kabul edilmiş temel (tahakkuk oluşturma): 100/100 native regresyon testi geçti (25 sınıf; hata/atlanan yok). Aynı kaynaktan debug APK imza ve paket doğrulaması yapıldı. Tahakkuk oluşturma gerçek API ve geçici DB ile kabul edildi; bütün native işlemler web ile henüz eşit değildir. Güncel kanıt docs/acceptance/native-debt-create-20261112.json ve docs/VERIFICATION_20261111.md içindedir.
+Önceki tahakkuk-oluşturma temeli: 100/100 native regresyon testi geçti (25 sınıf; hata/atlanan yok). Aynı kaynaktan debug APK imza ve paket doğrulaması yapıldı. Tahakkuk oluşturma gerçek API ve geçici DB ile kabul edildi; bütün native işlemler web ile henüz eşit değildir. Güncel kanıt docs/acceptance/native-debt-create-20261112.json ve docs/VERIFICATION_20261111.md içindedir.
 
 Gerçek A26 cihazı, sağlayıcı sandbox anahtarları/HTTPS callback ve mağaza abonelik ürünleri için kabul açık. Debug APK üretim sürümü değildir ve bu kaynak deposuna eklenmez. App Store/Google Play ürünleri henüz tanımlı olmadığından native SaaS satın alımı kapalıdır. Kurumların kendi okul/kurs tahsilatları ayrı sunucu checkout hesabı kullanır.
 
 Gizli anahtarlar, gerçek kullanıcı kayıtları, yerel veritabanları, imzalama dosyaları ve derleme önbellekleri bu kaynak aktarımına dahil edilmez.
 
 
-Finans ledger liste/düzenleme/iptal: 2/2 kontrat ve gerçek API/tempDB kabulü geçti; güncel tam Android/backend testleri sürüyor. Önceki 100-test kabulü ve debug APK bu takip değişikliğini kapsamıyor; güncel durum docs/acceptance/native-debt-ledger-20261112.json içindedir.
+Güncel finans ledger checkpoint: native104/104 test ve gerçek API/tempDB kabulü geçti; aynı kaynaktan debug APK doğrulandı. Backend tam SQLite/PG kabulü 922 benzersiz PASS, yalnız2 belgelenmiş DB varyantı skip. Bütün uygulama web paritesi ve satış kabulü tamamlanmadı; docs/acceptance/native-debt-ledger-20261112.json açık işleri listeler.
 
 
-Edit-form UI2/2 testi geçti: kuruş ve hata taslağı korunur, sunucu ACK ve Tamam sonrası kapanır; güncel tam104 sürüyor, eşleşen APK henüz yok. Native102 testi bu ek düzeltmeden öncedir. Backend tam922 PASS/2 DB varyantı skip. Güncel sınırlar docs/acceptance/native-debt-edit-ui-20261112.json içindedir; satış kabulü açık.
+Edit-form kuruş/taslak/ACK ve scope düzeltmesi kabul edildi; güncel104/104 test ve aynı kaynak APK doğrulandı. Satış kabulü ve diğer modüller açık; docs/acceptance/native-debt-edit-ui-20261112.json.
