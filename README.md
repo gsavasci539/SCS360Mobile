@@ -57,4 +57,4 @@ Gerçek A26 cihazı, sağlayıcı sandbox anahtarları/HTTPS callback ve mağaza
 Gizli anahtarlar, gerçek kullanıcı kayıtları, yerel veritabanları, imzalama dosyaları ve derleme önbellekleri bu kaynak aktarımına dahil edilmez.
 
 
-Finans ledger liste/düzenleme/iptal devamı WIP: yeni kod için testler sürüyor. Önceki 100-test kabulü ve debug APK bu takip değişikliğini kapsamıyor; güncel durum docs/acceptance/native-debt-ledger-20261112.json içindedir.
+Finans ledger liste/düzenleme/iptal: 2/2 kontrat ve gerçek API/tempDB kabulü geçti; güncel tam Android/backend testleri sürüyor. Önceki 100-test kabulü ve debug APK bu takip değişikliğini kapsamıyor; güncel durum docs/acceptance/native-debt-ledger-20261112.json içindedir.
