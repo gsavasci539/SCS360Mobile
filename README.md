@@ -50,7 +50,7 @@ Uygulama derlemesi JDK17 ile geçti; Android36 Robolectric testleri Java21+ gere
 
 ## Kabul durumu
 
-Güncel native kaynak51/51 testten geçti; hata ve atlanan test yoktur. Bu paket responsive, API scope, Retrofit tanım ve token kasası regresyonlarını içerir. Aynı Kotlin kaynakla debug APK derlendi; imza ve paket metadata kontrolü geçti. APK yerelde tutulur; burada kaynaklar ve kabul kanıtı bulunur. Ayrıntılar `docs/VERIFICATION_20261111.md` içindedir. Bütün native işlemler web ile henüz eşit değildir.
+12 Kasım checkpoint: 100/100 native regresyon testi geçti (25 sınıf; hata/atlanan yok). Aynı kaynaktan debug APK imza ve paket doğrulaması yapıldı. Tahakkuk oluşturma gerçek API ve geçici DB ile kabul edildi; bütün native işlemler web ile henüz eşit değildir. Güncel kanıt docs/acceptance/native-debt-create-20261112.json ve docs/VERIFICATION_20261111.md içindedir.
 
 Gerçek A26 cihazı, sağlayıcı sandbox anahtarları/HTTPS callback ve mağaza abonelik ürünleri için kabul açık. Debug APK üretim sürümü değildir ve bu kaynak deposuna eklenmez. App Store/Google Play ürünleri henüz tanımlı olmadığından native SaaS satın alımı kapalıdır. Kurumların kendi okul/kurs tahsilatları ayrı sunucu checkout hesabı kullanır.
 
