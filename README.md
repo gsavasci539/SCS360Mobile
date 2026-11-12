@@ -63,4 +63,6 @@ Gizli anahtarlar, gerçek kullanıcı kayıtları, yerel veritabanları, imzalam
 Edit-form kuruş/taslak/ACK ve scope düzeltmesi kabul edildi; önceki104/104 test ve o kaynağın APK doğrulandı. Satış kabulü ve diğer modüller açık; docs/acceptance/native-debt-edit-ui-20261112.json.
 
 
-Gider oluşturma/listeleme/silme ve web değişikliklerinin native görünürlüğü kabul edildi: güncel109/109 test ve aynı kaynak debug APK; backend 940 benzersiz PASS/2 DB varyantı skip. Yerel gider fallback ve örnek harcamalar kaldırıldı. Native gider düzenleme UI ve diğer modüller/fiziksel sağlayıcı-mağaza kabulü açık; docs/acceptance/native-expense-20261112.json.
+Gider oluşturma/listeleme/silme ve web değişikliklerinin native görünürlüğü kabul edildi: önceki109/109 test ve aynı kaynak debug APK; backend 940 benzersiz PASS/2 DB varyantı skip. Yerel gider fallback ve örnek harcamalar kaldırıldı. Native gider düzenleme UI ve diğer modüller/fiziksel sağlayıcı-mağaza kabulü açık; docs/acceptance/native-expense-20261112.json.
+
+Güncel finans portalı gider silme checkpoint:112 benzersiz native test geçti (6hedef+106regresyon,tekrar yok). Seçili kayıt/onay/hata/kapsam/büyük yazı kabulü ve aynı kaynak debug APK doğrulandı. Native düzenleme/notlar ve diğer modüller/gerçek cihaz/sağlayıcı/mağaza/yayın kabulü açık; docs/acceptance/native-expense-delete-20261112.json.
