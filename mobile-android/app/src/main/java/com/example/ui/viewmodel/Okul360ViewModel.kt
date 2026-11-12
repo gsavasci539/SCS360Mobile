@@ -56,7 +56,12 @@ data class Okul360UiState(
     val filterAcademicYear: String = "all",
     val academicYears: List<String> = listOf("2025-2026", "2024-2025", "2026-2027"),
     val selectedStudent: Student? = null,
+    val studentsError: String? = null,
+    val studentsLoaded: Boolean = false,
     val isStudentsLoading: Boolean = false,
+    val registrySaving: Boolean = false,
+    val registryError: String? = null,
+    val registrySavedRevision: Long = 0,
     val showAddStudentDialog: Boolean = false,
     val studentToEdit: Student? = null,
 
@@ -793,6 +798,7 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             val classList = repository.getClasses(_uiState.value.selectedBranchId)
             if (_uiState.value.isAttendanceSaving || _uiState.value.attendanceSavePending) return@launch
             _uiState.update { state -> state.copy(classes = classList,
+                students = state.students.map { student -> classList.find { it.id == student.class_id }?.let { student.copy(class_name = it.name, academic_year = it.academic_year) } ?: student },
                 selectedClassId = state.selectedClassId.takeIf { id -> classList.any { it.id == id } } ?: classList.firstOrNull()?.id.orEmpty(),
                 attendanceClassId = state.attendanceClassId.takeIf { id -> classList.any { it.id == id } } ?: classList.firstOrNull()?.id.orEmpty()) }
             loadAttendance()
@@ -898,63 +904,29 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
 
     // Student CRUD & Filtering
     fun loadStudents() {
-        viewModelScope.launch(requestFailures) {
-            _uiState.update { it.copy(isStudentsLoading = true) }
+        val state = _uiState.value
+        val generation = ++studentsGeneration
+        studentsLoadJob?.cancel()
+        val scope = com.example.data.remote.ApiClientProvider.interceptor.captureScope()
+        _uiState.update { it.copy(isStudentsLoading = true, studentsError = null) }
+        studentsLoadJob = viewModelScope.launch {
             try {
-                val stdList = repository.getStudents(
-                    branchId = _uiState.value.selectedBranchId,
-                    classId = if (_uiState.value.filterClassId == "all") null else _uiState.value.filterClassId,
-                    search = _uiState.value.searchQuery.ifBlank { null }
-                )
-                val rawStudents = if (stdList.isNotEmpty()) {
-                    repository.cacheStudentsLocally(stdList)
-                    stdList
-                } else {
-                    repository.getCachedStudents(
-                        classId = if (_uiState.value.filterClassId == "all") null else _uiState.value.filterClassId,
-                        search = _uiState.value.searchQuery.ifBlank { null }
-                    )
-                }
-
-                val filtered = rawStudents.filter { std ->
-                    val matchesYear = _uiState.value.filterAcademicYear == "all" || std.academic_year == _uiState.value.filterAcademicYear
-                    val matchesClass = _uiState.value.filterClassId == "all" || std.class_id == _uiState.value.filterClassId
-                    val q = _uiState.value.searchQuery.trim().lowercase()
-                    val matchesSearch = q.isBlank() ||
-                            std.full_name.lowercase().contains(q) ||
-                            std.student_number.lowercase().contains(q) ||
-                            std.parent_name.lowercase().contains(q) ||
-                            std.class_name.lowercase().contains(q)
-                    matchesYear && matchesClass && matchesSearch
-                }
-
-                _uiState.update {
-                    it.copy(
-                        students = filtered,
-                        isStudentsLoading = false
-                    )
-                }
-            } catch (e: Exception) {
-                val cached = repository.getCachedStudents(
-                    classId = if (_uiState.value.filterClassId == "all") null else _uiState.value.filterClassId,
-                    search = _uiState.value.searchQuery.ifBlank { null }
-                )
-                val filtered = cached.filter { std ->
-                    val matchesYear = _uiState.value.filterAcademicYear == "all" || std.academic_year == _uiState.value.filterAcademicYear
-                    val matchesClass = _uiState.value.filterClassId == "all" || std.class_id == _uiState.value.filterClassId
-                    val q = _uiState.value.searchQuery.trim().lowercase()
-                    val matchesSearch = q.isBlank() ||
-                            std.full_name.lowercase().contains(q) ||
-                            std.student_number.lowercase().contains(q) ||
-                            std.parent_name.lowercase().contains(q) ||
-                            std.class_name.lowercase().contains(q)
-                    matchesYear && matchesClass && matchesSearch
-                }
-                _uiState.update {
-                    it.copy(
-                        students = filtered,
-                        isStudentsLoading = false
-                    )
+                val rows = scope.io { repository.getStudents(state.selectedBranchId,
+                    state.filterClassId.takeIf { it != "all" }, state.searchQuery.ifBlank { null }) }
+                scope.ensureCurrent()
+                if (generation != studentsGeneration) return@launch
+                val knownClasses = _uiState.value.classes
+                val joined = rows.map { student -> knownClasses.find { it.id == student.class_id }?.let {
+                    student.copy(class_name = it.name, academic_year = it.academic_year)
+                } ?: student }.filter { state.filterAcademicYear == "all" || it.academic_year == state.filterAcademicYear }
+                _uiState.update { it.copy(students = joined, isStudentsLoading = false, studentsLoaded = true, studentsError = null) }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (failure: Exception) {
+                if (scope.current() && generation == studentsGeneration) {
+                    if ((failure as? com.example.data.remote.RegistryHttpException)?.code == 401) { logout(); return@launch }
+                    if ((failure as? com.example.data.remote.RegistryHttpException)?.code == 402) refreshSubscriptionAccessStatus()
+                    _uiState.update { it.copy(students = emptyList(), isStudentsLoading = false, studentsLoaded = false,
+                        studentsError = "Öğrenci listesi yüklenemedi. Yeniden deneyin.") }
                 }
             }
         }
@@ -979,152 +951,47 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(selectedStudent = student) }
     }
 
+    private fun <T> registryMutation(call: suspend () -> T, success: (T) -> Unit) {
+        if (_uiState.value.registrySaving) return
+        val scope = com.example.data.remote.ApiClientProvider.interceptor.captureScope()
+        _uiState.update { it.copy(registrySaving = true, registryError = null) }
+        viewModelScope.launch {
+            try {
+                val result = scope.io { call() }
+                scope.ensureCurrent()
+                success(result)
+                _uiState.update { it.copy(registrySavedRevision = it.registrySavedRevision + 1) }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (failure: Exception) {
+                if (scope.current()) {
+                    if ((failure as? com.example.data.remote.RegistryHttpException)?.code == 401) { logout(); return@launch }
+                    if ((failure as? com.example.data.remote.RegistryHttpException)?.code == 402) refreshSubscriptionAccessStatus()
+                    _uiState.update { it.copy(registryError = failure.message ?: "İşlem tamamlanamadı", toastMessage = "İşlem tamamlanamadı: ${failure.message.orEmpty()}") }
+                    if (failure is com.example.data.remote.RegistryRecordChangedException) { loadStudents(); loadClasses() }
+                }
+            } finally { if (scope.current()) _uiState.update { it.copy(registrySaving = false) } }
+        }
+    }
+    private var studentsGeneration = 0L
+    private var studentsLoadJob: kotlinx.coroutines.Job? = null
+
     fun openAddStudentDialog(open: Boolean) {
         _uiState.update { it.copy(showAddStudentDialog = open) }
     }
 
-    fun addStudent(student: Student) {
-        viewModelScope.launch(requestFailures) {
-            val state = _uiState.value
-            val targetClass = state.classes.find { it.id == student.class_id }
-            if (targetClass != null && !targetClass.is_active) {
-                _uiState.update { it.copy(toastMessage = "Hata (409 Conflict): Pasif sınıfa (${targetClass.name}) yeni öğrenci kaydı yapılamaz!") }
-                return@launch
-            }
-            if (targetClass != null && targetClass.student_count >= targetClass.capacity) {
-                _uiState.update { it.copy(toastMessage = "Kapasite Koruması (409 Conflict): '${targetClass.name}' sınıfı dolu (${targetClass.student_count}/${targetClass.capacity})!") }
-                return@launch
-            }
-            if (state.organizationAccess.student_limit > 0 && state.organizationAccess.active_students >= state.organizationAccess.student_limit) {
-                _uiState.update { it.copy(toastMessage = "Paket Kotası (409 Conflict): Kurum öğrenci limiti (${state.organizationAccess.student_limit}) dolu!") }
-                return@launch
-            }
-            repository.addStudent(student)
-            _uiState.update { cur ->
-                val updatedClasses = cur.classes.map { cls ->
-                    if (cls.id == student.class_id) cls.copy(student_count = cls.student_count + 1) else cls
-                }
-                cur.copy(
-                    classes = updatedClasses,
-                    showAddStudentDialog = false,
-                    toastMessage = "${student.full_name} sisteme başarıyla kaydedildi."
-                )
-            }
-            loadStudents()
-            loadDashboard()
-        }
+    fun addStudent(student: Student) = registryMutation({ repository.addStudent(student) }) { created ->
+        _uiState.update { it.copy(showAddStudentDialog = false, selectedStudent = created, toastMessage = "${created.full_name} kaydedildi.") }
+        loadStudents(); loadClasses(); loadDashboard()
     }
 
-    fun addStudent(
-        firstName: String,
-        lastName: String,
-        classId: String,
-        parentName: String,
-        parentPhone: String,
-        allergies: String?
-    ) {
-        viewModelScope.launch(requestFailures) {
-            val state = _uiState.value
-            val targetClass = state.classes.find { it.id == classId }
-            if (targetClass != null && !targetClass.is_active) {
-                _uiState.update { it.copy(toastMessage = "Hata (409 Conflict): Pasif sınıfa (${targetClass.name}) yeni öğrenci kaydı yapılamaz!") }
-                return@launch
-            }
-            if (targetClass != null && targetClass.student_count >= targetClass.capacity) {
-                _uiState.update { it.copy(toastMessage = "Kapasite Koruması (409 Conflict): '${targetClass.name}' sınıfı dolu (${targetClass.student_count}/${targetClass.capacity})!") }
-                return@launch
-            }
-            if (state.organizationAccess.student_limit > 0 && state.organizationAccess.active_students >= state.organizationAccess.student_limit) {
-                _uiState.update { it.copy(toastMessage = "Paket Kotası (409 Conflict): Kurum öğrenci limiti (${state.organizationAccess.student_limit}) dolu!") }
-                return@launch
-            }
-            val newStudent = Student(
-                id = "std-${UUID.randomUUID()}",
-                student_number = "2026-${(100..999).random()}",
-                first_name = firstName,
-                last_name = lastName,
-                class_id = classId,
-                class_name = targetClass?.name ?: "Sınıf",
-                branch_id = _uiState.value.selectedBranchId,
-                parent_name = parentName,
-                parent_phone = parentPhone,
-                allergies_or_diet = allergies,
-                status = "ACTIVE",
-                today_attendance_status = "PRESENT"
-            )
-            repository.addStudent(newStudent)
-            _uiState.update { cur ->
-                val updatedClasses = cur.classes.map { cls ->
-                    if (cls.id == classId) cls.copy(student_count = cls.student_count + 1) else cls
-                }
-                cur.copy(
-                    classes = updatedClasses,
-                    showAddStudentDialog = false,
-                    toastMessage = "${newStudent.full_name} sisteme başarıyla kaydedildi."
-                )
-            }
-            loadStudents()
-            loadDashboard()
-        }
+    fun updateStudent(student: Student) = registryMutation({ repository.updateStudent(student) }) { saved ->
+        _uiState.update { it.copy(studentToEdit = null, selectedStudent = saved, toastMessage = "${saved.full_name} güncellendi.") }
+        loadStudents(); loadClasses()
     }
 
-    fun updateStudent(student: Student) {
-        viewModelScope.launch(requestFailures) {
-            val state = _uiState.value
-            val existingStudent = state.students.find { it.id == student.id }
-            val classChanged = existingStudent != null && existingStudent.class_id != student.class_id
-            if (classChanged) {
-                val targetClass = state.classes.find { it.id == student.class_id }
-                if (targetClass != null && !targetClass.is_active) {
-                    _uiState.update { it.copy(toastMessage = "Hata (409 Conflict): Pasif sınıfa (${targetClass.name}) öğrenci aktarılamaz!") }
-                    return@launch
-                }
-                if (targetClass != null && targetClass.student_count >= targetClass.capacity) {
-                    _uiState.update { it.copy(toastMessage = "Kapasite Koruması (409 Conflict): '${targetClass.name}' sınıfı dolu (${targetClass.student_count}/${targetClass.capacity})!") }
-                    return@launch
-                }
-            }
-            repository.updateStudent(student)
-            _uiState.update { cur ->
-                val updatedClasses = if (classChanged && existingStudent != null) {
-                    cur.classes.map { cls ->
-                        when (cls.id) {
-                            existingStudent.class_id -> cls.copy(student_count = (cls.student_count - 1).coerceAtLeast(0))
-                            student.class_id -> cls.copy(student_count = cls.student_count + 1)
-                            else -> cls
-                        }
-                    }
-                } else cur.classes
-                cur.copy(
-                    classes = updatedClasses,
-                    studentToEdit = null,
-                    selectedStudent = student,
-                    toastMessage = "${student.full_name} bilgileri güncellendi."
-                )
-            }
-            loadStudents()
-        }
-    }
-
-    fun deleteStudent(studentId: String) {
-        viewModelScope.launch(requestFailures) {
-            val std = _uiState.value.students.find { it.id == studentId }
-            repository.deleteStudent(studentId)
-            _uiState.update { cur ->
-                val updatedClasses = if (std != null) {
-                    cur.classes.map { cls ->
-                        if (cls.id == std.class_id) cls.copy(student_count = (cls.student_count - 1).coerceAtLeast(0)) else cls
-                    }
-                } else cur.classes
-                cur.copy(
-                    classes = updatedClasses,
-                    selectedStudent = null,
-                    toastMessage = "${std?.full_name ?: "Öğrenci"} kaydı silindi."
-                )
-            }
-            loadStudents()
-            loadDashboard()
-        }
+    fun deleteStudent(studentId: String) = registryMutation({ repository.deleteStudent(studentId) }) {
+        _uiState.update { it.copy(selectedStudent = null, toastMessage = "Öğrenci kaydı silindi.") }
+        loadStudents(); loadClasses(); loadDashboard()
     }
 
     // Attendance actions use one immutable class/day snapshot and backend row versions.
@@ -1560,52 +1427,19 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(selectedClassDetail = classGroup) }
     }
 
-    fun addClass(name: String, gradeLevel: String, teacherName: String, capacity: Int, roomNumber: String) {
-        viewModelScope.launch(requestFailures) {
-            val newClass = ClassGroup(
-                id = "class-${UUID.randomUUID()}",
-                name = name,
-                grade_level = gradeLevel,
-                branch_id = _uiState.value.selectedBranchId,
-                teacher_name = teacherName,
-                student_count = 0,
-                capacity = capacity,
-                room_number = roomNumber
-            )
-            repository.addClass(newClass)
-            _uiState.update { it.copy(toastMessage = "${newClass.name} sınıfı oluşturuldu.") }
-            loadClasses()
-        }
+    fun addClass(classGroup: ClassGroup) = registryMutation({ repository.addClass(classGroup) }) { created ->
+        _uiState.update { it.copy(selectedClassDetail = created, toastMessage = "${created.name} sınıfı oluşturuldu.") }
+        loadClasses()
     }
 
-    fun updateClass(classGroup: ClassGroup) {
-        val enrolledCount = _uiState.value.students.count { it.class_id == classGroup.id }
-        if (classGroup.capacity < enrolledCount) {
-            _uiState.update {
-                it.copy(toastMessage = "Kapasite Hatası (409 Conflict): Sınıf kapasitesi (${classGroup.capacity}), mevcut öğrenci sayısının ($enrolledCount) altına düşürülemez!")
-            }
-            return
-        }
-        viewModelScope.launch(requestFailures) {
-            repository.updateClass(classGroup)
-            _uiState.update { it.copy(selectedClassDetail = classGroup, toastMessage = "${classGroup.name} güncellendi.") }
-            loadClasses()
-        }
+    fun updateClass(classGroup: ClassGroup) = registryMutation({ repository.updateClass(classGroup) }) { saved ->
+        _uiState.update { it.copy(selectedClassDetail = saved, toastMessage = "${saved.name} güncellendi.") }
+        loadClasses()
     }
 
-    fun deleteClass(classId: String) {
-        val enrolledCount = _uiState.value.students.count { it.class_id == classId }
-        if (enrolledCount > 0) {
-            _uiState.update {
-                it.copy(toastMessage = "Sınıf Silinemez (409 Conflict): Bu sınıfta $enrolledCount kayıtlı öğrenci var. Önce öğrencileri başka sınıfa transfer edin.")
-            }
-            return
-        }
-        viewModelScope.launch(requestFailures) {
-            repository.deleteClass(classId)
-            _uiState.update { it.copy(selectedClassDetail = null, toastMessage = "Sınıf silindi.") }
-            loadClasses()
-        }
+    fun deleteClass(classId: String) = registryMutation({ repository.deleteClass(classId) }) {
+        _uiState.update { it.copy(selectedClassDetail = null, toastMessage = "Sınıf silindi.") }
+        loadClasses()
     }
 
     fun assignStudentToClass(studentId: String, classId: String) {

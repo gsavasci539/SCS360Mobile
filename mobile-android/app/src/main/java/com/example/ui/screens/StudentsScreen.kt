@@ -58,6 +58,7 @@ fun StudentsScreen(
     onViewReportCard: ((Student) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val canWrite = com.example.ui.dialogs.registryCanWrite(state, "student") && !state.registrySaving
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     var studentToEdit by remember { mutableStateOf<Student?>(null) }
@@ -80,7 +81,7 @@ fun StudentsScreen(
             SpeedDialAction(
                 id = "student_add_new",
                 title = "Yeni Öğrenci Ekle",
-                description = "Profil, veli ve sınıf bilgisi kaydet",
+                description = "Öğrenci ve sınıf bilgilerini kaydet",
                 icon = Icons.Default.PersonAdd,
                 containerColor = PrimaryBlue,
                 testTag = "student_fab_action_add",
@@ -132,10 +133,17 @@ fun StudentsScreen(
         )
     }
 
+    val visibleStudentActions = studentActions.filter { action -> when (action.id) {
+                    "student_add_new", "student_import_excel" -> canWrite
+                    "student_print_cards" -> onPrintReportCard != null || onPrintClassReportCards != null
+                    "student_export_csv" -> onExportCsv != null
+                    else -> true
+                } }
+
     Scaffold(
         floatingActionButton = {
-            RoleSpeedDialFab(
-                actions = studentActions,
+            if (visibleStudentActions.isNotEmpty()) RoleSpeedDialFab(
+                actions = visibleStudentActions,
                 expanded = isFabExpanded,
                 onExpandedChange = { isFabExpanded = it },
                 fabColor = PrimaryBlue,
@@ -185,7 +193,13 @@ fun StudentsScreen(
             )
 
             // Loading & Empty State Handling
-            if (state.isDataLoading) {
+            if (state.studentsError != null) {
+                LazyColumn(Modifier.fillMaxSize().testTag("students_load_error"), contentPadding = PaddingValues(16.dp)) {
+                    item { Text(state.studentsError, color = MaterialTheme.colorScheme.error) }
+                    item { Button(onClick = { onRefresh?.invoke() }, enabled = onRefresh != null,
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("students_retry")) { Text("Yeniden dene") } }
+                }
+            } else if (state.isStudentsLoading || (state.isDataLoading && !state.studentsLoaded)) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -364,6 +378,7 @@ fun StudentsScreen(
                                 if (isCardView) {
                                     StudentItemCard(
                                         student = student,
+                                        canWrite = canWrite,
                                         onClick = {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             onSelectStudent(student)
@@ -385,6 +400,7 @@ fun StudentsScreen(
                                     StudentCompactTableRow(
                                         index = index,
                                         student = student,
+                                        canWrite = canWrite,
                                         onClick = {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             onSelectStudent(student)
@@ -407,11 +423,10 @@ fun StudentsScreen(
     studentToEdit?.let { std ->
         EditStudentDialog(
             student = std,
-            classes = state.classes,
+            state = state,
             onDismiss = { studentToEdit = null },
             onConfirm = { updated ->
                 onUpdateStudent(updated)
-                studentToEdit = null
             }
         )
     }
@@ -438,7 +453,8 @@ private fun StudentCompactTableRow(
     onDeleteClick: () -> Unit,
     onViewReportCard: () -> Unit,
     onCallParent: () -> Unit,
-    onWhatsAppParent: () -> Unit
+    onWhatsAppParent: () -> Unit,
+    canWrite: Boolean = false
 ) {
     val attendanceStatusEnum = when (student.today_attendance_status) {
         "PRESENT" -> AttendanceStatus.PRESENT
@@ -538,28 +554,32 @@ private fun StudentCompactTableRow(
                 icon = Icons.Default.Phone,
                 contentDescription = "Ara",
                 tint = PrimaryBlue,
-                onClick = onCallParent
+                onClick = onCallParent,
+                enabled = student.parent_phone.isNotBlank()
             )
             Spacer(modifier = Modifier.width(3.dp))
             CompactRowActionIcon(
                 icon = Icons.AutoMirrored.Filled.Chat,
                 contentDescription = "WhatsApp",
                 tint = SecondaryEmerald,
-                onClick = onWhatsAppParent
+                onClick = onWhatsAppParent,
+                enabled = student.parent_phone.isNotBlank()
             )
             Spacer(modifier = Modifier.width(3.dp))
             CompactRowActionIcon(
                 icon = Icons.Default.Edit,
                 contentDescription = "Düzenle",
                 tint = BrandNavy,
-                onClick = onEditClick
+                onClick = onEditClick,
+                enabled = canWrite
             )
             Spacer(modifier = Modifier.width(3.dp))
             CompactRowActionIcon(
                 icon = Icons.Default.Delete,
                 contentDescription = "Sil",
                 tint = MaterialTheme.colorScheme.error,
-                onClick = onDeleteClick
+                onClick = onDeleteClick,
+                enabled = canWrite
             )
         }
     }
@@ -575,7 +595,8 @@ fun StudentItemCard(
     onCallParent: () -> Unit,
     onWhatsAppParent: () -> Unit,
     onViewReportCard: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    canWrite: Boolean = false
 ) {
     val attendanceStatusEnum = when (student.today_attendance_status) {
         "PRESENT" -> AttendanceStatus.PRESENT
@@ -646,13 +667,15 @@ fun StudentItemCard(
                     icon = Icons.Default.Edit,
                     contentDescription = "Düzenle",
                     tint = PrimaryBlue,
-                    onClick = onEditClick
+                    onClick = onEditClick,
+                enabled = canWrite
                 )
                 CompactRowActionIcon(
                     icon = Icons.Default.Delete,
                     contentDescription = "Sil",
                     tint = MaterialTheme.colorScheme.error,
-                    onClick = onDeleteClick
+                    onClick = onDeleteClick,
+                enabled = canWrite
                 )
             }
         }
@@ -712,14 +735,16 @@ fun StudentItemCard(
                     contentDescription = "Ara",
                     tint = PrimaryBlue,
                     containerColor = PrimaryBlueContainer,
-                    onClick = onCallParent
+                    onClick = onCallParent,
+                enabled = student.parent_phone.isNotBlank()
                 )
                 CompactRowActionIcon(
                     icon = Icons.AutoMirrored.Filled.Chat,
                     contentDescription = "WhatsApp",
                     tint = SecondaryEmerald,
                     containerColor = SecondaryEmeraldContainer,
-                    onClick = onWhatsAppParent
+                    onClick = onWhatsAppParent,
+                enabled = student.parent_phone.isNotBlank()
                 )
             }
         }

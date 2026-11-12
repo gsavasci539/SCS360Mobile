@@ -454,7 +454,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             BranchManagerPortalScreen(
                                 state = state,
                                 onAddStudent = { std -> viewModel.addStudent(std) },
-                                onAddClass = { name, grade, teacher, cap, room -> viewModel.addClass(name, grade, teacher, cap, room) },
+                                onAddClass = { viewModel.addClass(it) },
                                 onCreateAnnouncement = { title, content, cat, tgt -> viewModel.createAnnouncement(title, content, cat, tgt) },
                                 onDeleteAnnouncement = { id -> viewModel.deleteAnnouncement(id) },
                                 onRoleSelected = { role -> viewModel.switchRole(role) },
@@ -1027,9 +1027,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                         when (subScreen) {
                             SubScreen.CLASSES -> ClassesScreen(
                                 state = state,
-                                onAddClass = { name, grade, teacher, cap, room ->
-                                    viewModel.addClass(name, grade, teacher, cap, room)
-                                },
+                                onAddClass = { viewModel.addClass(it) },
                                 onUpdateClass = { cls ->
                                     viewModel.updateClass(cls)
                                 },
@@ -1731,15 +1729,8 @@ fun Okul360App(viewModel: Okul360ViewModel) {
         }
 
         // Dialogs & Modals
-            if (state.showAddStudentDialog) {
-                AddStudentDialog(
-                    classes = state.classes,
-                    onDismiss = { viewModel.openAddStudentDialog(false) },
-                    onConfirm = { first, last, clsId, pName, pPhone, allergies ->
-                        viewModel.addStudent(first, last, clsId, pName, pPhone, allergies)
-                    }
-                )
-            }
+            if (state.showAddStudentDialog) AddStudentDialog(state = state,
+                onDismiss = { viewModel.openAddStudentDialog(false) }, onConfirm = { viewModel.addStudent(it) })
 
             if (showQuickAttendanceSheet) {
                 QuickAttendanceBottomSheet(

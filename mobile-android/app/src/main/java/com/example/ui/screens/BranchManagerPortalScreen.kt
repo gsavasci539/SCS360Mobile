@@ -51,7 +51,7 @@ enum class ManagerNavTab(
 fun BranchManagerPortalScreen(
     state: Okul360UiState,
     onAddStudent: (Student) -> Unit,
-    onAddClass: (name: String, grade: String, teacher: String, cap: Int, room: String) -> Unit,
+    onAddClass: (com.example.data.model.ClassGroup) -> Unit,
     onCreateAnnouncement: (title: String, content: String, cat: String, tgt: String) -> Unit,
     onDeleteAnnouncement: (String) -> Unit = {},
     onRoleSelected: (UserRole) -> Unit = {},
@@ -301,41 +301,8 @@ fun BranchManagerPortalScreen(
         }
     }
 
-    if (showAddStudentModal) {
-        AddStudentDialog(
-            classes = state.classes,
-            onDismiss = { showAddStudentModal = false },
-            onConfirm = { firstName, lastName, classId, parentName, parentPhone, allergies ->
-                val targetClass = state.classes.find { it.id == classId }
-                val newStd = Student(
-                    id = "std-${java.util.UUID.randomUUID()}",
-                    student_number = "2026-${(100..999).random()}",
-                    first_name = firstName,
-                    last_name = lastName,
-                    class_id = classId,
-                    class_name = targetClass?.name ?: "Sınıf",
-                    branch_id = state.selectedBranchId,
-                    parent_name = parentName,
-                    parent_phone = parentPhone,
-                    allergies_or_diet = allergies,
-                    status = "ACTIVE",
-                    today_attendance_status = "PRESENT"
-                )
-                onAddStudent(newStd)
-                showAddStudentModal = false
-            }
-        )
-    }
-
-    if (showAddClassModal) {
-        AddClassDialog(
-            onDismiss = { showAddClassModal = false },
-            onConfirm = { name, grade, teacher, cap, room ->
-                onAddClass(name, grade, teacher, cap, room)
-                showAddClassModal = false
-            }
-        )
-    }
+    if (showAddStudentModal) AddStudentDialog(state = state, onDismiss = { showAddStudentModal = false }, onConfirm = onAddStudent)
+    if (showAddClassModal) AddClassDialog(state = state, onDismiss = { showAddClassModal = false }, onConfirm = onAddClass)
 
     if (showNewAnnouncementModal) {
         var title by remember { mutableStateOf("") }

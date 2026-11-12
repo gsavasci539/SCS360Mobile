@@ -113,13 +113,13 @@ data class AuthResponse(
 
 @JsonClass(generateAdapter = true)
 data class Branch(
-    val id: String = "branch-1",
-    val organization_id: String = "org-1",
-    val name: String = "Merkez Kampüs",
-    val code: String = "MK",
-    val address: String = "İstanbul",
-    val phone: String = "+90 216 000 0000",
-    val email: String? = "merkez@scs360.com.tr",
+    val id: String = "",
+    val organization_id: String = "",
+    val name: String = "",
+    val code: String = "",
+    val address: String = "",
+    val phone: String = "",
+    val email: String? = null,
     val student_count: Int = 0,
     val class_count: Int = 0,
     val is_active: Boolean = true
@@ -127,16 +127,21 @@ data class Branch(
 
 @JsonClass(generateAdapter = true)
 data class ClassGroup(
-    val id: String = "class-1",
-    val name: String = "Sınıf",
-    val grade_level: String = "Anaokulu",
-    val branch_id: String = "branch-1",
-    val teacher_name: String = "Öğretmen",
+    val id: String = "",
+    val name: String = "",
+    val grade_level: String = "",
+    val branch_id: String = "",
+    val teacher_name: String = "",
     val student_count: Int = 0,
-    val capacity: Int = 20,
-    val room_number: String = "101",
-    val teacher_id: String? = "usr-teacher",
-    val is_active: Boolean = true
+    val capacity: Int = 0,
+    val room_number: String = "",
+    val teacher_id: String? = null,
+    val is_active: Boolean = true,
+    val organization_id: String = "",
+    val code: String = "",
+    val academic_year: String = "",
+    val description: String? = null,
+    val registry_snapshot: String? = null
 )
 
 enum class AttendanceStatus(val label: String, val shortCode: String, val colorHex: Long) {
@@ -181,22 +186,22 @@ data class AttendanceRecordSubmit(
 
 @JsonClass(generateAdapter = true)
 data class Student(
-    val id: String = "std-1",
-    val student_number: String = "101",
+    val id: String = "",
+    val student_number: String = "",
     val first_name: String = "",
     val last_name: String = "",
-    val class_id: String = "class-1",
-    val class_name: String = "Sınıf",
-    val branch_id: String = "branch-1",
-    val academic_year: String = "2025-2026",
-    val birth_date: String = "2021-03-15",
-    val enrollment_date: String? = "2026-09-01",
-    val gender: String = "Erkek",
-    val address: String? = "Ataşehir / İstanbul",
+    val class_id: String = "",
+    val class_name: String = "",
+    val branch_id: String = "",
+    val academic_year: String = "",
+    val birth_date: String = "",
+    val enrollment_date: String? = null,
+    val gender: String = "",
+    val address: String? = null,
     val notes: String? = null,
     val health_notes: String? = null,
-    val parent_name: String = "Veli",
-    val parent_phone: String = "+90 532 000 0000",
+    val parent_name: String = "",
+    val parent_phone: String = "",
     val parent_email: String? = null,
     val linked_parent_user_id: String? = null,
     val receive_notifications: Boolean = true,
@@ -204,10 +209,12 @@ data class Student(
     val whatsapp_phone: String? = null,
     val status: String = "ACTIVE", // ACTIVE, INACTIVE, TRIAL
     val allergies_or_diet: String? = null,
-    val blood_type: String? = "A Rh+",
+    val blood_type: String? = null,
     val avatar_color_hex: Long = 0xFF3B82F6,
     val tuition_balance: Double = 0.0,
-    val today_attendance_status: String? = null
+    val today_attendance_status: String? = null,
+    val organization_id: String = "",
+    val registry_snapshot: String? = null
 ) {
     val full_name: String get() = if (first_name.isNotBlank() || last_name.isNotBlank()) "$first_name $last_name".trim() else "Öğrenci"
 }

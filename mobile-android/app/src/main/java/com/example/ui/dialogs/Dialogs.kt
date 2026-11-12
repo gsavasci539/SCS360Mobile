@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,8 +33,6 @@ import com.example.data.model.ClassGroup
 import com.example.data.model.Invoice
 import com.example.data.model.Student
 import com.example.data.model.User
-import com.example.ui.components.AttendanceHeatmapCalendar
-import com.example.ui.components.MonthlyAttendanceBarChart
 import com.example.ui.components.StatusBadge
 import com.example.ui.dialogs.ceppos.CepPosPaymentDialog
 import com.example.ui.dialogs.iyzico.IyzicoPaymentDialog
@@ -41,218 +40,8 @@ import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddStudentDialog(
-    classes: List<ClassGroup>,
-    onDismiss: () -> Unit,
-    onConfirm: (firstName: String, lastName: String, classId: String, parentName: String, parentPhone: String, allergies: String?) -> Unit
-) {
-    val selectableClasses = remember(classes) {
-        classes.filter { it.is_active }
-    }
-    var firstName by remember { mutableStateOf("") }
-    var lastName by remember { mutableStateOf("") }
-    var selectedClassId by remember(selectableClasses) {
-        mutableStateOf(
-            selectableClasses.firstOrNull { it.student_count < it.capacity }?.id
-                ?: selectableClasses.firstOrNull()?.id
-                ?: ""
-        )
-    }
-    var parentName by remember { mutableStateOf("") }
-    var parentPhone by remember { mutableStateOf("") }
-    var allergies by remember { mutableStateOf("") }
-    var classDropdownExpanded by remember { mutableStateOf(false) }
-    var classSearchQuery by remember { mutableStateOf("") }
-
-    val selectedClass = selectableClasses.find { it.id == selectedClassId } ?: classes.find { it.id == selectedClassId }
-    val isSelectedClassFull = selectedClass != null && selectedClass.student_count >= selectedClass.capacity
-
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
-            modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(max = 560.dp)
-                .padding(vertical = 16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "Yeni Öğrenci Kaydı",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 19.sp
-                        )
-                    )
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Kapat")
-                    }
-                }
-
-                Text(
-                    text = "Öğrenci ve veli bilgilerini doldurarak sisteme dahil edin.",
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                OutlinedTextField(
-                    value = firstName,
-                    onValueChange = { firstName = it },
-                    label = { Text("Öğrenci Adı") },
-                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                OutlinedTextField(
-                    value = lastName,
-                    onValueChange = { lastName = it },
-                    label = { Text("Öğrenci Soyadı") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Class selection with active/capacity filter & search
-                ExposedDropdownMenuBox(
-                    expanded = classDropdownExpanded,
-                    onExpandedChange = { classDropdownExpanded = !classDropdownExpanded }
-                ) {
-                    OutlinedTextField(
-                        value = selectedClass?.let { "${it.name} (${it.student_count}/${it.capacity})" } ?: "Sınıf Seçiniz",
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Kayıt Edilecek Aktif Sınıf & Kontenjan") },
-                        supportingText = if (isSelectedClassFull) {
-                            { Text("Seçili sınıf kontenjanı dolu (${selectedClass?.student_count}/${selectedClass?.capacity}).", color = StatusError) }
-                        } else null,
-                        isError = isSelectedClassFull,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = classDropdownExpanded) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = classDropdownExpanded,
-                        onDismissRequest = { classDropdownExpanded = false }
-                    ) {
-                        OutlinedTextField(
-                            value = classSearchQuery,
-                            onValueChange = { classSearchQuery = it },
-                            placeholder = { Text("Sınıf ara (100+ sınıf filtreleme)...", fontSize = 12.sp) },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                        val filteredClasses = selectableClasses.filter {
-                            classSearchQuery.isBlank() ||
-                                it.name.contains(classSearchQuery, ignoreCase = true) ||
-                                it.grade_level.contains(classSearchQuery, ignoreCase = true)
-                        }
-                        filteredClasses.forEach { cls ->
-                            val isFull = cls.student_count >= cls.capacity
-                            DropdownMenuItem(
-                                text = {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text("${cls.name} (${cls.grade_level})", fontWeight = FontWeight.Medium)
-                                        Text(
-                                            text = if (isFull) "${cls.student_count}/${cls.capacity} • DOLU" else "${cls.student_count}/${cls.capacity}",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isFull) StatusError else SecondaryEmerald
-                                        )
-                                    }
-                                },
-                                enabled = !isFull,
-                                onClick = {
-                                    if (!isFull) {
-                                        selectedClassId = cls.id
-                                        classDropdownExpanded = false
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                OutlinedTextField(
-                    value = parentName,
-                    onValueChange = { parentName = it },
-                    label = { Text("Veli Adı & Soyadı (Örn: Mehmet Kaya - Baba)") },
-                    leadingIcon = { Icon(Icons.Default.SupervisorAccount, contentDescription = null) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                OutlinedTextField(
-                    value = parentPhone,
-                    onValueChange = { parentPhone = it },
-                    label = { Text("Veli Telefon Numarası") },
-                    placeholder = { Text("+90 5XX XXX XX XX") },
-                    leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                OutlinedTextField(
-                    value = allergies,
-                    onValueChange = { allergies = it },
-                    label = { Text("Alerji / Özel Sağlık Durumu (Opsiyonel)") },
-                    placeholder = { Text("Örn: Laktoz intoleransı, Astım") },
-                    leadingIcon = { Icon(Icons.Default.HealthAndSafety, contentDescription = null) },
-                    maxLines = 2,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                Button(
-                    onClick = {
-                        if (firstName.isNotBlank() && lastName.isNotBlank() && parentName.isNotBlank()) {
-                            onConfirm(firstName, lastName, selectedClassId, parentName, parentPhone, allergies)
-                        }
-                    },
-                    enabled = firstName.isNotBlank() && lastName.isNotBlank() && parentName.isNotBlank(),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                ) {
-                    Icon(Icons.Default.Save, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Öğrenciyi Kaydet", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-    }
+fun AddStudentDialog(state: com.example.ui.viewmodel.Okul360UiState, onDismiss: () -> Unit, onConfirm: (Student) -> Unit) {
+    RegistryStudentDialog(null, state, onDismiss, onConfirm)
 }
 
 @Composable
@@ -743,12 +532,12 @@ fun StudentDetailBottomSheet(
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Text(
-                        text = student.parent_name,
+                        text = student.parent_name.ifBlank { "Veli bilgisi yüklenmedi" },
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp
                     )
                     Text(
-                        text = student.parent_phone,
+                        text = student.parent_phone.ifBlank { "Telefon bilgisi yüklenmedi" },
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -760,6 +549,7 @@ fun StudentDetailBottomSheet(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Button(
+                            enabled = student.parent_phone.isNotBlank(),
                             onClick = {
                                 val intent = Intent(Intent.ACTION_DIAL).apply {
                                     data = Uri.parse("tel:${student.parent_phone}")
@@ -775,6 +565,7 @@ fun StudentDetailBottomSheet(
                         }
 
                         Button(
+                            enabled = student.parent_phone.isNotBlank(),
                             onClick = {
                                 val cleanPhone = student.parent_phone.replace("[^0-9]".toRegex(), "")
                                 val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -796,20 +587,8 @@ fun StudentDetailBottomSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Calendar-based Attendance Heatmap Visualization
-            AttendanceHeatmapCalendar(
-                student = student,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Monthly Attendance Bar Chart (Devam-Devamsızlık Veri Görselleştirmesi)
-            MonthlyAttendanceBarChart(
-                student = student,
-                modifier = Modifier.fillMaxWidth()
-            )
-
+            Text("Geçmiş yoklama raporu henüz yüklenmedi. Günlük yoklama ekranını kullanabilirsiniz.",
+                modifier = Modifier.fillMaxWidth().testTag("student_attendance_unloaded"))
             Spacer(modifier = Modifier.height(16.dp))
 
             // Sağlık ve Alerji Bilgisi
@@ -839,7 +618,7 @@ fun StudentDetailBottomSheet(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = student.allergies_or_diet ?: "Belirtilen alerji veya diyet kısıtı bulunmuyor.",
+                        text = student.health_notes ?: "Sağlık notu yüklenmedi veya paylaşılmıyor.",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium
                     )
@@ -871,10 +650,11 @@ fun StudentDetailBottomSheet(
                 ) {
                     Text(text = "Kalan Tahsilat Bakiyesi:", fontSize = 13.sp)
                     Text(
-                        text = if (student.tuition_balance <= 0) "Borcu Yok (₺0)" else "₺${student.tuition_balance.toInt()}",
+                        text = "Yüklenmedi",
+                        modifier = Modifier.testTag("student_finance_unloaded"),
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp,
-                        color = if (student.tuition_balance <= 0) SecondaryEmerald else AccentRose
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -886,176 +666,8 @@ fun StudentDetailBottomSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EditStudentDialog(
-    student: Student,
-    classes: List<ClassGroup>,
-    onDismiss: () -> Unit,
-    onConfirm: (Student) -> Unit
-) {
-    var firstName by remember { mutableStateOf(student.first_name) }
-    var lastName by remember { mutableStateOf(student.last_name) }
-    var selectedClassId by remember { mutableStateOf(student.class_id) }
-    var enrollmentDate by remember { mutableStateOf(student.enrollment_date ?: "") }
-    var address by remember { mutableStateOf(student.address ?: "") }
-    var notes by remember { mutableStateOf(student.notes ?: "") }
-    var healthNotes by remember { mutableStateOf(student.health_notes ?: "") }
-    var parentName by remember { mutableStateOf(student.parent_name) }
-    var parentPhone by remember { mutableStateOf(student.parent_phone) }
-    var allergies by remember { mutableStateOf(student.allergies_or_diet ?: "") }
-    var classDropdownExpanded by remember { mutableStateOf(false) }
-
-    val selectableClasses = remember(classes, student.class_id) {
-        classes.filter { it.is_active || it.id == student.class_id }
-    }
-    var classSearchQuery by remember { mutableStateOf("") }
-    val selectedClass = selectableClasses.find { it.id == selectedClassId } ?: classes.find { it.id == selectedClassId }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
-            modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp).padding(vertical = 16.dp)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(20.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Öğrenciyi Düzenle",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    )
-                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Kapat") }
-                }
-
-                OutlinedTextField(value = firstName, onValueChange = { firstName = it }, label = { Text("Adı") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = lastName, onValueChange = { lastName = it }, label = { Text("Soyadı") }, modifier = Modifier.fillMaxWidth())
-
-                ExposedDropdownMenuBox(
-                    expanded = classDropdownExpanded,
-                    onExpandedChange = { classDropdownExpanded = !classDropdownExpanded }
-                ) {
-                    OutlinedTextField(
-                        value = selectedClass?.let { "${it.name} (${it.student_count}/${it.capacity})" } ?: "Sınıf Seçiniz",
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Sınıf & Kontenjan") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = classDropdownExpanded) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = classDropdownExpanded,
-                        onDismissRequest = { classDropdownExpanded = false }
-                    ) {
-                        OutlinedTextField(
-                            value = classSearchQuery,
-                            onValueChange = { classSearchQuery = it },
-                            placeholder = { Text("Sınıf ara (100+ filtreleme)...", fontSize = 12.sp) },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                        val filteredClasses = selectableClasses.filter {
-                            classSearchQuery.isBlank() ||
-                                it.name.contains(classSearchQuery, ignoreCase = true) ||
-                                it.grade_level.contains(classSearchQuery, ignoreCase = true)
-                        }
-                        filteredClasses.forEach { cls ->
-                            val isCurrentClass = cls.id == student.class_id
-                            val isFullForTransfer = !isCurrentClass && cls.student_count >= cls.capacity
-                            DropdownMenuItem(
-                                text = {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = if (isCurrentClass) "${cls.name} (Mevcut)" else cls.name,
-                                            fontWeight = if (isCurrentClass) FontWeight.Bold else FontWeight.Medium
-                                        )
-                                        Text(
-                                            text = if (isFullForTransfer) "${cls.student_count}/${cls.capacity} • DOLU" else "${cls.student_count}/${cls.capacity}",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isFullForTransfer) StatusError else SecondaryEmerald
-                                        )
-                                    }
-                                },
-                                enabled = !isFullForTransfer,
-                                onClick = {
-                                    if (!isFullForTransfer) {
-                                        selectedClassId = cls.id
-                                        classDropdownExpanded = false
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
-
-                OutlinedTextField(
-                    value = enrollmentDate,
-                    onValueChange = { enrollmentDate = it },
-                    label = { Text("Kayıt Tarihi (YYYY-MM-DD • Boş bırakılırsa temizlenir)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = address,
-                    onValueChange = { address = it },
-                    label = { Text("Ev Adresi (Boş bırakılırsa temizlenir)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = notes,
-                    onValueChange = { notes = it },
-                    label = { Text("Genel Öğrenci Notu (Boş bırakılırsa temizlenir)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = healthNotes,
-                    onValueChange = { healthNotes = it },
-                    label = { Text("Sağlık Notu (health.write yetkisiyle • Boş bırakılırsa temizlenir)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(value = parentName, onValueChange = { parentName = it }, label = { Text("Veli Adı & Soyadı") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = parentPhone, onValueChange = { parentPhone = it }, label = { Text("Veli Telefonu") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = allergies, onValueChange = { allergies = it }, label = { Text("Alerji / Diyet") }, modifier = Modifier.fillMaxWidth())
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Button(
-                    onClick = {
-                        val updated = student.copy(
-                            first_name = firstName,
-                            last_name = lastName,
-                            class_id = selectedClassId,
-                            class_name = selectedClass?.name ?: student.class_name,
-                            enrollment_date = enrollmentDate.trim().takeIf { it.isNotBlank() },
-                            address = address.trim().takeIf { it.isNotBlank() },
-                            notes = notes.trim().takeIf { it.isNotBlank() },
-                            health_notes = healthNotes.trim().takeIf { it.isNotBlank() },
-                            parent_name = parentName,
-                            parent_phone = parentPhone,
-                            allergies_or_diet = allergies.trim().takeIf { it.isNotBlank() }
-                        )
-                        onConfirm(updated)
-                    },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Değişiklikleri Kaydet", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-    }
+fun EditStudentDialog(student: Student, state: com.example.ui.viewmodel.Okul360UiState, onDismiss: () -> Unit, onConfirm: (Student) -> Unit) {
+    RegistryStudentDialog(student, state, onDismiss, onConfirm)
 }
 
 @Composable
@@ -1225,146 +837,13 @@ fun EditInvoiceDialog(
 }
 
 @Composable
-fun AddClassDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (name: String, gradeLevel: String, teacherName: String, capacity: Int, roomNumber: String) -> Unit
-) {
-    var name by remember { mutableStateOf("") }
-    var gradeLevel by remember { mutableStateOf("Anaokulu") }
-    var teacherName by remember { mutableStateOf("") }
-    var capacityText by remember { mutableStateOf("20") }
-    var roomNumber by remember { mutableStateOf("Derslik 101") }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp).padding(vertical = 16.dp)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(20.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Yeni Sınıf Ekle", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = null) }
-                }
-
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Sınıf Adı (Örn: Kelebekler Sınıfı)") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = gradeLevel, onValueChange = { gradeLevel = it }, label = { Text("Seviye / Kademe (Örn: Anaokulu, 1. Sınıf)") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = teacherName, onValueChange = { teacherName = it }, label = { Text("Sınıf Öğretmeni Adı") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = capacityText, onValueChange = { capacityText = it }, label = { Text("Öğrenci Kontenjanı") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = roomNumber, onValueChange = { roomNumber = it }, label = { Text("Derslik / Oda No") }, modifier = Modifier.fillMaxWidth())
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Button(
-                    onClick = {
-                        if (name.isNotBlank()) {
-                            onConfirm(name, gradeLevel, teacherName, capacityText.toIntOrNull() ?: 20, roomNumber)
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Sınıfı Oluştur", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-    }
+fun AddClassDialog(state: com.example.ui.viewmodel.Okul360UiState, onDismiss: () -> Unit, onConfirm: (ClassGroup) -> Unit) {
+    RegistryClassDialog(null, state, onDismiss, onConfirm)
 }
 
 @Composable
-fun EditClassDialog(
-    classGroup: ClassGroup,
-    onDismiss: () -> Unit,
-    onConfirm: (ClassGroup) -> Unit
-) {
-    var name by remember { mutableStateOf(classGroup.name) }
-    var gradeLevel by remember { mutableStateOf(classGroup.grade_level) }
-    var teacherName by remember { mutableStateOf(classGroup.teacher_name) }
-    var capacityText by remember { mutableStateOf(classGroup.capacity.toString()) }
-    var roomNumber by remember { mutableStateOf(classGroup.room_number) }
-    var isActive by remember { mutableStateOf(classGroup.is_active) }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp).padding(vertical = 16.dp)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(20.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Sınıfı Düzenle (Kapasite Korumalı)", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = null) }
-                }
-
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Sınıf Adı") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = gradeLevel, onValueChange = { gradeLevel = it }, label = { Text("Kademe") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(
-                    value = teacherName,
-                    onValueChange = { teacherName = it },
-                    label = { Text("Birincil Sınıf Öğretmeni (Boş bırakılırsa öğretmen ataması kaldırılır)") },
-                    trailingIcon = {
-                        if (teacherName.isNotBlank()) {
-                            IconButton(onClick = { teacherName = "" }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Öğretmeni Kaldır")
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = capacityText,
-                    onValueChange = { capacityText = it },
-                    label = { Text("Kapasite (Mevcut öğrenci sayısının altına düşürülemez)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(value = roomNumber, onValueChange = { roomNumber = it }, label = { Text("Oda No") }, modifier = Modifier.fillMaxWidth())
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Sınıf Aktif Durumu (is_active)", fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                    Switch(checked = isActive, onCheckedChange = { isActive = it })
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Button(
-                    onClick = {
-                        onConfirm(
-                            classGroup.copy(
-                                name = name,
-                                grade_level = gradeLevel,
-                                teacher_id = teacherName.trim().takeIf { it.isNotBlank() }?.let { "usr-teacher" },
-                                teacher_name = teacherName.trim().ifBlank { "Atanmadı" },
-                                capacity = capacityText.toIntOrNull() ?: classGroup.capacity,
-                                room_number = roomNumber,
-                                is_active = isActive
-                            )
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Güncelle", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-    }
+fun EditClassDialog(classGroup: ClassGroup, state: com.example.ui.viewmodel.Okul360UiState, onDismiss: () -> Unit, onConfirm: (ClassGroup) -> Unit) {
+    RegistryClassDialog(classGroup, state, onDismiss, onConfirm)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

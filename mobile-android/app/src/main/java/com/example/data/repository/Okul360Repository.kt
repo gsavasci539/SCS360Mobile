@@ -209,10 +209,9 @@ class Okul360Repository(private val context: Context) {
     }
 
     suspend fun getBranches(): List<Branch> = requestContext {
-        try {
-            apiService.getBranches()
-        } catch (failure: Exception) { throw failure }
+        com.example.data.remote.NativeRegistryClient().branches()
     }
+
 
     suspend fun createBranch(branch: Branch): Branch = requestContext {
         try {
@@ -229,85 +228,58 @@ class Okul360Repository(private val context: Context) {
     }
 
     suspend fun getClasses(branchId: String?): List<ClassGroup> = requestContext {
-        val bId = branchId?.takeIf { it != "all" && it.isNotBlank() }
-        try {
-            apiService.getClasses(bId)
-        } catch (failure: Exception) { throw failure }
+        com.example.data.remote.NativeRegistryClient().classes(branchId?.takeIf { it != "all" && it.isNotBlank() })
     }
+    suspend fun getClassTeacherOptions(org: String, branch: String): List<com.example.data.remote.RegistryChoice> = requestContext {
+        com.example.data.remote.NativeRegistryClient().teachers(org, branch)
+    }
+
 
     suspend fun addClass(classGroup: ClassGroup): ClassGroup = requestContext {
-        try {
-            val created = apiService.createClass(classGroup)
-            localClasses.add(created)
-            created
-        } catch (failure: Exception) { throw failure }
+        com.example.data.remote.NativeRegistryClient().createClass(classGroup)
     }
+
 
     suspend fun updateClass(classGroup: ClassGroup): ClassGroup = requestContext {
-        try {
-            val updated = apiService.updateClass(classGroup.id, classGroup)
-            val idx = localClasses.indexOfFirst { it.id == classGroup.id }
-            if (idx >= 0) localClasses[idx] = updated else localClasses.add(updated)
-            updated
-        } catch (failure: Exception) { throw failure }
+        com.example.data.remote.NativeRegistryClient().updateClass(classGroup)
     }
+
 
     suspend fun deleteClass(classId: String): Boolean = requestContext {
-        try {
-            apiService.deleteClass(classId)
-            localClasses.removeAll { it.id == classId }
-            true
-        } catch (failure: Exception) { throw failure }
+        com.example.data.remote.NativeRegistryClient().deleteClass(classId); true
     }
+
 
     suspend fun assignStudentToClass(studentId: String, classId: String): Boolean = requestContext {
-        try {
-            apiService.assignStudentsToClass(classId, mapOf("student_ids" to listOf(studentId)))
-            true
-        } catch (failure: Exception) { throw failure }
+        com.example.data.remote.NativeRegistryClient().assignStudent(studentId, classId); true
     }
+
 
     suspend fun removeStudentFromClass(studentId: String): Boolean = requestContext {
-        try {
-            val student = apiService.getStudentById(studentId)
-            apiService.updateStudent(studentId, student.copy(class_id = "unassigned", class_name = "Atanmamış"))
-            true
-        } catch (failure: Exception) { throw failure }
+        com.example.data.remote.NativeRegistryClient().unassignStudent(studentId); true
     }
+
 
     suspend fun getStudents(branchId: String?, classId: String?, search: String?): List<Student> = requestContext {
-        val bId = branchId?.takeIf { it != "all" && it.isNotBlank() }
-        val cId = classId?.takeIf { it != "all" && it.isNotBlank() }
-        val q = search?.takeIf { it.isNotBlank() }
-
-        try {
-            val list = apiService.getStudents(bId, cId, q)
-            cacheStudentsLocally(list)
-            list
-        } catch (failure: Exception) { throw failure }
+        com.example.data.remote.NativeRegistryClient().students(
+            branchId?.takeIf { it != "all" && it.isNotBlank() }, classId?.takeIf { it != "all" && it.isNotBlank() }, search?.takeIf { it.isNotBlank() })
     }
+
 
     suspend fun addStudent(student: Student): Student = requestContext {
-        try {
-            studentDao.insertStudent(student.toEntity())
-            apiService.createStudent(student)
-        } catch (failure: Exception) { throw failure }
+        com.example.data.remote.NativeRegistryClient().createStudent(student)
     }
+
 
     suspend fun updateStudent(student: Student): Student = requestContext {
-        try {
-            studentDao.insertStudent(student.toEntity())
-            apiService.updateStudent(student.id, student)
-        } catch (failure: Exception) { throw failure }
+        com.example.data.remote.NativeRegistryClient().updateStudent(student)
     }
 
+
     suspend fun deleteStudent(studentId: String): Boolean = requestContext {
-        try {
-            studentDao.deleteStudent(studentId)
-            apiService.deleteStudent(studentId)
-            true
-        } catch (failure: Exception) { throw failure }
+        com.example.data.remote.NativeRegistryClient().deleteStudent(studentId); true
     }
+
 
     suspend fun getAttendance(classId: String, date: String): List<AttendanceRecord> = requestContext {
         val id = classId.takeIf { it != "all" && it.isNotBlank() }

@@ -93,8 +93,9 @@ fun Okul360NavHost(
                 onSelectStudent = { viewModel.selectStudent(it) },
                 onOpenAddStudent = { viewModel.openAddStudentDialog(true) },
                 onUpdateStudent = { viewModel.updateStudent(it) },
-                onDeleteStudent = { viewModel.deleteStudent(it) }
-            )
+                onDeleteStudent = { viewModel.deleteStudent(it) },
+                                onRefresh = { viewModel.loadStudents() }
+                            )
         }
 
         // 3. Attendance Destination
@@ -202,9 +203,7 @@ fun Okul360NavHost(
         composable(Screen.Classes.route) {
             ClassesScreen(
                 state = state,
-                onAddClass = { name, grade, teacher, cap, room ->
-                    viewModel.addClass(name, grade, teacher, cap, room)
-                },
+                onAddClass = { viewModel.addClass(it) },
                 onUpdateClass = { cls ->
                     viewModel.updateClass(cls)
                 },

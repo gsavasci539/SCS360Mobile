@@ -241,13 +241,14 @@ fun CompactRowActionIcon(
     tint: Color,
     containerColor: Color = tint.copy(alpha = 0.12f),
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
     Box(
         modifier = modifier
             .size(48.dp)
             .clip(RoundedCornerShape(7.dp))
-            .clickable { onClick() },
+            .clickable(enabled = enabled) { onClick() },
         contentAlignment = Alignment.Center
     ) {
         Surface(modifier = Modifier.size(30.dp), color = containerColor, shape = RoundedCornerShape(7.dp)) {
@@ -255,7 +256,7 @@ fun CompactRowActionIcon(
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                tint = tint,
+                tint = if (enabled) tint else tint.copy(alpha = .38f),
                 modifier = Modifier.size(15.dp)
             )
           }

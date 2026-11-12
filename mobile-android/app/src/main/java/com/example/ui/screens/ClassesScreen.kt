@@ -44,7 +44,7 @@ import com.example.ui.viewmodel.Okul360UiState
 @Composable
 fun ClassesScreen(
     state: Okul360UiState,
-    onAddClass: (name: String, gradeLevel: String, teacherName: String, capacity: Int, roomNumber: String) -> Unit,
+    onAddClass: (com.example.data.model.ClassGroup) -> Unit,
     onUpdateClass: (ClassGroup) -> Unit,
     onDeleteClass: (String) -> Unit,
     onAssignStudent: (studentId: String, classId: String) -> Unit,
@@ -52,6 +52,7 @@ fun ClassesScreen(
     onSelectClassDetail: (ClassGroup?) -> Unit,
     onTransferStudent: (studentId: String, currentClassId: String, targetClassId: String) -> Unit = { _, _, _ -> }
 ) {
+    val canWrite = com.example.ui.dialogs.registryCanWrite(state, "class") && !state.registrySaving
     var showAddClassDialog by remember { mutableStateOf(false) }
     var classToEdit by remember { mutableStateOf<ClassGroup?>(null) }
     var classToDelete by remember { mutableStateOf<ClassGroup?>(null) }
@@ -97,10 +98,10 @@ fun ClassesScreen(
                             modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
                         )
                         Row {
-                            IconButton(onClick = { classToEdit = selectedClass }) {
+                            IconButton(enabled = canWrite, onClick = { classToEdit = selectedClass }) {
                                 Icon(Icons.Default.Edit, contentDescription = "Düzenle", tint = PrimaryBlue)
                             }
-                            IconButton(onClick = { classToDelete = selectedClass }) {
+                            IconButton(enabled = canWrite, onClick = { classToDelete = selectedClass }) {
                                 Icon(Icons.Default.Delete, contentDescription = "Sil", tint = MaterialTheme.colorScheme.error)
                             }
                         }
@@ -150,6 +151,7 @@ fun ClassesScreen(
                 )
                 Button(
                     onClick = { showAssignDialog = true },
+                    enabled = canWrite,
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                 ) {
@@ -322,6 +324,7 @@ fun ClassesScreen(
 
                 Button(
                     onClick = { showAddClassDialog = true },
+                    enabled = canWrite,
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
@@ -614,26 +617,8 @@ fun ClassesScreen(
     }
 
     // Dialogs
-    if (showAddClassDialog) {
-        AddClassDialog(
-            onDismiss = { showAddClassDialog = false },
-            onConfirm = { name, grade, teacher, cap, room ->
-                onAddClass(name, grade, teacher, cap, room)
-                showAddClassDialog = false
-            }
-        )
-    }
-
-    classToEdit?.let { cls ->
-        EditClassDialog(
-            classGroup = cls,
-            onDismiss = { classToEdit = null },
-            onConfirm = { updated ->
-                onUpdateClass(updated)
-                classToEdit = null
-            }
-        )
-    }
+    if (showAddClassDialog) AddClassDialog(state = state, onDismiss = { showAddClassDialog = false }, onConfirm = onAddClass)
+    classToEdit?.let { cls -> EditClassDialog(classGroup = cls, state = state, onDismiss = { classToEdit = null }, onConfirm = onUpdateClass) }
 
     classToDelete?.let { cls ->
         ConfirmDeleteDialog(
