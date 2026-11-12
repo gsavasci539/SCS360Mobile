@@ -57,10 +57,10 @@ Gerçek A26 cihazı, sağlayıcı sandbox anahtarları/HTTPS callback ve mağaza
 Gizli anahtarlar, gerçek kullanıcı kayıtları, yerel veritabanları, imzalama dosyaları ve derleme önbellekleri bu kaynak aktarımına dahil edilmez.
 
 
-Güncel finans ledger checkpoint: native104/104 test ve gerçek API/tempDB kabulü geçti; aynı kaynaktan debug APK doğrulandı. Backend tam SQLite/PG kabulü 922 benzersiz PASS, yalnız2 belgelenmiş DB varyantı skip. Bütün uygulama web paritesi ve satış kabulü tamamlanmadı; docs/acceptance/native-debt-ledger-20261112.json açık işleri listeler.
+Önceki tahakkuk ledger checkpoint: native104/104 test ve gerçek API/tempDB kabulü geçti; aynı kaynaktan debug APK doğrulandı. Backend tam SQLite/PG kabulü 922 benzersiz PASS, yalnız2 belgelenmiş DB varyantı skip. Bütün uygulama web paritesi ve satış kabulü tamamlanmadı; docs/acceptance/native-debt-ledger-20261112.json açık işleri listeler.
 
 
-Edit-form kuruş/taslak/ACK ve scope düzeltmesi kabul edildi; güncel104/104 test ve aynı kaynak APK doğrulandı. Satış kabulü ve diğer modüller açık; docs/acceptance/native-debt-edit-ui-20261112.json.
+Edit-form kuruş/taslak/ACK ve scope düzeltmesi kabul edildi; önceki104/104 test ve o kaynağın APK doğrulandı. Satış kabulü ve diğer modüller açık; docs/acceptance/native-debt-edit-ui-20261112.json.
 
 
-Gider create/list/delete: backend21,client2,UI3 ve gerçek API kabulü geçti; güncel tam regresyon/yeniAPK henüz bekleniyor. Önceki104 testi gider eklerinden öncedir. docs/acceptance/native-expense-20261112.json güncel açık işleri listeler.
+Gider oluşturma/listeleme/silme ve web değişikliklerinin native görünürlüğü kabul edildi: güncel109/109 test ve aynı kaynak debug APK; backend 940 benzersiz PASS/2 DB varyantı skip. Yerel gider fallback ve örnek harcamalar kaldırıldı. Native gider düzenleme UI ve diğer modüller/fiziksel sağlayıcı-mağaza kabulü açık; docs/acceptance/native-expense-20261112.json.
