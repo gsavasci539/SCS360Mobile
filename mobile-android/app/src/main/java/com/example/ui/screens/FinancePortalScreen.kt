@@ -318,84 +318,10 @@ fun FinancePortalScreen(
             onRecorded = { showPaymentDialogForInvoice = null; onRetry() })
     }
 
-    // New Invoice Dialog
+    // Native bounded form; no invented amounts or dates.
     if (showNewInvoiceDialog) {
-        var selectedStudentId by remember { mutableStateOf(state.students.firstOrNull()?.id ?: "") }
-        var invoiceTitle by remember { mutableStateOf("2026-2027 Yıllık Eğitim & Servis Taksiti") }
-        var amountText by remember { mutableStateOf("15000") }
-        var dueDateText by remember { mutableStateOf("2026-09-15") }
-
-        AlertDialog(
-            onDismissRequest = { showNewInvoiceDialog = false },
-            title = { Text("📄 Yeni Fatura / Taksit Tanımla", fontWeight = FontWeight.Bold, color = BrandNavy) },
-            text = {
-                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Öğrenci Seçin:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    var expanded by remember { mutableStateOf(false) }
-                    val currentStd = state.students.find { it.id == selectedStudentId }
-
-                    OutlinedButton(
-                        onClick = { expanded = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(currentStd?.full_name ?: "Öğrenci Seçin", modifier = Modifier.weight(1f))
-                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-                    }
-                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        state.students.forEach { std ->
-                            DropdownMenuItem(
-                                text = { Text(std.full_name) },
-                                onClick = {
-                                    selectedStudentId = std.id
-                                    expanded = false
-                                }
-                            )
-                        }
-                    }
-
-                    OutlinedTextField(
-                        value = invoiceTitle,
-                        onValueChange = { invoiceTitle = it },
-                        label = { Text("Fatura / Taksit Başlığı") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    OutlinedTextField(
-                        value = amountText,
-                        onValueChange = { amountText = it },
-                        label = { Text("Tutar (₺)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    OutlinedTextField(
-                        value = dueDateText,
-                        onValueChange = { dueDateText = it },
-                        label = { Text("Son Vade Tarihi (YYYY-AA-GG)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val amt = amountText.toDoubleOrNull() ?: 0.0
-                        if (amt > 0) {
-                            onCreateInvoice(selectedStudentId, invoiceTitle, amt, dueDateText, "")
-                            showNewInvoiceDialog = false
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentAmber)
-                ) {
-                    Text("Faturayı Oluştur")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNewInvoiceDialog = false }) {
-                    Text("Vazgeç")
-                }
-            }
-        )
+        com.example.ui.dialogs.FinanceInvoiceDraftDialog(state,
+            onDismiss = { showNewInvoiceDialog = false }, onCreate = onCreateInvoice)
     }
 
     // Receipt Modal
