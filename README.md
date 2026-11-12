@@ -63,4 +63,4 @@ Güncel finans ledger checkpoint: native104/104 test ve gerçek API/tempDB kabul
 Edit-form kuruş/taslak/ACK ve scope düzeltmesi kabul edildi; güncel104/104 test ve aynı kaynak APK doğrulandı. Satış kabulü ve diğer modüller açık; docs/acceptance/native-debt-edit-ui-20261112.json.
 
 
-Yeni gider paritesi WIP: backend21/client2 kontratı geçti; UI final/gerçek API/tam regresyon/yeniAPK kabulü henüz yok. Önceki104 testi gider eklerinden öncedir. docs/acceptance/native-expense-20261112.json güncel açık işleri listeler.
+Gider create/list/delete: backend21,client2,UI3 ve gerçek API kabulü geçti; güncel tam regresyon/yeniAPK henüz bekleniyor. Önceki104 testi gider eklerinden öncedir. docs/acceptance/native-expense-20261112.json güncel açık işleri listeler.
