@@ -60,4 +60,4 @@ Gizli anahtarlar, gerçek kullanıcı kayıtları, yerel veritabanları, imzalam
 Finans ledger liste/düzenleme/iptal: 2/2 kontrat ve gerçek API/tempDB kabulü geçti; güncel tam Android/backend testleri sürüyor. Önceki 100-test kabulü ve debug APK bu takip değişikliğini kapsamıyor; güncel durum docs/acceptance/native-debt-ledger-20261112.json içindedir.
 
 
-Yeni edit-form UI düzeltmesi WIP: kuruş kaybı ve sunucu öncesi kapanma kaldırılıyor; yeni UI testleri henüz bitmedi. Native102 testi bu ek düzeltmeden öncedir. Backend tam922 PASS/2 DB varyantı skip. Güncel sınırlar docs/acceptance/native-debt-edit-ui-20261112.json içindedir; satış kabulü açık.
+Edit-form UI2/2 testi geçti: kuruş ve hata taslağı korunur, sunucu ACK ve Tamam sonrası kapanır; güncel tam104 sürüyor, eşleşen APK henüz yok. Native102 testi bu ek düzeltmeden öncedir. Backend tam922 PASS/2 DB varyantı skip. Güncel sınırlar docs/acceptance/native-debt-edit-ui-20261112.json içindedir; satış kabulü açık.
