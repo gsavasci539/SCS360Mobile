@@ -1,0 +1,34 @@
+{
+  "real_backend": true,
+  "temporary_db": true,
+  "native_tests": 1,
+  "initial_paged_students": 102,
+  "nullable_unknown_fields": true,
+  "canonical_class_crud": true,
+  "canonical_student_crud": true,
+  "privacy_preserved_by_changed_fields_only": true,
+  "server_rejections": [
+    403,
+    404,
+    409,
+    422
+  ],
+  "original_room_rows_unchanged": true,
+  "application_source_acceptance": "registry operations only; not full native parity",
+  "write_only_role_options_and_create": true,
+  "occupied_class_delete_preflight": true,
+  "core_source_files": [
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/remote/NativeRegistryClient.kt",
+      "sha256": "9f546f895217cad73844c3a9000e6f5b381de7429b0943aa2fecc1e31595320b"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/repository/Okul360Repository.kt",
+      "sha256": "6393762c451eedbbb719d77178eb04b1abbe00960b3653153ac892e7a9bc3977"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/model/Models.kt",
+      "sha256": "d2f9eb531350f7b742f288d108d8bed39fc30adeedef9d35042a43905a5e90df"
+    }
+  ]
+}

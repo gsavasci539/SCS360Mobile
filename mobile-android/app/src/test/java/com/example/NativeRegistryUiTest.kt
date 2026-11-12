@@ -19,6 +19,8 @@ import org.junit.*
 import org.junit.Assert.*
 import org.junit.runner.RunWith
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
+import android.os.Looper
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
@@ -41,8 +43,10 @@ class NativeRegistryUiTest {
     private lateinit var server: HttpServer
     private lateinit var oldBase: String
     private var oldToken: String? = null; private var oldWorkspace: String? = null
+    private var oldFontScale = 1f
     private val hits = AtomicInteger(); @Volatile private var failFirst = false
     @Before fun server() {
+        oldFontScale = RuntimeEnvironment.getFontScale()
         RuntimeEnvironment.setFontScale(2f)
         assertEquals(2f, RuntimeEnvironment.getFontScale(), .01f)
         oldBase = ApiClientProvider.activeBaseUrl; oldToken = ApiClientProvider.interceptor.authToken; oldWorkspace = ApiClientProvider.interceptor.workspaceOrganizationId
@@ -61,7 +65,7 @@ class NativeRegistryUiTest {
         server.start(); ApiClientProvider.createService("http://127.0.0.1:${server.address.port}/api/")
         ApiClientProvider.interceptor.setSession("synthetic-ui-registry-token")
     }
-    @After fun stop() { server.stop(0); ApiClientProvider.createService(oldBase); ApiClientProvider.interceptor.setSession(oldToken, workspace = oldWorkspace) }
+    @After fun stop() { RuntimeEnvironment.setFontScale(oldFontScale); server.stop(0); ApiClientProvider.createService(oldBase); ApiClientProvider.interceptor.setSession(oldToken, workspace = oldWorkspace) }
 
     @Test fun unloadedStudentDetailsDoNotInventDebtOrAttendanceHistory() {
         compose.setContent { Okul360Theme { com.example.ui.dialogs.StudentDetailBottomSheet(existing, {}) } }
@@ -145,25 +149,45 @@ class NativeRegistryUiTest {
             compose.runOnIdle { kind = form }
             val prefix = if (form == 0) "student" else "class"
             compose.onNodeWithTag("registry_${prefix}_form").performScrollToNode(hasTestTag("registry_${prefix}_save"))
-            compose.onNodeWithTag("registry_${prefix}_save").performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(48.dp).assertWidthIsAtLeast(48.dp)
+            compose.onNodeWithText("Kapat").performScrollTo()
+            compose.onNodeWithTag("registry_${prefix}_save").assertIsDisplayed().assertHeightIsAtLeast(48.dp).assertWidthIsAtLeast(48.dp)
+            assertSaveInsideViewport(prefix)
             val bounds = compose.onNodeWithTag("registry_${prefix}_form").getUnclippedBoundsInRoot()
             assertTrue(bounds.right.value - bounds.left.value <= 600f)
         }
     }
-    @OptIn(ExperimentalTestApi::class)
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Test fun nativePhoneFormRendersWithLargeFont() {
-        var kind by mutableIntStateOf(0)
-        compose.setContent { DeviceConfigurationOverride(DeviceConfigurationOverride.FontScale(2f)) {
-            Okul360Theme { key(kind) { if (kind == 0) RegistryStudentDialog(existing, state, {}, {}) else RegistryClassDialog(room, state, {}, {}) } }
+    @Test fun nativeStudentPhoneRendersWithSystemLargeFont() { captureForm(true) }
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test fun nativeClassPhoneRendersWithSystemLargeFont() { captureForm(false) }
+    private fun captureForm(student: Boolean) {
+        compose.setContent { Okul360Theme {
+            if (student) RegistryStudentDialog(existing, state, {}, {}) else RegistryClassDialog(room, state, {}, {})
         } }
-        for (form in 0..1) {
-            compose.runOnIdle { kind = form }
-            val prefix = if (form == 0) "student" else "class"
-            compose.onNodeWithTag("registry_${prefix}_form").captureRoboImage("../../output/native-registry-${prefix}-top-font2-20261112.png")
-            compose.onNodeWithTag("registry_${prefix}_form").performScrollToNode(hasTestTag("registry_${prefix}_save"))
-            compose.onNodeWithTag("registry_${prefix}_save").performScrollTo().assertHeightIsAtLeast(48.dp)
-            compose.onNodeWithTag("registry_${prefix}_form").captureRoboImage("../../output/native-registry-${prefix}-save-font2-20261112.png")
-        }
+        val prefix = if (student) "student" else "class"
+        val list = compose.onNodeWithTag("registry_${prefix}_form")
+        val selector = if (student) "student_branch" else "class_teacher"
+        if (!student) list.performScrollToNode(hasTestTag(selector))
+        compose.waitUntil(10000) { runCatching { compose.onNodeWithTag(selector).assertIsEnabled(); true }.getOrDefault(false) }
+        list.performScrollToIndex(0)
+        captureReady(prefix, "top")
+        list.performScrollToNode(hasTestTag("registry_${prefix}_save"))
+        compose.onNodeWithText("Kapat").performScrollTo()
+        list.performTouchInput { swipeUp() }
+        compose.onNodeWithTag("registry_${prefix}_save").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        assertSaveInsideViewport(prefix)
+        captureReady(prefix, "save")
+    }
+    private fun assertSaveInsideViewport(prefix: String) {
+        val viewport = compose.onNodeWithTag("registry_${prefix}_form").getUnclippedBoundsInRoot()
+        val save = compose.onNodeWithTag("registry_${prefix}_save").getUnclippedBoundsInRoot()
+        assertTrue("Save clipped above viewport", save.top.value >= viewport.top.value - .5f)
+        assertTrue("Save clipped below viewport", save.bottom.value <= viewport.bottom.value + .5f)
+    }
+    private fun captureReady(prefix: String, part: String) {
+        compose.mainClock.advanceTimeBy(64)
+        shadowOf(Looper.getMainLooper()).idle()
+        compose.waitForIdle()
+        compose.onNodeWithTag("registry_${prefix}_form").captureRoboImage("../../output/native-registry-${prefix}-${part}-font2-20261112.png")
     }
 }

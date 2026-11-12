@@ -1,0 +1,13 @@
+{
+  "status": "LOCAL_DEBUG_NOT_DEVICE_ACCEPTANCE",
+  "sha256": "79c6a7c512e7071453146e2c3087996955341eedef51c4517c745dfc8d24a8a1",
+  "bytes": 37268854,
+  "artifact": "Local debug artifact; APK is not committed",
+  "signature_verify": "apksigner v2 exit0",
+  "package": "com.aistudio.okul360.hdtcca",
+  "min_sdk": 24,
+  "target_sdk": 36,
+  "build_duration": "3m3s",
+  "api_default": "http://10.0.2.2:8000/api/ emulator-only",
+  "application_source_unchanged_since_full74": true
+}
