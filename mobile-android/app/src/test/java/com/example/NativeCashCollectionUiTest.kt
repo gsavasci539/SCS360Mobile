@@ -1,6 +1,7 @@
 package com.example
 
 import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.createComposeRule
 import com.example.data.remote.ApiClientProvider
 import com.example.ui.dialogs.NativeCashCollectionDialog
@@ -46,22 +47,34 @@ class NativeCashCollectionUiTest {
     @After fun stop() { server.stop(0); ApiClientProvider.createService(oldBase); ApiClientProvider.interceptor.setSession(oldToken); RuntimeEnvironment.setFontScale(oldFont) }
     @Test fun draftAndRetryRemainUntilAckAndCompletionIsExplicit() {
         var completed = 0
-        compose.setContent { Okul360Theme { NativeCashCollectionDialog(debt, actor, {}, { completed++ }) } }
-        compose.waitUntil(10000) { compose.onAllNodesWithTag("cash_save").fetchSemanticsNodes().isNotEmpty() }
+        compose.setContent { Okul360Theme { NativeCashCollectionDialog(debt, actor, {}, { completed++ }, canCollect = true) } }
+        compose.waitUntil(10000) { compose.onNodeWithTag("cash_list").fetchSemanticsNode().config[SemanticsProperties.StateDescription] == "Hazır" }
+        compose.onNodeWithTag("cash_list").performScrollToNode(hasTestTag("cash_save"))
         compose.onNodeWithTag("cash_save").performScrollTo().assertHeightIsAtLeast(androidx.compose.ui.unit.Dp(48f)).performClick()
-        compose.waitUntil(10000) { compose.onAllNodesWithText("Aynı isteği doğrula").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(10000) { compose.onNodeWithTag("cash_list").fetchSemanticsNode().config[SemanticsProperties.StateDescription] == "Bekleyen işlem" }
+        compose.onNodeWithTag("cash_list").performScrollToNode(hasTestTag("cash_amount"))
         compose.onNodeWithTag("cash_amount").assertIsNotEnabled(); assertEquals(0, completed)
+        compose.onNodeWithTag("cash_list").performScrollToNode(hasTestTag("cash_save"))
         compose.onNodeWithTag("cash_save").performScrollTo().performClick()
-        compose.waitUntil(10000) { compose.onAllNodesWithTag("cash_done").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(10000) { compose.onNodeWithTag("cash_list").fetchSemanticsNode().config[SemanticsProperties.StateDescription] == "Kaydedildi" }
         assertEquals(posts[0], posts[1]); assertEquals(0, completed)
+        compose.onNodeWithTag("cash_list").performScrollToNode(hasTestTag("cash_done"))
         compose.onNodeWithTag("cash_done").performScrollTo().assertIsDisplayed().performClick(); assertEquals(1, completed)
     }
     @Test @Config(qualifiers = "w780dp-h360dp-land-mdpi")
     fun landscapeLargeFontKeepsSaveInsideViewport() {
-        compose.setContent { Okul360Theme { NativeCashCollectionDialog(debt, actor, {}, {}) } }
-        compose.waitUntil(10000) { compose.onAllNodesWithTag("cash_save").fetchSemanticsNodes().isNotEmpty() }
+        compose.setContent { Okul360Theme { NativeCashCollectionDialog(debt, actor, {}, {}, canCollect = true) } }
+        compose.waitUntil(10000) { compose.onNodeWithTag("cash_list").fetchSemanticsNode().config[SemanticsProperties.StateDescription] == "Hazır" }
+        compose.onNodeWithTag("cash_list").performScrollToNode(hasTestTag("cash_save"))
         compose.onNodeWithTag("cash_save").performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(androidx.compose.ui.unit.Dp(48f))
         val bounds = compose.onNodeWithTag("cash_save").fetchSemanticsNode().boundsInRoot
         assertTrue(bounds.top >= 0 && bounds.bottom <= 360f && bounds.left >= 0 && bounds.right <= 780f)
     }
+    @Test fun readonlyActorHasNoManualCollectionAction() {
+        compose.setContent { Okul360Theme { NativeCashCollectionDialog(debt, actor, {}, {}, canCollect = false) } }
+        compose.waitUntil(10000) { compose.onNodeWithTag("cash_list").fetchSemanticsNode().config[SemanticsProperties.StateDescription] == "Hazır" }
+        compose.onNodeWithTag("cash_list").performScrollToNode(hasTestTag("cash_save"))
+        compose.onNodeWithTag("cash_save").assertIsNotEnabled(); assertTrue(posts.isEmpty())
+    }
+
 }

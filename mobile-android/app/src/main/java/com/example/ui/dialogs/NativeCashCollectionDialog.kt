@@ -9,6 +9,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.remote.*
@@ -18,7 +20,7 @@ import java.text.NumberFormat
 import java.util.Locale
 
 @Composable
-fun NativeCashCollectionDialog(debtId: String, actorId: String, onDismiss: () -> Unit, onRecorded: () -> Unit) {
+fun NativeCashCollectionDialog(debtId: String, actorId: String, onDismiss: () -> Unit, onRecorded: () -> Unit, canCollect: Boolean = false) {
     val context = LocalContext.current
     val session = remember(debtId, actorId) { runCatching { NativeCashCollection(context, actorId, debtId) }.getOrNull() }
     val scope = rememberCoroutineScope()
@@ -43,9 +45,12 @@ fun NativeCashCollectionDialog(debtId: String, actorId: String, onDismiss: () ->
     Dialog(onDismissRequest = { if (!busy) onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.padding(12.dp).widthIn(max = 600.dp).fillMaxWidth()
             .heightIn(max = (LocalConfiguration.current.screenHeightDp * .9f).dp).imePadding(), shape = MaterialTheme.shapes.large) {
-            LazyColumn(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyColumn(Modifier.padding(16.dp).testTag("cash_list").semantics {
+                stateDescription = when { ack != null -> "Kaydedildi"; pending -> "Bekleyen işlem"; debt != null -> "Hazır"; else -> "Yükleniyor" }
+            }, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item { Text("Tahsilat kaydı", style = MaterialTheme.typography.titleLarge) }
                 item { Text("Bu ekran önceden alınmış nakit/havale tutarını deftere işler. Online ödeme ayrı sağlayıcı ekranında yapılır.") }
+                if (!canCollect) item { Text("Tahsilat kaydı yetkiniz yok; bu ekran salt okunur.") }
                 if (busy) item { Text("Sunucu yanıtı bekleniyor…") }
                 error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
                 if (debt == null) item {
@@ -54,14 +59,15 @@ fun NativeCashCollectionDialog(debtId: String, actorId: String, onDismiss: () ->
                 if (ack == null && debt != null) {
                     item { Text("Sunucudaki kalan borç: ${currency.format(debt!!.remaining)}") }
                     if (pending) item { Text("Sonucu belirsiz istek korunuyor. Aynı tutar/yöntem/kimlik ile doğrulayın; yeni tahsilat oluşturulmaz.") }
-                    item { OutlinedTextField(amount, { amount = it }, enabled = !busy && !pending,
+                    item { OutlinedTextField(amount, { amount = it }, enabled = canCollect && !busy && !pending,
                         label = { Text("Tutar (ör. 100.25)") }, modifier = Modifier.fillMaxWidth().testTag("cash_amount")) }
                     item { Column { listOf("CASH" to "Nakit", "BANK_TRANSFER" to "Havale", "EFT" to "EFT").forEach { (value, title) ->
-                        TextButton(onClick = { method = value }, enabled = !busy && !pending,
+                        TextButton(onClick = { method = value }, enabled = canCollect && !busy && !pending,
                             modifier = Modifier.heightIn(min = 48.dp)) { Text(if (method == value) "✓ $title" else title) }
                     } } }
                     item {
-                        Button(enabled = !busy && session != null, modifier = Modifier.heightIn(min = 48.dp).testTag("cash_save"), onClick = {
+                        Button(enabled = canCollect && !busy && session != null, modifier = Modifier.heightIn(min = 48.dp).testTag("cash_save"), onClick = {
+                            if (!canCollect) return@Button
                             busy = true; error = null
                             scope.launch {
                                 try { ack = session!!.collect(amount, method) }
@@ -70,13 +76,13 @@ fun NativeCashCollectionDialog(debtId: String, actorId: String, onDismiss: () ->
                                     403 -> "Tahsilat kaydı için yetkiniz yok."
                                     409 -> "İşlem kimliği veya kayıt değişmiş. Yeni ödeme başlatmadan sonucu inceleyin."
                                     422 -> "Tutar veya borç kaydı reddedildi. Aynı isteğin sonucunu inceleyin."
-                                    else -> if (session!!.hasPending) "Sonuç belirsiz; aynı isteği tekrar doğrulayın." else failure.message ?: "Kaydedilemedi."
+                                    else -> if (session!!.hasPending) "Sonuç belirsiz; aynı isteği tekrar doğrulayın." else "Geçerli tutarı nokta veya virgülle girin; güncel kalan borcu aşmayın."
                                 } }
                                 finally { pending = session!!.hasPending; busy = false }
                             }
                         }) { Text(if (pending) "Aynı isteği doğrula" else "Deftere kaydet") }
                     }
-                    item { TextButton(onClick = { online = true }, enabled = !busy && !pending,
+                    item { TextButton(onClick = { online = true }, enabled = canCollect && !busy && !pending,
                         modifier = Modifier.heightIn(min = 48.dp)) { Text("Güvenli online ödeme") } }
                 }
                 ack?.let { result ->

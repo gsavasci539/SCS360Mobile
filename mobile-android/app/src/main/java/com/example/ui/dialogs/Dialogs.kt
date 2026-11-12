@@ -45,8 +45,8 @@ fun AddStudentDialog(state: com.example.ui.viewmodel.Okul360UiState, onDismiss: 
 }
 
 @Composable
-fun RecordPaymentDialog(invoice: Invoice, actorId: String, onDismiss: () -> Unit, onRecorded: () -> Unit) {
-    NativeCashCollectionDialog(invoice.id, actorId, onDismiss, onRecorded)
+fun RecordPaymentDialog(invoice: Invoice, actorId: String, canCollect: Boolean, onDismiss: () -> Unit, onRecorded: () -> Unit) {
+    NativeCashCollectionDialog(invoice.id, actorId, onDismiss, onRecorded, canCollect)
 }
 
 @Composable

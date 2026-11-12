@@ -1771,6 +1771,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
             state.selectedInvoiceForPayment?.let { invoice ->
                 RecordPaymentDialog(
                     invoice = invoice, actorId = state.currentUser.id,
+                    canCollect = state.currentUser.permissions.any { it in setOf("finance.write", "finance.collect_payment") } || (state.currentUser.is_super_admin == true && !state.workspaceOrganizationId.isNullOrBlank()),
                     onDismiss = { viewModel.selectInvoiceForPayment(null) },
                     onRecorded = { viewModel.selectInvoiceForPayment(null); viewModel.loadFinance() }
                 )

@@ -53,9 +53,13 @@ class NativeCashCollection(context: Context, actorId: String, val debtId: String
     private fun money(value: String) = value.toBigDecimal().also {
         require(it >= BigDecimal.ZERO && it <= BigDecimal("9999999999.99") && it.stripTrailingZeros().scale() <= 2)
     }
+    private fun verifyScope(value: JSONObject) {
+        check(branch.isBlank() || value.optString("branch_id") == branch) { "Borç seçili şubeye ait değil" }
+        check(workspace.isBlank() || value.optString("organization_id") == workspace) { "Borç seçili kuruma ait değil" }
+    }
     suspend fun load(): CashDebt = mutex.withLock {
         val value = request("debts/$debtId")
-        check(value.getString("id") == debtId)
+        check(value.getString("id") == debtId); verifyScope(value)
         val loaded = CashDebt(debtId, money(value.getString("amount")), money(value.getString("paid_amount")), value.getString("status"))
         check(loaded.amount > BigDecimal.ZERO && loaded.remaining >= BigDecimal.ZERO)
         debt = loaded
@@ -70,12 +74,12 @@ class NativeCashCollection(context: Context, actorId: String, val debtId: String
     suspend fun collect(amountText: String, method: String): CashPaymentAck = mutex.withLock {
         scope.ensureCurrent()
         ack?.let { return@withLock it }
-        val amount = money(amountText).setScale(2)
+        val amount = money(amountText.trim().replace(',', '.')).setScale(2)
         require(amount > BigDecimal.ZERO && method in setOf("CASH", "BANK_TRANSFER", "EFT")) { "Geçerli tutar ve kayıt yöntemi seçin" }
         if (body == null) body = prefs.getString(key, null)
         if (body == null) {
             val loaded = checkNotNull(debt) { "Önce güncel borcu yükleyin" }
-            val latest = request("debts/$debtId")
+            val latest = request("debts/$debtId"); verifyScope(latest)
             check(latest.getString("id") == debtId && money(latest.getString("amount")) == loaded.amount &&
                 money(latest.getString("paid_amount")) == loaded.paid && latest.getString("status") == loaded.status) {
                 "Borç değişmiş; güncel kaydı yeniden yükleyin"

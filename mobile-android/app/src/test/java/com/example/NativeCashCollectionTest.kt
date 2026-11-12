@@ -40,7 +40,7 @@ class NativeCashCollectionTest {
             if (posts.size == 1) e.close() else reply(e, ack(posts.last()))
         } }) {
             val first = session(); first.load()
-            try { first.collect("30.01", "CASH"); fail("Dropped ACK must be uncertain") } catch (_: java.io.IOException) { }
+            try { first.collect("30,01", "CASH"); fail("Dropped ACK must be uncertain") } catch (_: java.io.IOException) { }
             assertTrue(first.hasPending); assertEquals(1, posts.size)
             val restored = session(); restored.load(); assertTrue(restored.hasPending)
             assertEquals("30.01", restored.pendingAmount()); assertEquals("CASH", restored.pendingMethod())
@@ -88,4 +88,18 @@ class NativeCashCollectionTest {
             assertEquals(1, posts)
         }
     }
+    @Test fun explicitBranchAndWorkspaceCannotReadAnotherScopesDebt() = runBlocking {
+        var posts = 0
+        val branch = UUID(4, 4).toString(); val org = UUID(5, 5).toString()
+        server({ e -> if (e.requestMethod == "GET") reply(e, row().put("branch_id", branch).put("organization_id", org))
+            else { posts++; reply(e, JSONObject(), 403) } }) {
+            ApiClientProvider.interceptor.branchId = UUID(6, 6).toString()
+            try { session().load(); fail("Another selected branch cannot read the debt") } catch (_: IllegalStateException) { }
+            ApiClientProvider.interceptor.branchId = null
+            ApiClientProvider.interceptor.workspaceOrganizationId = UUID(7, 7).toString()
+            try { session().load(); fail("Another selected workspace cannot read the debt") } catch (_: IllegalStateException) { }
+            assertEquals(0, posts)
+        }
+    }
+
 }

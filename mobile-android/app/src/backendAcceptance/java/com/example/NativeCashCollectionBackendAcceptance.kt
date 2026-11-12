@@ -33,6 +33,9 @@ class NativeCashCollectionBackendAcceptance {
             assertNotEquals(ack.paymentId, second.paymentId); assertEquals(BigDecimal("60.00"), second.remainingStudentDebt); next.finish()
             val fresh = editor(); assertEquals(BigDecimal("60.00"), fresh.load().remaining)
             try { fresh.collect("61.00", "CASH"); fail("Overpayment must fail") } catch (_: IllegalArgumentException) { }
+            ApiClientProvider.interceptor.branchId = env("NATIVE_TEST_OTHER_BRANCH")
+            try { editor().load(); fail("Selected branch must match the debt metadata") } catch (_: IllegalStateException) { }
+            ApiClientProvider.interceptor.branchId = null
             try { NativeCashCollection(context, env("NATIVE_TEST_FINANCE_ACTOR"), env("NATIVE_TEST_FOREIGN_DEBT")).load(); fail("Foreign debt denied") }
             catch (e: CashCollectionHttpException) { assertEquals(404, e.code) }
             ApiClientProvider.interceptor.setSession(env("NATIVE_TEST_PARENT_TOKEN"))

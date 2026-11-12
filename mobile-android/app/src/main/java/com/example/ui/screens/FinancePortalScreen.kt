@@ -333,6 +333,7 @@ fun FinancePortalScreen(
     // Both finance entry points use the same canonical native collection editor.
     showPaymentDialogForInvoice?.let { invoice ->
         com.example.ui.dialogs.NativeCashCollectionDialog(invoice.id, state.currentUser.id,
+            canCollect = state.currentUser.permissions.any { it in setOf("finance.write", "finance.collect_payment") } || (state.currentUser.is_super_admin == true && !state.workspaceOrganizationId.isNullOrBlank()),
             onDismiss = { showPaymentDialogForInvoice = null },
             onRecorded = { showPaymentDialogForInvoice = null; onRetry() })
     }
