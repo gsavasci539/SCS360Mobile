@@ -69,13 +69,14 @@ fun FinancePortalScreen(
     onLogout: () -> Unit,
     onRetry: () -> Unit = {}
 ) {
-    var selectedTab by remember { mutableStateOf(FinanceNavTab.SUMMARY) }
-    var showNewInvoiceDialog by remember { mutableStateOf(false) }
-    var showPaymentDialogForInvoice by remember { mutableStateOf<Invoice?>(null) }
-    var viewingReceipt by remember { mutableStateOf<Invoice?>(null) }
-    var financeFabExpanded by remember { mutableStateOf(false) }
+    val presentationScope = com.example.ui.components.financePresentationScope(state)
+    var selectedTab by remember(presentationScope) { mutableStateOf(FinanceNavTab.SUMMARY) }
+    var showNewInvoiceDialog by remember(presentationScope) { mutableStateOf(false) }
+    var showPaymentDialogForInvoice by remember(presentationScope) { mutableStateOf<Invoice?>(null) }
+    var viewingReceipt by remember(presentationScope) { mutableStateOf<Invoice?>(null) }
+    var financeFabExpanded by remember(presentationScope) { mutableStateOf(false) }
 
-    val financeActions = remember(state.invoices) {
+    val financeActions = remember(presentationScope, state.invoices) {
         listOf(
             SpeedDialAction(
                 id = "finance_quick_collect",

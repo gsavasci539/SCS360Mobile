@@ -39,6 +39,10 @@ fun VerifiedReceiptDialog(debtId: String, onDismiss: () -> Unit) {
         catch (_: Exception) { error = "Makbuz kayıtları doğrulanamadı. Yetki ve bağlantınızı kontrol edin." }
         finally { busy = false }
     }
+    if (client != null && !client.current()) {
+        LaunchedEffect(client) { onDismiss() }
+        return
+    }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.padding(12.dp).widthIn(max = 600.dp).fillMaxWidth()
             .heightIn(max = (LocalConfiguration.current.screenHeightDp * .9f).dp), shape = MaterialTheme.shapes.large) {

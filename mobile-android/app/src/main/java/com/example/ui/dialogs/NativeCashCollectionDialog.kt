@@ -42,6 +42,10 @@ fun NativeCashCollectionDialog(debtId: String, actorId: String, onDismiss: () ->
         finally { busy = false }
     }
     if (online) { HostedPaymentDialog(debtId) { online = false }; return }
+    if (session != null && !session.current()) {
+        LaunchedEffect(session) { onDismiss() }
+        return
+    }
     Dialog(onDismissRequest = { if (!busy) onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.padding(12.dp).widthIn(max = 600.dp).fillMaxWidth()
             .heightIn(max = (LocalConfiguration.current.screenHeightDp * .9f).dp).imePadding(), shape = MaterialTheme.shapes.large) {

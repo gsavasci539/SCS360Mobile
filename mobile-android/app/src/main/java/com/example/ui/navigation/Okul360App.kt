@@ -106,9 +106,10 @@ fun Okul360App(viewModel: Okul360ViewModel) {
     var currentTab by remember { mutableStateOf(MainTab.HOME) }
     var currentSubScreen by remember { mutableStateOf(SubScreen.NONE) }
     var homeFabExpanded by remember { mutableStateOf(false) }
-    var showQuickPaymentSheet by remember { mutableStateOf(false) }
+    var showQuickPaymentSheet by remember(com.example.ui.components.financePresentationScope(state)) { mutableStateOf(false) }
     var showQuickAttendanceSheet by remember { mutableStateOf(false) }
-    var selectedInvoiceForReceipt by remember { mutableStateOf<Invoice?>(null) }
+    val financeScope = com.example.ui.components.financePresentationScope(state)
+    var selectedInvoiceForReceipt by remember(financeScope) { mutableStateOf<Invoice?>(null) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
