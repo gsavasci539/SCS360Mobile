@@ -89,6 +89,7 @@ data class Okul360UiState(
     val invoiceToEdit: Invoice? = null,
     val selectedReceipt: PaymentReceipt? = null,
     val isFinanceLoading: Boolean = false,
+    val isFinanceRowsLoading: Boolean = false,
     val expenses: List<Expense> = emptyList(),
     val isExpensesLoading: Boolean = false,
 
@@ -1104,7 +1105,7 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         val generation = ++financeGeneration
         financeJob?.cancel()
         val scope = com.example.data.remote.ApiClientProvider.interceptor.captureScope()
-        _uiState.update { it.copy(isFinanceLoading = true, recordedFinanceSummary = null, financeSummary = null,
+        _uiState.update { it.copy(isFinanceLoading = true, isFinanceRowsLoading = true, recordedFinanceSummary = null, financeSummary = null,
             financeSummaryError = null, financeRowsError = null, invoices = emptyList(), expenses = emptyList(), debts = emptyList()) }
         financeJob = viewModelScope.launch(requestFailures) {
             try {
@@ -1116,7 +1117,7 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
                 if (scope.current() && generation == financeGeneration) {
                     val code = (failure as? com.example.data.remote.FinanceSummaryHttpException)?.code
                     if (code == 401) logout()
-                    else _uiState.update { it.copy(isFinanceLoading = false, financeSummaryError = when (code) {
+                    else _uiState.update { it.copy(isFinanceLoading = false, isFinanceRowsLoading = false, financeSummaryError = when (code) {
                         403 -> "Finans özetini görme yetkiniz yok."
                         404 -> "Seçili şube bulunamadı veya erişilemiyor."
                         402 -> "Üyelik erişiminizi kontrol edin."
@@ -1139,6 +1140,8 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
                 if (scope.current() && generation == financeGeneration) _uiState.update {
                     it.copy(financeRowsError = "Finans satırları doğrulanamadı; listeyi yeniden yükleyin.")
                 }
+            } finally {
+                if (scope.current() && generation == financeGeneration) _uiState.update { it.copy(isFinanceRowsLoading = false) }
             }
         }
     }
@@ -1181,22 +1184,7 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun addExpense(category: String, title: String, amount: Double, date: String, receiptUrl: String? = null) {
-        viewModelScope.launch(requestFailures) {
-            val branchId = if (_uiState.value.selectedBranchId == "all") "branch-1" else _uiState.value.selectedBranchId
-            val newExpense = Expense(
-                id = "exp-${System.currentTimeMillis()}",
-                branch_id = branchId,
-                category = category,
-                title = title,
-                amount = amount,
-                date = date,
-                receipt_url = receiptUrl,
-                created_by = _uiState.value.currentUser.full_name
-            )
-            repository.createExpense(newExpense)
-            _uiState.update { it.copy(toastMessage = "₺${amount.toInt()} tutarındaki $category gideri kaydedildi.") }
-            loadFinance()
-        }
+        _uiState.update { it.copy(toastMessage = "Gider oluşturmak için güncel gider formunu kullanın. Eski kayıt yolu gönderilmedi.") }
     }
 
     fun deleteExpense(id: String) {

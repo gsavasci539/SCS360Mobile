@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -71,6 +72,7 @@ fun FinancePortalScreen(
 ) {
     val presentationScope = com.example.ui.components.financePresentationScope(state)
     var selectedTab by remember(presentationScope) { mutableStateOf(FinanceNavTab.SUMMARY) }
+    var showExpenseDialog by remember(presentationScope) { mutableStateOf(false) }
     var showNewInvoiceDialog by remember(presentationScope) { mutableStateOf(false) }
     var showPaymentDialogForInvoice by remember(presentationScope) { mutableStateOf<Invoice?>(null) }
     var viewingReceipt by remember(presentationScope) { mutableStateOf<Invoice?>(null) }
@@ -284,8 +286,8 @@ fun FinancePortalScreen(
                     onSendReminder = onSendReminder
                 )
                 FinanceNavTab.EXPENSES -> FinanceExpensesTab(
-                    state = state,
-                    currencyFormatter = currencyFormatter
+                    state = state, currencyFormatter = currencyFormatter,
+                    onNew = { showExpenseDialog = true }, onRetry = onRetry
                 )
                 FinanceNavTab.PROFILE -> FinanceReportsAndProfileTab(
                     state = state,
@@ -319,6 +321,10 @@ fun FinancePortalScreen(
     }
 
     // Native bounded form; no invented amounts or dates.
+    if (showExpenseDialog) {
+        com.example.ui.dialogs.FinanceExpenseCreateDialog(state, onDismiss = { showExpenseDialog = false },
+            onRecorded = { showExpenseDialog = false; onRetry() })
+    }
     if (showNewInvoiceDialog) {
         com.example.ui.dialogs.FinanceInvoiceDraftDialog(state,
             onDismiss = { showNewInvoiceDialog = false },
@@ -654,51 +660,20 @@ private fun FinanceDunningTab(
 // 4. FINANCE EXPENSES TAB
 // -------------------------------------------------------------
 @Composable
-private fun FinanceExpensesTab(
-    state: Okul360UiState,
-    currencyFormatter: NumberFormat
-) {
-    val expenses = listOf(
-        Triple("Personel Maaş & SGK Ödemeleri", 210000.0, "Maaş"),
-        Triple("Kampüs Kira & Bina Aidatı", 45000.0, "Kira"),
-        Triple("Mutfak & Organik Gıda Tedariği", 28000.0, "Gıda"),
-        Triple("Eğitim Materyali & Kırtasiye", 14500.0, "Materyal"),
-        Triple("Elektrik, Doğalgaz, Fiber İnternet", 12400.0, "Faturalar")
-    )
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        item {
-            Text("🧾 Giderler & Harcama Kalemleri", fontSize = 18.sp, fontWeight = FontWeight.Black, color = BrandNavy)
-            Text("Kurum işletme giderleri ve harcama dökümleri", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-
-        items(expenses) { (title, amt, cat) ->
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = Color.White,
-                shape = RoundedCornerShape(14.dp),
-                tonalElevation = 1.dp,
-                shadowElevation = 1.dp
-            ) {
-                Row(
-                    modifier = Modifier.padding(14.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(title, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = BrandNavy)
-                        Text("Kategori: $cat • Ağustos 2026", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Text(
-                        currencyFormatter.format(amt),
-                        fontWeight = FontWeight.Black,
-                        fontSize = 15.sp,
-                        color = MaterialTheme.colorScheme.error
-                    )
+private fun FinanceExpensesTab(state: Okul360UiState, currencyFormatter: NumberFormat, onNew: () -> Unit, onRetry: () -> Unit) {
+    val canWrite="finance.write" in state.currentUser.permissions || (state.currentUser.is_super_admin==true && !state.workspaceOrganizationId.isNullOrBlank())
+    LazyColumn(Modifier.fillMaxSize().testTag("finance_expenses_list"), contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
+        item { Text("Giderler & Harcamalar",fontSize=18.sp,fontWeight=FontWeight.Bold) }
+        if(canWrite) item { Button(onClick=onNew,modifier=Modifier.heightIn(min=48.dp).testTag("finance_new_expense")) { Text("Yeni gider") } }
+        if(state.isFinanceLoading || state.isFinanceRowsLoading) item { Text("Gider kayıtları yükleniyor…") }
+        else if(state.financeRowsError!=null || state.financeSummaryError!=null) item { Text(state.financeRowsError ?: state.financeSummaryError.orEmpty()); TextButton(onClick=onRetry,modifier=Modifier.heightIn(min=48.dp)) { Text("Yeniden yükle") } }
+        else if(state.expenses.isEmpty()) item { Text("Bu kapsamda gider kaydı yok.") }
+        else items(state.expenses,key={ it.id }) { expense ->
+            Surface(Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),tonalElevation=1.dp) {
+                Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Text(expense.title,fontWeight=FontWeight.Bold)
+                    Text("${expense.category} • ${expense.date}")
+                    Text(currencyFormatter.format(expense.amount),fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.error)
                 }
             }
         }

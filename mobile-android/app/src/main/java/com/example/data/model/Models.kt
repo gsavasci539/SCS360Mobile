@@ -262,14 +262,14 @@ data class FinanceSummary(
 
 @JsonClass(generateAdapter = true)
 data class Expense(
-    val id: String = "exp-1",
-    val branch_id: String = "branch-1",
-    val category: String = "Kira", // Kira, Mutfak, Kırtasiye, Fatura, Maaş, Diğer
+    val id: String = "",
+    val branch_id: String = "",
+    val category: String = "", // Kira, Mutfak, Kırtasiye, Fatura, Maaş, Diğer
     val title: String = "",
     val amount: Double = 0.0,
-    val date: String = "2026-08-20",
+    val date: String = "",
     val receipt_url: String? = null,
-    val created_by: String = "Muhasebe"
+    val created_by: String = ""
 )
 
 @JsonClass(generateAdapter = true)

@@ -98,6 +98,7 @@ fun FinanceScreen(
     val tableModeState = rememberResolvedTableMode()
     val isCardMode = isCompactCardMode(tableModeState.value)
 
+    val expenseRowsKnown = !state.isFinanceLoading && !state.isFinanceRowsLoading && state.financeRowsError == null && state.financeSummaryError == null
     val totalExpenses = remember(state.expenses) { state.expenses.sumOf { it.amount } }
     val totalCollected = remember(state.invoices) {
         state.invoices.filter {
@@ -619,9 +620,9 @@ fun FinanceScreen(
                                     Text(debt.description, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         Column(horizontalAlignment = Alignment.End) {
-                                            Text("₺${String.format("%,.0f", debt.amount)}", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = BrandNavy)
+                                            Text("₺${String.format("%,.2f", debt.amount)}", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = BrandNavy)
                                             if (!isPaid && debt.paid_amount > 0) {
-                                                Text("Kalan: ₺${String.format("%,.0f", remaining)}", fontSize = 10.sp, color = Color(0xFFDC2626), fontWeight = FontWeight.SemiBold)
+                                                Text("Kalan: ₺${String.format("%,.2f", remaining)}", fontSize = 10.sp, color = Color(0xFFDC2626), fontWeight = FontWeight.SemiBold)
                                             }
                                         }
                                         CompactRowActionIcon(
@@ -664,9 +665,9 @@ fun FinanceScreen(
                                     Text(debt.debt_type, fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                                 }
                                 Column(modifier = Modifier.weight(0.9f), horizontalAlignment = Alignment.End) {
-                                    Text("₺${String.format("%,.0f", debt.amount)}", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = BrandNavy)
+                                    Text("₺${String.format("%,.2f", debt.amount)}", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = BrandNavy)
                                     if (!isPaid && debt.paid_amount > 0) {
-                                        Text("Kalan: ₺${String.format("%,.0f", remaining)}", fontSize = 10.sp, color = Color(0xFFDC2626))
+                                        Text("Kalan: ₺${String.format("%,.2f", remaining)}", fontSize = 10.sp, color = Color(0xFFDC2626))
                                     }
                                 }
                                 Row(
@@ -736,7 +737,13 @@ fun FinanceScreen(
                         }
                     }
     
-                    if (filteredExpenses.isEmpty()) {
+                    if (!expenseRowsKnown) {
+                        item { Column(Modifier.padding(16.dp)) {
+                            Text(if (state.isFinanceLoading || state.isFinanceRowsLoading) "Gider kayıtları yükleniyor…" else state.financeRowsError ?: state.financeSummaryError.orEmpty())
+                            if (!state.isFinanceLoading && !state.isFinanceRowsLoading) TextButton(onClick=onRetry,modifier=Modifier.heightIn(min=48.dp)) { Text("Yeniden yükle") }
+                        } }
+                    }
+                    if (expenseRowsKnown && filteredExpenses.isEmpty()) {
                         item {
                             Surface(
                                 modifier = Modifier
@@ -779,7 +786,7 @@ fun FinanceScreen(
                         }
                     }
     
-                    if (filteredExpenses.isNotEmpty()) {
+                    if (expenseRowsKnown && filteredExpenses.isNotEmpty()) {
                         stickyHeader {
                             StickyTableHeaderRow(
                                 columns = listOf(
@@ -795,7 +802,7 @@ fun FinanceScreen(
                     }
     
                     // Expense Items
-                    itemsIndexed(filteredExpenses, key = { _, it -> it.id }) { index, expense ->
+                    itemsIndexed(if (expenseRowsKnown) filteredExpenses else emptyList(), key = { _, it -> it.id }) { index, expense ->
                         if (isCardMode) {
                             ExpenseCardItem(
                                 expense = expense,
@@ -826,7 +833,7 @@ fun FinanceScreen(
                                     Text("Kaydeden: ${expense.created_by}", fontSize = 10.5.sp, color = Color(0xFF64748B), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                                 Text(
-                                    text = "-₺${String.format("%,.0f", expense.amount)}",
+                                    text = "-₺${String.format("%,.2f", expense.amount)}",
                                     fontWeight = FontWeight.Black,
                                     fontSize = 13.sp,
                                     color = Color(0xFFDC2626),
@@ -868,13 +875,8 @@ fun FinanceScreen(
     }
 
     if (showAddExpenseDialog) {
-        AddExpenseDialog(
-            onDismiss = { showAddExpenseDialog = false },
-            onConfirm = { category, title, amount, date, receiptUrl ->
-                onAddExpense(category, title, amount, date, receiptUrl)
-                showAddExpenseDialog = false
-            }
-        )
+        FinanceExpenseCreateDialog(state, onDismiss = { showAddExpenseDialog = false },
+            onRecorded = { showAddExpenseDialog = false; onRetry() })
     }
 
     expenseToDelete?.let { exp ->
@@ -1200,7 +1202,7 @@ fun ExpenseCardItem(
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    text = "-₺${String.format("%,.0f", expense.amount)}",
+                    text = "-₺${String.format("%,.2f", expense.amount)}",
                     fontWeight = FontWeight.Black,
                     fontSize = 14.5.sp,
                     color = Color(0xFFDC2626)

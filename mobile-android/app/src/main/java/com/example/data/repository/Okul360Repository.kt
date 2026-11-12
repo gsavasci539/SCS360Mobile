@@ -132,7 +132,6 @@ class Okul360Repository(private val context: Context) {
     private val localRfidCards = mutableListOf<RfidCard>()
     private val localDevices = mutableListOf<HardwareDevice>()
     private val localAnnouncements = mutableListOf<Announcement>()
-    private val localExpenses = mutableListOf<Expense>()
     private val localConsents = mutableListOf<StudentConsent>()
     private val localGuidance = mutableListOf<GuidanceRecord>()
     private val localInfirmary = mutableListOf<InfirmaryVisit>()
@@ -329,31 +328,16 @@ class Okul360Repository(private val context: Context) {
     }
 
     suspend fun getExpenses(branchId: String? = null): List<Expense> = requestContext {
-        val bId = branchId?.takeIf { it != "all" && it.isNotBlank() }
-        try {
-            val remote = apiService.getExpenses(bId)
-            if (remote.isNotEmpty()) {
-                remote
-            } else {
-                localExpenses.filter { bId == null || it.branch_id == bId }
-            }
-        } catch (failure: Exception) { throw failure }
+        com.example.data.remote.NativeExpenseClient().load(branchId)
     }
 
     suspend fun createExpense(expense: Expense): Expense = requestContext {
-        try {
-            val created = apiService.createExpense(expense)
-            localExpenses.add(0, created)
-            created
-        } catch (failure: Exception) { throw failure }
+        throw IllegalStateException("Gideri kalıcı işlem kimliği kullanan güncel gider formundan oluşturun")
     }
 
     suspend fun deleteExpense(id: String): Boolean = requestContext {
-        try {
-            apiService.deleteExpense(id)
-            localExpenses.removeAll { it.id == id }
-            true
-        } catch (failure: Exception) { throw failure }
+        com.example.data.remote.NativeExpenseClient().delete(id)
+        true
     }
 
     suspend fun changePassword(currentPass: String, newPass: String, userEmail: String? = null): Boolean = requestContext {
