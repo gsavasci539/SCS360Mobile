@@ -227,17 +227,17 @@ enum class InvoiceStatus(val label: String, val colorHex: Long) {
 
 @JsonClass(generateAdapter = true)
 data class Invoice(
-    val id: String = "inv-1",
-    val invoice_number: String = "FAT-001",
+    val id: String = "",
+    val invoice_number: String = "",
     val student_id: String = "",
     val student_name: String = "",
     val class_name: String = "",
     val amount: Double = 0.0,
     val paid_amount: Double = 0.0,
-    val due_date: String = "2026-08-30",
-    val issue_date: String = "2026-08-01",
-    val status: String = "PENDING", // PAID, PENDING, OVERDUE
-    val description: String = "Aylık Eğitim ve Yemek Ücreti",
+    val due_date: String = "",
+    val issue_date: String = "",
+    val status: String = "",
+    val description: String = "",
     val payment_method: String? = null // CREDIT_CARD, BANK_TRANSFER, CASH
 )
 
@@ -1469,19 +1469,19 @@ data class ExcuseRequest(
 // ==========================================
 @JsonClass(generateAdapter = true)
 data class Debt(
-    val id: String = "debt-1",
-    val organization_id: String = "org-1",
-    val branch_id: String = "branch-1",
-    val student_id: String = "std-1",
-    val student_name: String = "Ali Demir",
-    val class_name: String = "5-A",
-    val debt_type: String = "EDUCATION", // EDUCATION, FOOD, SERVICE, STATIONERY, ACTIVITY, OTHER
-    val description: String = "2026-2027 Yıllık Eğitim Harcı",
-    val amount: Double = 45000.0,
-    val paid_amount: Double = 15000.0,
-    val status: String = "PARTIALLY_PAID", // UNPAID, PARTIALLY_PAID, PAID, OVERDUE, CANCELLED
-    val due_date: String = "2026-10-15",
-    val created_at: String = "2026-09-01"
+    val id: String = "",
+    val organization_id: String = "",
+    val branch_id: String = "",
+    val student_id: String = "",
+    val student_name: String = "",
+    val class_name: String = "",
+    val debt_type: String = "",
+    val description: String = "",
+    val amount: Double = 0.0,
+    val paid_amount: Double = 0.0,
+    val status: String = "",
+    val due_date: String = "",
+    val created_at: String = ""
 )
 
 // ==========================================

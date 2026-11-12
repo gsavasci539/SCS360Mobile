@@ -50,8 +50,11 @@ Uygulama derlemesi JDK17 ile geçti; Android36 Robolectric testleri Java21+ gere
 
 ## Kabul durumu
 
-12 Kasım checkpoint: 100/100 native regresyon testi geçti (25 sınıf; hata/atlanan yok). Aynı kaynaktan debug APK imza ve paket doğrulaması yapıldı. Tahakkuk oluşturma gerçek API ve geçici DB ile kabul edildi; bütün native işlemler web ile henüz eşit değildir. Güncel kanıt docs/acceptance/native-debt-create-20261112.json ve docs/VERIFICATION_20261111.md içindedir.
+Son kabul edilmiş temel (tahakkuk oluşturma): 100/100 native regresyon testi geçti (25 sınıf; hata/atlanan yok). Aynı kaynaktan debug APK imza ve paket doğrulaması yapıldı. Tahakkuk oluşturma gerçek API ve geçici DB ile kabul edildi; bütün native işlemler web ile henüz eşit değildir. Güncel kanıt docs/acceptance/native-debt-create-20261112.json ve docs/VERIFICATION_20261111.md içindedir.
 
 Gerçek A26 cihazı, sağlayıcı sandbox anahtarları/HTTPS callback ve mağaza abonelik ürünleri için kabul açık. Debug APK üretim sürümü değildir ve bu kaynak deposuna eklenmez. App Store/Google Play ürünleri henüz tanımlı olmadığından native SaaS satın alımı kapalıdır. Kurumların kendi okul/kurs tahsilatları ayrı sunucu checkout hesabı kullanır.
 
 Gizli anahtarlar, gerçek kullanıcı kayıtları, yerel veritabanları, imzalama dosyaları ve derleme önbellekleri bu kaynak aktarımına dahil edilmez.
+
+
+Finans ledger liste/düzenleme/iptal devamı WIP: yeni kod için testler sürüyor. Önceki 100-test kabulü ve debug APK bu takip değişikliğini kapsamıyor; güncel durum docs/acceptance/native-debt-ledger-20261112.json içindedir.

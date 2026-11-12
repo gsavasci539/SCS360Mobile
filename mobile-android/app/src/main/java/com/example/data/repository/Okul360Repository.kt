@@ -312,14 +312,7 @@ class Okul360Repository(private val context: Context) {
     }
 
     suspend fun getInvoices(branchId: String?, status: String?): List<Invoice> = requestContext {
-        val bId = branchId?.takeIf { it != "all" && it.isNotBlank() }
-        val s = status?.takeIf { it != "ALL" && it.isNotBlank() }
-
-        try {
-            val list = apiService.getDebts(bId, s)
-            cacheInvoicesLocally(list)
-            list
-        } catch (failure: Exception) { throw failure }
+        com.example.data.remote.NativeDebtLedgerClient().invoices(branchId, status)
     }
 
     suspend fun addInvoice(invoice: Invoice): Invoice = requestContext {
@@ -327,32 +320,12 @@ class Okul360Repository(private val context: Context) {
     }
 
     suspend fun updateInvoice(invoice: Invoice): Invoice = requestContext {
-        try {
-            invoiceDao.insertInvoice(
-                InvoiceEntity(
-                    id = invoice.id,
-                    invoice_number = invoice.invoice_number,
-                    student_id = invoice.student_id,
-                    student_name = invoice.student_name,
-                    class_name = invoice.class_name,
-                    amount = invoice.amount,
-                    paid_amount = invoice.paid_amount,
-                    due_date = invoice.due_date,
-                    issue_date = invoice.issue_date,
-                    status = invoice.status,
-                    description = invoice.description
-                )
-            )
-            apiService.updateDebt(invoice.id, invoice)
-        } catch (failure: Exception) { throw failure }
+        com.example.data.remote.NativeDebtLedgerClient().update(invoice)
     }
 
     suspend fun deleteInvoice(invoiceId: String): Boolean = requestContext {
-        try {
-            invoiceDao.deleteInvoice(invoiceId)
-            apiService.deleteDebt(invoiceId)
-            true
-        } catch (failure: Exception) { throw failure }
+        com.example.data.remote.NativeDebtLedgerClient().delete(invoiceId)
+        true
     }
 
     suspend fun getExpenses(branchId: String? = null): List<Expense> = requestContext {
@@ -1319,15 +1292,9 @@ class Okul360Repository(private val context: Context) {
     }
 
     // Debts & Collections (/api/debts)
-    private val localDebts = mutableListOf<Debt>()
 
     suspend fun getDebts(studentId: String? = null): List<Debt> = requestContext {
-        try {
-            val res = apiService.getDebts(studentId)
-            localDebts.clear()
-            localDebts.addAll(res)
-            res
-        } catch (failure: Exception) { throw failure }
+        com.example.data.remote.NativeDebtLedgerClient().debts(studentId)
     }
 
     suspend fun createDebt(debt: Debt): Debt = requestContext {
@@ -1335,19 +1302,11 @@ class Okul360Repository(private val context: Context) {
     }
 
     suspend fun updateDebt(debt: Debt): Debt = requestContext {
-        try {
-            apiService.updateDebtRecord(debt.id, debt)
-        } catch (failure: Exception) { throw failure }
-        val idx = localDebts.indexOfFirst { it.id == debt.id }
-        if (idx >= 0) localDebts[idx] = debt else localDebts.add(debt)
-        debt
+        throw IllegalStateException("Borç durumu tahsilat ve vadeden hesaplanır; tahakkuk düzenleme/tahsilat/iptal ekranını kullanın")
     }
 
     suspend fun deleteDebt(id: String): Boolean = requestContext {
-        try {
-            apiService.deleteDebt(id)
-        } catch (failure: Exception) { throw failure }
-        localDebts.removeAll { it.id == id }
+        com.example.data.remote.NativeDebtLedgerClient().delete(id)
         true
     }
 
