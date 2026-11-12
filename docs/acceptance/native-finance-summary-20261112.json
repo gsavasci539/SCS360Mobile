@@ -1,0 +1,1047 @@
+{
+  "status": "WIP: recorded native finance summary and negative-envelope rejection; full Android regression and real Kotlin/FastAPI acceptance pending. Previous 74-test/APK evidence does not cover this source.",
+  "backend_summary_tests": {
+    "passed": 9,
+    "skipped": 8
+  },
+  "backend_related_tests": {
+    "passed": 5,
+    "skipped": 5
+  },
+  "android_first_run": {
+    "tests": 15,
+    "passed": 14,
+    "failed": 1,
+    "reason": "HTTP 200 success:false incorrectly unwrapped; common interceptor fixed after this run"
+  },
+  "pending": [
+    "current full Android regression",
+    "real Kotlin/FastAPI temporary DB acceptance",
+    "new APK",
+    "native debt/payment row pagination and mutations",
+    "parent CRUD",
+    "physical A26 and actual provider/store acceptance"
+  ],
+  "files": [
+    {
+      "path": "mobile-android/.env.example",
+      "sha256": "71bb5c4cea0ef2691d6a7f37e518ac298584431acbab57e6be301c375e254533"
+    },
+    {
+      "path": "mobile-android/.gitignore",
+      "sha256": "516b254abde1ae346c8fe9ef91a7717857d7df86f9ff1bee28c309a1c8b65824"
+    },
+    {
+      "path": "mobile-android/INTEGRATION.md",
+      "sha256": "29ec52f9dd46250c458b38e54a3fbb0e1d9c5273d96b5608b318cacbebbea1ed"
+    },
+    {
+      "path": "mobile-android/app/build.gradle.kts",
+      "sha256": "c974aebbb9bf60df27aae5661d98f0ba1bb8d1759b3b5d35f45611ac95a66d28"
+    },
+    {
+      "path": "mobile-android/app/proguard-rules.pro",
+      "sha256": "dec087f34c2469926ae8fa1c084a410ef16c0ed4e02f9e816a31116816d3643a"
+    },
+    {
+      "path": "mobile-android/app/src/androidTest/java/com/example/ExampleInstrumentedTest.kt",
+      "sha256": "af79227e88d1ea0ae10279e9dd2a16f0e290766cd9d90620f4339449cb28067e"
+    },
+    {
+      "path": "mobile-android/app/src/backendAcceptance/java/com/example/NativeAttendanceBackendAcceptance.kt",
+      "sha256": "66261fbeb77a310e702021e134be72f58288196b751b7356da5c16e08442ccd2"
+    },
+    {
+      "path": "mobile-android/app/src/backendAcceptance/java/com/example/NativeFinanceSummaryBackendAcceptance.kt",
+      "sha256": "8acb0db081d5efdfe3f3a776942fd59c6eee6478dd53c31a8d2b997712feefc5"
+    },
+    {
+      "path": "mobile-android/app/src/backendAcceptance/java/com/example/NativeRegistryBackendAcceptance.kt",
+      "sha256": "f1ff562a15b0bb4aab873bb9cbdda95edf10fd0ff729bc4f965a59a637358031"
+    },
+    {
+      "path": "mobile-android/app/src/main/AndroidManifest.xml",
+      "sha256": "2d6ff7f6e6f454266f7221f7f335431bf496874fe9a7b19e1258edb869a15f65"
+    },
+    {
+      "path": "mobile-android/app/src/main/assets/css/design-tokens.css",
+      "sha256": "ec8f1d8118dba5a975fbb8c7f78267723ee0b175b6c220f1034e37f40cfdf178"
+    },
+    {
+      "path": "mobile-android/app/src/main/assets/css/global.css",
+      "sha256": "24289f095aa21af68516e734a20214eb679cb0a3146efaf6e8394171057800b9"
+    },
+    {
+      "path": "mobile-android/app/src/main/assets/css/normalize.css",
+      "sha256": "433c9e7e428298f70493cac27e963e8e4a98be4cb31a04bd3ce6b86b77e6989f"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/MainActivity.kt",
+      "sha256": "cd4e60d2a1efeda61f6c85fb3886da96da429083507bc70e1cbf3324233134e6"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/local/EntityMappers.kt",
+      "sha256": "34f91a5f8e501827813c1200a4e6345457093709238c1bfaef11d6c44f58f860"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/local/Okul360Database.kt",
+      "sha256": "99c7d658f8705022348d8a436e271cc6d6564b0eba39014134ec8cd6ef3c223e"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/local/SessionManager.kt",
+      "sha256": "2ca78ac5d11d8a01f29a933e113fedacb40ec1e39064d5ebd782da3a3cc84346"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/local/SessionTokenVault.kt",
+      "sha256": "ecad04089e1fb743f5123fa319a7e351fb78124b6e3810a01c9306bd5acd3043"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/model/Models.kt",
+      "sha256": "d2f9eb531350f7b742f288d108d8bed39fc30adeedef9d35042a43905a5e90df"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/model/RecordedFinanceSummary.kt",
+      "sha256": "3b9eb8e6cca3ffd2836def109f22b6b9d036ea3cd119afd69fe7658947c6316c"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/model/SessionRolePolicy.kt",
+      "sha256": "5093e9e714495c3fec4296d235a2938f57d9a539d6f36892c2349dd071424b41"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/payment/SchoolCheckout.kt",
+      "sha256": "e84bb79a34d02607939d835c4625f35db24edff5a17b1475a59cade78832b548"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/payment/ceppos/CepPosService.kt",
+      "sha256": "565db774c9c12786fb9c4d993ef00b89487f312d62bbb21dea8a91d3923217f6"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/payment/iyzico/IyzicoPaymentService.kt",
+      "sha256": "0c7a02f789c11fb8f7f94feefc2c14938d11871595fa08649abab4204bc631c3"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/remote/GeminiApiService.kt",
+      "sha256": "88ea4762f12581e082718e436319b90db48c9be2c4361efe20fea4f07dbc5977"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/remote/JsonAdapters.kt",
+      "sha256": "46a14cba47cd55e0854873b6b9be1912e6f27ab0f7f29255f00978d65ff9c87c"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/remote/NativeAttendanceEditor.kt",
+      "sha256": "62d00e158ceed4c693f22a4c7815521d1ea96e3744971b5dfb0cb02ef939c9ad"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/remote/NativeAuthentication.kt",
+      "sha256": "f8f6afc159039965d6d799fe9eccf9dc941ff5c7aedf5e2c2307537ac44c8301"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/remote/NativeFinanceSummaryClient.kt",
+      "sha256": "7c409a3bf14f39e95896f5db6033242c68662d62e51e40b62b33467f625e86ed"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/remote/NativeRegistryClient.kt",
+      "sha256": "9f546f895217cad73844c3a9000e6f5b381de7429b0943aa2fecc1e31595320b"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/remote/NativeRequestScope.kt",
+      "sha256": "d1808924f1f5c804b2d09571daa41b9b8006df287df6bad908b5954468e926ba"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/remote/Okul360ApiService.kt",
+      "sha256": "7ad098c42981b9cc0d06416c88d99ec11f0bafc41f6230139e527a128a81fda1"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/remote/SaasApi.kt",
+      "sha256": "29b970dea29b9708effb154ef3a463d3645c893c20c3bb47ed4d6e8b0c525e9d"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/remote/TenantProvisioner.kt",
+      "sha256": "6130f76a8146f9bc5f24dfcb20bf94b2243b0dcc7e1beaa534641b83feadcf00"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/data/repository/Okul360Repository.kt",
+      "sha256": "c5bd2c7ed3222d26d46b9e36565755ca853a84a8e7f1953d698f851b210ced59"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/AiModals.kt",
+      "sha256": "4a290022f03bf532b4ec6db151e684ef0aaa62a409120ca33acbc4f66f7b86c8"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/AttendanceHeatmapCalendar.kt",
+      "sha256": "74f0363a313e60aaee88af0e2f64e20b7a705245d74ff390f273064cdb99354d"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/AttendanceMonthlyCalendarView.kt",
+      "sha256": "b19882a7f46c147109af06a63e3766a10a30b0c6f00866d2d7ca9af3c8aac4e8"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/BranchFinancialOverviewChart.kt",
+      "sha256": "849f1bcb75e5d1c0059169eccafe6d299723e07fee1a39ce4d281537fc096f8c"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/BranchSwitcherBar.kt",
+      "sha256": "e870e1423b94502ac41321eca536f622dd525e5b7e53c0df88ebdf2ceac79205"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/CommonComponents.kt",
+      "sha256": "699ffcd086d5ebef5d765ff161a27e85ae95b00cf630a811471f3e7ae9c889dd"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/DashboardInteractiveWidgets.kt",
+      "sha256": "27ff46cb34642bcb48dde53dfb5533e647d7935dda33f18bd8e68bec37b201ed"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/EmptyStateView.kt",
+      "sha256": "faf350f69c486319817ff629fd8fbcf10e6ddf4c1ac01ad76fa0960bedb58663"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/ExamCalendarCard.kt",
+      "sha256": "196ff1f64b6418eea2421f356131572daa351ff1f848206c945fe86117917638"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/FinancialSummaryCard.kt",
+      "sha256": "9dbaeecacf11734dc28c3a094cf2e8b22ae4a83878249f1903d3774037d35dda"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/GlobalSearchBar.kt",
+      "sha256": "75fd3d623bd1cb72113f5ca0c4756b81eaeec83df96a576d8c3c66f5b9778ca9"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/HomeSpeedDialFab.kt",
+      "sha256": "525aafa69dc8b8f3be084ceefd74d60a9f4518c8f70780cd7e98eb16bebc0754"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/LoadingIndicator.kt",
+      "sha256": "b1e6dcf49d13b991608cc470917a9eb3014dd44a0185596bd93c04903e852fd5"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/MonthlyAttendanceBarChart.kt",
+      "sha256": "f54eec4b69057419398c002fffd41b9720e25823ac0aa62f8bbe2eb30e57b853"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/Okul360ChatbotModal.kt",
+      "sha256": "18c96223f31530b42fcd95c2fe006817f12cba9ba22380540a7ed569b31e75fc"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/PaymentReminderComponents.kt",
+      "sha256": "4b98e91ae577f816fba15fa35b6a8649c25d474365a8ff52d9f68ad00386909a"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/PaymentStatusPieChart.kt",
+      "sha256": "072cfd9e60f376ab2f5b8d8f65670ebf0d4b5a6afecbffefedba5aa5f4ede156"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/PullRefreshWrapper.kt",
+      "sha256": "502564c9b0a6654ec50f83afe9925eb309608a4c98df98470d538c31c864ab7e"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/RecordedFinanceSummaryCard.kt",
+      "sha256": "e6fd63217f74ca39a1dd6adb024355e40ef26b3e68c4e2da09569e59a9444a1a"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/ReportCardViewer.kt",
+      "sha256": "de9f648d98321074d4ee47f2d7ccbab11a6de8cff7dc8b4b39894f6e8b96d125"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/ResponsiveDataTable.kt",
+      "sha256": "257840b346b83a716093dfdad49ea36e4bd5baccde91783f9273ce6956683898"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/RoleContextualAiCard.kt",
+      "sha256": "b4544a75f769e351b963d25aaa6af37cc768050c18f464b9e9748cbf2e77668b"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/SubjectAttendanceStatisticsChart.kt",
+      "sha256": "86b70b0e31801e2cc65c9094ab29e02530186f094796d8405a8e94a931b5b306"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/TableViewport.kt",
+      "sha256": "b9d4b2c8211c7f9e01df5376f0095840e16fa338a47be7bd817465e98c061edb"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/TodayAttendancePieChart.kt",
+      "sha256": "95a45dc68e27750d0f1f0f3d68877e47c6caa7e888bb6c12c603df92629f9c9f"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/WeeklyTimetableComponent.kt",
+      "sha256": "9ecb4df8013ece1123e598e18eb4f783761aa3f382d0a0d5e81e60eb5830be3d"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/components/YearlyFinancialTrendRechartsView.kt",
+      "sha256": "e15b64266762727a1e923ea4c870cc35bdb3c23efdba7815f1710432addece81"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/context/ChatContext.kt",
+      "sha256": "e52003c2d3c67fb07e4461df5a8f11bbab2e3185ce8dccc6381fd7149da8997e"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/dialogs/AddExpenseDialog.kt",
+      "sha256": "62438628791b85f17ca69d84b4e4e32b7a545e2d94ceb7e44518b92c054067a3"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/dialogs/AnnouncementDetailDialog.kt",
+      "sha256": "50498dc511d71f49df514c637f42a403045713236998eaf026dae8a1484831e0"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/dialogs/ChangePasswordDialog.kt",
+      "sha256": "87e22dbd914a5b395f40bcb563f368a351b2444b1dd93e8b05760b08c63bab01"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/dialogs/Dialogs.kt",
+      "sha256": "9766eb1e5e1ee10c927f5fa4005800ca6ec40081f1e2a07b3a0d9be6acd54c0d"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/dialogs/FeedbackBottomSheet.kt",
+      "sha256": "20d2c86baabc50c8f5366ede6f16d600e10bf14ea7dae45675c1b6c4fffd1475"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/dialogs/ReceiptDialog.kt",
+      "sha256": "35467c35d8cadcfb24cda687fd0638aa19ef0af7c542838b9b397539122dc50e"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/dialogs/RegistryDialogs.kt",
+      "sha256": "3e1cd044257b84f781dcccfb58e381db877d7ad16a5397cd2802e23e26b60d39"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/dialogs/ThemeConfigDialog.kt",
+      "sha256": "61f6da5c3796ff6fcb0b8b0badb3411974b43fb7ba0d08ff4e57549c10b27206"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/dialogs/ceppos/CepPosPaymentDialog.kt",
+      "sha256": "a4f14ca87dddce9469280a860d05eebbfb4d3ca4da810450aa66d87a5cb772a0"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/dialogs/iyzico/HostedPaymentDialog.kt",
+      "sha256": "46262bd211fedae79ea26e5f4c8f5309f3ebb1723bed66a8b73c7e13b3d51506"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/dialogs/iyzico/IyzicoEftSection.kt",
+      "sha256": "90bf61a1ce9ccab0b9524be895759b4ed4f731610b79797d5b14df3f3738ede4"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/dialogs/iyzico/IyzicoPaySection.kt",
+      "sha256": "f5c683b3175d90050232c53fc4e9f14e0cd30ebdd14039ec696ea5520b913061"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/dialogs/iyzico/IyzicoPaymentDialog.kt",
+      "sha256": "be314b9d1357e2961cfbad9501ded066f7af19b50cf46605118bf27869e0a843"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/hooks/DashboardDataHook.kt",
+      "sha256": "8c7f40cd205e8cd79f2a960a3ad1825ac0134a55f30d0b2b7e8c705ee92ee82d"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/navigation/NavigationRoutes.kt",
+      "sha256": "0d8521ccd9d95f753be3fbf231168049466f958b222df21cdfd6827742eb778a"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/navigation/Okul360App.kt",
+      "sha256": "0383e22be589e03cb4c181ff489ed35c51085f65a730e198ed87daacccad5ecc"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/navigation/Okul360NavHost.kt",
+      "sha256": "8fc508045c4cfd959956b6c2985e6e9c3707ecfafd72196ac45fec61a6f78c37"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/AdminAnnouncementManagementView.kt",
+      "sha256": "c42f12215fca1ab48df27aac21818ae74ed83f14852dd39d6a20d9cb574dcc5e"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/AiAnalyticsHubScreen.kt",
+      "sha256": "0982ba74541c39958016ad988e263cfd701c0d95c89e7432cd31ccb010f69009"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/AiChatAuditScreen.kt",
+      "sha256": "5b64b5a5d8db326c03e59688a6cfb064db589e2418872de20f82ab66f9b2f86e"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/AiChatbotScreen.kt",
+      "sha256": "5bc36b60832e098aed9df31234481655a9dd3a03a13d096de4b54a5fb0b69406"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/AnnouncementsScreen.kt",
+      "sha256": "12be3a9ad1b1fd130f2d08c00bde8f72f35d199bf9412a066e5e48659eb3b91c"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/AppointmentsScreen.kt",
+      "sha256": "602a57254c717b7cdad7a6f9c485bca89db3a20832995488340e21a14f1d0c9e"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/AttendanceScreen.kt",
+      "sha256": "5d00567ba1980d2089a85abc4702150f931f83ba51a72c223f715147c4f3c0ed"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/BranchManagerPortalScreen.kt",
+      "sha256": "cd366b59f992e9b95fc3039a3603ef1032f6b389bce53d99a461fae9e7841966"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/CanteenStaffPortalScreen.kt",
+      "sha256": "f497e5514c3af0517a44602777d6e356277a379344b753efd896645376822a4a"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/CanteenWalletScreen.kt",
+      "sha256": "b09e456c59cd12e9e1169a55c636f742f423f851c49ddf95305634a9cb728d15"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/ClassesScreen.kt",
+      "sha256": "1aaeece138f60afdd8270419ba76e74f805df9d8136662ce1c671bb122c33632"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/ClubsScreen.kt",
+      "sha256": "e21679f2b4d1b813c5480efd35eeb204c08949501083db234a467771556908f2"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/CommunicationScreen.kt",
+      "sha256": "42bbe74ce57a7f84c1b058f13e493baaf1d9e5a88caf45e6709d5a50e1eae55b"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/ConsentsScreen.kt",
+      "sha256": "f3d13ee04051f72da8c3d2f2c3fa24d6644b9c8fc6581bd7147a75ba6adc16e8"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/CourseMaterialsScreen.kt",
+      "sha256": "6b9c6119eb0ddd42d18711c1bd17832b16f24860fc9b133a35fb1ee53bedc617"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/DailyReportsScreen.kt",
+      "sha256": "48423ebc82857f42bd0dfda0ba10b3d7c5c719518844023cdedad049d98cfc99"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/DashboardScreen.kt",
+      "sha256": "8a72d2b72e34f62269e0f9952644a369a05b5c345a8d34e5406a7a8d8967b4dc"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/DigitalIdCardScreen.kt",
+      "sha256": "988e632278294aa13af765375e9615964eb0f2ca0569e9995fd5bee9171272d3"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/DirectMessagingScreen.kt",
+      "sha256": "7e6684d78b6d5c8ff17fd2f8890ee7b33a7df99b646ae4500e847390df18ef5c"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/DismissalScreen.kt",
+      "sha256": "1c2f3a3a0ee0d2843592deb0f1bf43affa44557b2cca287a0acaa39acc13455a"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/ExamsScreen.kt",
+      "sha256": "96422d8b3c500eb60c08d2d40c99e1f7232bc3b6e8f0c269a51e06e879dcbb42"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/FinancePortalScreen.kt",
+      "sha256": "58f8389fb8e697fb7978ffea3538a1150ba2e0b7d78fdeddea77498a0af35609"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/FinanceScreen.kt",
+      "sha256": "1e73387df5956c9073d4db666b35e9310e7d9286d9088298bba819a1074b2412"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/GuidanceScreen.kt",
+      "sha256": "2646adcc46416c0c286065c6e08b4b0afefab4be65cb3a3b7f46b9565d1340e0"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/HomeworkGradingScreen.kt",
+      "sha256": "24f5cc97c357c8e3736364428e8ecec5a71c154e9a204c3a78664b7d7fb2dc81"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/InfirmaryScreen.kt",
+      "sha256": "3a463f74967b0dd3c76d8a2bd4906339f96ee79c782f2550c0648607d4093c04"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/LibraryScreen.kt",
+      "sha256": "97a3a7eab59b37cca822f07e6346accd6587c5d9a755e5c7ede6ac283960b80e"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/LoginScreen.kt",
+      "sha256": "6ffb3fda5073033687ce1d1deb361bcfdea7b0f0a4fe8b32d64e9e42b59d1469"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/MembershipEditorDialog.kt",
+      "sha256": "859c411609e7fdede4ace3863a0af18cbfd5f88b361d7f7274d617c902056a31"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/MenuScreen.kt",
+      "sha256": "30c7951d2c08f54775cdf0d540b27447f09fe859eab08a0887dadedfe381b906"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/NotificationCenterScreen.kt",
+      "sha256": "141ff7f0b6fd963fecc63761b340a9a2ac3439f6f5c829c75e23e0041a5cacd6"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/OrganizationsBranchesScreen.kt",
+      "sha256": "8330b55c7fc05e2424b3c8ade0959b842c9b842c04343ecac93b5d1693003280"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/OutboxBroadcastScreen.kt",
+      "sha256": "5065a2e676c663f479bf5c895b7c016ff72886622cc4319f34e7f216d7e3de1e"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/OwnerPortalScreen.kt",
+      "sha256": "df3425e5eaba95a1d6726178ce413ea7bed2ae59de834c6b478d83fb8c057f6c"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/ParentPortalScreen.kt",
+      "sha256": "6a7e0e3e4850c452995423c4c6dcb2ec70046afacfa26624cfa1ec1a216780b2"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/PayrollScreen.kt",
+      "sha256": "2e8f0930cb6687e784460ac1c9d6b1a41cf9fa46fc6013d17842c65f72bceb14"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/PlatformSaasScreen.kt",
+      "sha256": "4246b994b85cc35c9658f5c6748b7a2b1e67b37214d1e34d19fc77847d31557c"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/ReportsScreen.kt",
+      "sha256": "a7e23bb28931bd713dcdac637cbfaa0c9096eb8ac23f0279166af3baa13c573f"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/ResourcesScreen.kt",
+      "sha256": "92fb651946964415533851c56a751c9b34b1417e550ed83e583af9cb6af3c7bf"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/RfidDevicesScreen.kt",
+      "sha256": "c432fc9c25c8984c610a5cd735e19235e16ed9446fc3a50ab9d16e366b7168ad"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/RolesScreen.kt",
+      "sha256": "f33752097593ad65b7db17bade99f4f88a05f289169468c83aa79771e62acfc3"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/SecurityAuditScreen.kt",
+      "sha256": "9aae0bc4ae5951039dfd440a5b0b5df997f75cc9bb984e3b2eb11f36966984c5"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/SettingsScreen.kt",
+      "sha256": "b87285438f2a509e1437b65d0343cfe3f81825344c91220356881120bb4ff699"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/SplashScreen.kt",
+      "sha256": "a43e30ca460c957541d13cc18c3af072d67a2ffcd43d44b2401d6b078c236bb3"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/StaffManagementScreen.kt",
+      "sha256": "cc7a92c17d16a8a06918266905cafc53e825311476cb8fc9ec7e6fa05f43607e"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/StudentProfileScreen.kt",
+      "sha256": "4d8c1025e73164b311bd275057fa2dd30c964c8a997bb6ffa4b40d6793658936"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/StudentsScreen.kt",
+      "sha256": "45f3251e52d73287ce3119ec6843b640b843cbe34c233e3dd3e3a620102315eb"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/SubscriptionBillingScreen.kt",
+      "sha256": "6237ea88effded873a93cb893d68af15aa091dbd150700da137d81e2755a0eca"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/SurveysScreen.kt",
+      "sha256": "7d06d7e2a9fa0e46f4bf5929a71917da4851fb6079f665e69d3ccdef855ba99d"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/TeacherPortalScreen.kt",
+      "sha256": "ae64819725e6738087d289ce165febb99e5ecba02cb8a38a44acc9be196ff039"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/TenantCreateDialog.kt",
+      "sha256": "8c87ace19a447f1e4d69d10d987e251972a6f04c2a75b3a8a326bb46ab964385"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/TransportScreen.kt",
+      "sha256": "68c7bee55da6a3593bdf64517d1eb97ecd85040c5dbd16c43fa287db686fef0a"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/TutoringScreen.kt",
+      "sha256": "f7736d23b11357feb628bf95e566eb95fd03afa51c41c6e8e629595c19eab251"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/UsersScreen.kt",
+      "sha256": "5fdcfcf80fa06591a94f0e7c85b2ed986803933b79d3c36d0c03209400521c0b"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/screens/WeeklyScheduleScreen.kt",
+      "sha256": "d9a01762a69f05ed14f3437cbd826b58b117f680d33969537fae347609c90c39"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/theme/AdaptiveLayouts.kt",
+      "sha256": "4acea63b55ab7051a9504f703303ef5976b5d161fcaffe104c86b8f2cd5aa0af"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/theme/Color.kt",
+      "sha256": "240100e6d8baf3c9e9bb6eb676b96a7e10d3514a4a3caec830b99def97964bf7"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/theme/DashboardBrandPalette.kt",
+      "sha256": "345666eb201006177f67fb20536cbe72df907edfe7a016ba0321a68712b6457a"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/theme/DesignTokens.kt",
+      "sha256": "46bf0847828ce7e64ffd348204561dee39977c352ba13f7ba2be7b7b3a937abf"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/theme/Theme.kt",
+      "sha256": "0cbf7f7c5f9e3abca95c8b148216fd94d3dd60dee70bf530d615fae9a1776775"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/theme/Type.kt",
+      "sha256": "d624f9760a0fb14a25833700657f6bc3cb8a695749cc1270fdb6e3b720bd8c99"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/viewmodel/LoginViewModel.kt",
+      "sha256": "431dc3545f7259e9c4f7677894b98697db00ed2af43354761ea1492808ab118f"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/ui/viewmodel/Okul360ViewModel.kt",
+      "sha256": "d27f301cbb344227c2049cb1be71153bbf76293a566043dcbe556fb7c4ac47f0"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/util/AiAnalyticsEngine.kt",
+      "sha256": "a234643f438c44ab0a9a4b17bc5ab0e54d131a110eeabe3d11cc3975358a72ba"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/util/CsvExportHelper.kt",
+      "sha256": "87051c0b43f23e231a4c1c96ba0304ade57b47810236b56a62c25297cc1dcbdb"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/util/NetworkMonitor.kt",
+      "sha256": "1022795b6e17eb9c4ca8da8dcc7b00c56cead21b84dadedd740d4eab2eccd4ae"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/util/NotificationHelper.kt",
+      "sha256": "619f16ed40e1a4a97b780b61a6dd7b8203c54d74b8536ae94b3494c28761df52"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/util/Okul360FirebaseMessagingService.kt",
+      "sha256": "0bac26ffef57273869b7b1da168331ab12d3d523323111ce98f96f2587ca4cae"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/util/ReportCardPrintHelper.kt",
+      "sha256": "4dc6550bbeb818f713ed4187d7c91760ccdba02f3442e64b6aa6b75321403f35"
+    },
+    {
+      "path": "mobile-android/app/src/main/java/com/example/util/TeacherReportExportHelper.kt",
+      "sha256": "f83ad43a4c387744acb2a1cce4cb6054db25165153543716f762c0d07bb102e0"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/drawable/ic_launcher_background.xml",
+      "sha256": "626739f30fb547983d6474c760e92004431c69d65d1fceb740ae83cc199288a1"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/drawable/ic_launcher_foreground.xml",
+      "sha256": "3438c0a74f315a47bd1de5f578f350274e9fb2de22bf971268ed12b6856e89dd"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/drawable/ic_notification.xml",
+      "sha256": "5448593806cafe3b8a9d5602f94badb4382a45c69a72d9b52b1adf533693ec21"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/drawable/ic_scs360_mark.xml",
+      "sha256": "02e20d0637f590fe2c07b6ba5635b3a7de21d724143e2e13a191cd98f3ad4417"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/drawable/img_bytebridge_logo_1787049913477.jpg",
+      "sha256": "48a7ee5299130c5af91f52bbc2ab8ce0a0c3046e20aced049f0cabe11c684b0e"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/drawable/img_okul360_app_icon_1787837235049.jpg",
+      "sha256": "95d8bae9859af2ff4630c6ac80e82c0f7248333e01c2be925b85ee8765744db6"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/drawable/img_okul360_logo_1787049893721.jpg",
+      "sha256": "f9265ddd58402f4a7608e0d1d80080ee4fe9c5c7a920f5fd41d9ee9b6ba3efd8"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/drawable/img_okul360_official_logo_1787837221592.jpg",
+      "sha256": "0a13fb86e07234526e903a50af457885b35d7f6d34e87b1aa1fd537db2ca1666"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/drawable/okul360_hero_1787035201990.jpg",
+      "sha256": "0ae2334bca1ff2886cecfa6654f5ecfb570cf5f62befa9cbfc9d307dd7ccc30e"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/drawable/okul360_logo_1787035152132.jpg",
+      "sha256": "49ae1a7e17bc2cc5103fa00394f9f4e709f42916ab93acd8473c7beecb2f8166"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/drawable/scs360_logo.png",
+      "sha256": "8904eb9368339ae951ab847aaa4273ff4f6ef05d56a2524ea40e1a233b1d7915"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/drawable/scs360_logo_preview.png",
+      "sha256": "2cddccfac42f82cb5b4d2ebff08a7d98719d6272374744032f8fd61138377b67"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/drawable/scs360_mark.png",
+      "sha256": "909d44ccb91bbfc9ed622088829c8cdfb4467a419f0a9557cbc64947b9f912e4"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/font/inter.ttf",
+      "sha256": "db2007cac3f58427030755b0ff368cceef98dc503cf6d3d2aa366a4743f9749f"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/font/plus_jakarta_sans.ttf",
+      "sha256": "3632e5fe3fbece3917f7347ba91fbb6fa06d120af55b387f1e2067c170f92faf"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml",
+      "sha256": "6d0988175971f41bdc83eadb144af3d84c40052fa125e90edbe7d89227be4b25"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml",
+      "sha256": "6d0988175971f41bdc83eadb144af3d84c40052fa125e90edbe7d89227be4b25"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/mipmap-hdpi/ic_launcher.png",
+      "sha256": "ac7e37fbcc18a59dbd83022b8ad0dd134d090b8774174fe18d1523a8ab1649a9"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/mipmap-hdpi/ic_launcher_round.png",
+      "sha256": "f5fb48186aa197caad9c93ee238541c9c23a698015b6623377f473817f26fbcd"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/mipmap-mdpi/ic_launcher.png",
+      "sha256": "25bcedd1d6d9e204d04ee834d439dc0e9d5eca98aa3e7248e5f6ec63fed07269"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png",
+      "sha256": "2b48453cdbb277c093078f4c60594a9833293f92a193c81974e39eb492505895"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/mipmap-xhdpi/ic_launcher.png",
+      "sha256": "287a2088257cc3502af6e096ed4a3e906092ebdd21fe21ac190f54ac337df844"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.png",
+      "sha256": "34810276e690002206232bc19bd0bebb888eb2c30f372c2657de1cc0b036ad19"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png",
+      "sha256": "e4582d145df831f14e0feeb83bf09544ee084fecc8790b71fdbc299576e0cf8a"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png",
+      "sha256": "200bbe0477b95c8f145301aeb55efb54de1c7d07ae61b760af2defaa65e47c23"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+      "sha256": "12a24ef9831a6e73bbf1c492bda9eeeb52f1660610a7b8644108aece9a00ea9e"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png",
+      "sha256": "fd5fe7dae353e357cff7ebe2444088ac145ecdc71e9832189edadf868963a3fe"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/values/colors.xml",
+      "sha256": "57681038afd005dcd260eabdd6d16619709c4a3fe20324362ea00e093e85b5fd"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/values/strings.xml",
+      "sha256": "1fbd13632cfd8b4532948645f328238f101a77006be7b1aba40c1cadb90c5a81"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/values/themes.xml",
+      "sha256": "e8288b65767f4f28854d168c7b19c308579d3703bdf3fc26c2b266e19148f465"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/xml/backup_rules.xml",
+      "sha256": "34902171db86bd7b01cd054e894c3a18b1af40e9c25556f8b0a58f6ca8fbb5b8"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/xml/data_extraction_rules.xml",
+      "sha256": "c4dc00be3120eec90bb9f8c41f08d746f36ccb153096c31520f420e0a7615e7f"
+    },
+    {
+      "path": "mobile-android/app/src/main/res/xml/file_paths.xml",
+      "sha256": "00cc25df511294ce85f96b4c81000724bce4d04ce41822e8f8054a7c246a813d"
+    },
+    {
+      "path": "mobile-android/app/src/test/java/com/example/ExampleRobolectricTest.kt",
+      "sha256": "44b89431b52d1a3589b59a215e5e970c73aaabe865f39364d9f1eebcdb948ab1"
+    },
+    {
+      "path": "mobile-android/app/src/test/java/com/example/ExampleUnitTest.kt",
+      "sha256": "e17ce26895e5cb4884f4a5e3a12a10395334784bbd81f8d8a0b26a91037adec4"
+    },
+    {
+      "path": "mobile-android/app/src/test/java/com/example/GreetingScreenshotTest.kt",
+      "sha256": "058ecd3e0685cd3bf8b8ce82212732ea082da43349fe200cc8655e5c41f2d147"
+    },
+    {
+      "path": "mobile-android/app/src/test/java/com/example/MembershipEditorDialogTest.kt",
+      "sha256": "b6bfc5102a2f1717f3e8d5a8d4a854db46450d483a2d57a32ab42610f1481b39"
+    },
+    {
+      "path": "mobile-android/app/src/test/java/com/example/NativeApiScopeTest.kt",
+      "sha256": "5353be879ee736cb3f076a6a13785e87011265c13841dafbeeaf01383e594148"
+    },
+    {
+      "path": "mobile-android/app/src/test/java/com/example/NativeAttendanceApiTest.kt",
+      "sha256": "780cfd51dc71c564fec37dd14adfeee5837b144ce6ff13e6904e5cccbeec244c"
+    },
+    {
+      "path": "mobile-android/app/src/test/java/com/example/NativeAttendanceUiTest.kt",
+      "sha256": "11c5b8df21159cf4735a19d1c8abe7c32131a8475baa8c5bf91fdf9a536f3e43"
+    },
+    {
+      "path": "mobile-android/app/src/test/java/com/example/NativeFinanceSummaryTest.kt",
+      "sha256": "d1deaf08bfdfa3e65d1a57e3a61146e8a9b53981adc0b83adc42067eccc14669"
+    },
+    {
+      "path": "mobile-android/app/src/test/java/com/example/NativeFinanceSummaryUiTest.kt",
+      "sha256": "17e1b9ef4aee3a139966db81318c7a9c7f54c43c98cb09298f1a907aad922e03"
+    },
+    {
+      "path": "mobile-android/app/src/test/java/com/example/NativeRegistryContractTest.kt",
+      "sha256": "84a27e07bfd9a9249079651771ee2afac3fcb17d753fd8ea1d6492495694f4ab"
+    },
+    {
+      "path": "mobile-android/app/src/test/java/com/example/NativeRegistryUiTest.kt",
+      "sha256": "e3ab817e362652d530d9f44854cd88c4276ebcd47929d3cf40471600b6c1be88"
+    },
+    {
+      "path": "mobile-android/app/src/test/java/com/example/NativeScreenLayoutTest.kt",
+      "sha256": "54f7bf5f84a5a06cbfe3dbe0d34f7557dd60d46f54c7700d2102528dc7069c80"
+    },
+    {
+      "path": "mobile-android/app/src/test/java/com/example/ResponsiveLayoutTest.kt",
+      "sha256": "656e37160616dcc67f861703a56026049a4d20f9159583d4bca95942d68812fe"
+    },
+    {
+      "path": "mobile-android/app/src/test/java/com/example/ResponsiveScreenshotTest.kt",
+      "sha256": "d0c1e4b4e612c25b79c4f50420ab0a71a623a17b1f9a15e315cf171bb300f53f"
+    },
+    {
+      "path": "mobile-android/app/src/test/java/com/example/SaasApiTest.kt",
+      "sha256": "5afb2c8e95fcf73f4ef86728d058631c5d6131a55b536606626f9f42f87a55ad"
+    },
+    {
+      "path": "mobile-android/app/src/test/java/com/example/SessionRolePolicyTest.kt",
+      "sha256": "ab6b4fc9e0759e01d67a4d9a07e6ab01bc653529d1eec99992b586117437995f"
+    },
+    {
+      "path": "mobile-android/app/src/test/java/com/example/SessionTokenVaultTest.kt",
+      "sha256": "bfa673093635468a79918d0cbe2e09ffeceea3b043aade703a36a8ade5d15871"
+    },
+    {
+      "path": "mobile-android/app/src/test/java/com/example/TenantCreateDialogTest.kt",
+      "sha256": "492d14619e6c122f028a73ed26eb8ef54ab8ef555e99a3b3b67a7e3d1492f4b1"
+    },
+    {
+      "path": "mobile-android/app/src/test/java/com/example/TenantProvisionerTest.kt",
+      "sha256": "fc77d75ce2c82d84d55a4aaf9a5f2957d8eb8ce72948624961223b767e62909d"
+    },
+    {
+      "path": "mobile-android/app/src/test/screenshots/greeting.png",
+      "sha256": "08b77a026d9f6bc52b9404021e164eaf16d033701ddc0cdb1caabe6f5e7ed01b"
+    },
+    {
+      "path": "mobile-android/build.gradle.kts",
+      "sha256": "2d3c2b9e7e2cf6a7eede8c67899769ff7d5c1810d29797b74d584f0253df851a"
+    },
+    {
+      "path": "mobile-android/gradle.properties",
+      "sha256": "d004de8543bdcd2ac81f41bdd491e33654592a2e51b6b28072d71f84228dd12d"
+    },
+    {
+      "path": "mobile-android/gradle/libs.versions.toml",
+      "sha256": "474dfce27f628124bfbf27d2d6d790d6da823e1ea965d19480d1fd4decc6bbea"
+    },
+    {
+      "path": "mobile-android/gradle/wrapper/gradle-wrapper.jar",
+      "sha256": "b3a875ddc1f044746e1b1a55f645584505f4a10438c1afea9f15e92a7c42ec13"
+    },
+    {
+      "path": "mobile-android/gradle/wrapper/gradle-wrapper.properties",
+      "sha256": "137a45811ade89eb5d35fc3df0441aa891a69c55ae65780f23303e5acaf597f7"
+    },
+    {
+      "path": "mobile-android/gradlew",
+      "sha256": "fb68debc1b1acf8ec55dc0d5e5495e1dedd0bd6b61f304bee61613eeb2bd9b92"
+    },
+    {
+      "path": "mobile-android/gradlew.bat",
+      "sha256": "fedad02c18e266ec094995a5751b7fe1eb6e74f66bf75db64fae2e50eb22c234"
+    },
+    {
+      "path": "mobile-android/settings.gradle.kts",
+      "sha256": "46f88d3bd2163e1657a5f850fa714a4fb131c2666539ee934b1559011ccc4117"
+    },
+    {
+      "path": "mobile/.env.example",
+      "sha256": "dfb5e558073ffb7d9820bb77103958329843340f43e1dff6da7cf393462f6edc"
+    },
+    {
+      "path": "mobile/.gitignore",
+      "sha256": "55690f1e65364ba9ed901847bc68ce881715fef423ed84dcb5603ebbc04b29c1"
+    },
+    {
+      "path": "mobile/AGENTS.md",
+      "sha256": "5986df214fcb822f856b9a8aac7c06503e02158aad55c8d7edf2966d7ee2dffd"
+    },
+    {
+      "path": "mobile/App.js",
+      "sha256": "d9f59d79f20bc8af0ec0904c0a91254033510c46a683e9b9ab7082706f1c9569"
+    },
+    {
+      "path": "mobile/INTEGRATION.md",
+      "sha256": "c46354d9ce337e0bd34cba2a0a19407806c135cb506f863ea2413906df95f099"
+    },
+    {
+      "path": "mobile/LICENSE",
+      "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4"
+    },
+    {
+      "path": "mobile/README.md",
+      "sha256": "0f15b643a4b82ae4264a8dab50a359eef257f9ef8770ae6c2954bb89ea5ec26b"
+    },
+    {
+      "path": "mobile/app.json",
+      "sha256": "e8b56859419a1aaca29e6d22471327df993e6d0d13db71465a949fefaa1a8d28"
+    },
+    {
+      "path": "mobile/assets/android-icon-background.png",
+      "sha256": "b467f7cbc93c3a049eddf70769dfd9c1733181e9ab1ee65a06d3162003cd2138"
+    },
+    {
+      "path": "mobile/assets/android-icon-foreground.png",
+      "sha256": "9d2470efe21020815321415042ebc6fac268f8701281c14ca6406c09cf277f71"
+    },
+    {
+      "path": "mobile/assets/android-icon-monochrome.png",
+      "sha256": "75b1d79ea414b7409728b76a3b53670e61be0407615b82e1ab4940ad84545379"
+    },
+    {
+      "path": "mobile/assets/favicon.png",
+      "sha256": "7367c85ddacff26fed51b923b751915e6202d98a72bb6993363b6b87f8b8688c"
+    },
+    {
+      "path": "mobile/assets/icon.png",
+      "sha256": "90aad17b06580fdfa1fe4e5fd10425c5ab97ed75b86b3e6fec58510529f61fd7"
+    },
+    {
+      "path": "mobile/assets/scs360_logo.png",
+      "sha256": "8904eb9368339ae951ab847aaa4273ff4f6ef05d56a2524ea40e1a233b1d7915"
+    },
+    {
+      "path": "mobile/assets/scs360_mark.png",
+      "sha256": "909d44ccb91bbfc9ed622088829c8cdfb4467a419f0a9557cbc64947b9f912e4"
+    },
+    {
+      "path": "mobile/assets/splash-icon.png",
+      "sha256": "63023221726ddf769eb83509bb73711a554a90e4d7ede67f5e7b4826b2c71727"
+    },
+    {
+      "path": "mobile/eas.json",
+      "sha256": "b2edbf911ea1d2484c696314bac87dacc0c4e75875fdda475f328a42fc9238e1"
+    },
+    {
+      "path": "mobile/index.js",
+      "sha256": "5c157f4d44972d9c84415e1e4bda595b3abcd8cf733f8a9cd20935bec3eccc42"
+    },
+    {
+      "path": "mobile/package-lock.json",
+      "sha256": "7d7c81abffb82a1e8746b6d4d8d4f09db6a75f436b8e4531318a534d9d83c39e"
+    },
+    {
+      "path": "mobile/package.json",
+      "sha256": "ea9d9f9e1f347b57c9919ce60a2d74010639164b85d856ada620c88f2b6a8ada"
+    },
+    {
+      "path": "mobile/src/config/api.js",
+      "sha256": "a518bd9e8f5eb1bfa34526ae8ff497cf5671ee6a0344f7cba6bcf37f9f439d2c"
+    },
+    {
+      "path": "mobile/src/config/authStorage.mjs",
+      "sha256": "dd141f680d4b8063160bbcc9a0f375e7d4518cb71d4b8efd602254693f88db71"
+    },
+    {
+      "path": "mobile/src/config/theme.js",
+      "sha256": "eaa590824ab7451cbfde5d2e2a08d8064c5df9d328f3fd23cb9ca7aa4a7a8f94"
+    },
+    {
+      "path": "mobile/src/navigation/AppNavigator.js",
+      "sha256": "402125e54f993f241ddb389e76adb3a6871f4a77af7e63bd5ac93176501f2eee"
+    },
+    {
+      "path": "mobile/src/payments/SchoolCheckout.js",
+      "sha256": "24027d9a028709c2ee53c4002649a450de3a483e2a192ea3036a71f1bf794e1f"
+    },
+    {
+      "path": "mobile/src/payments/checkout.mjs",
+      "sha256": "d35897efd0bf6a5cb21bb5d82fd4ca5a1f552436ea3a95b58ded0a0238bd4aaa"
+    },
+    {
+      "path": "mobile/src/screens/AttendanceScreen.js",
+      "sha256": "4626812d2d444d0a705884ebcc96cbc4cf8b9f8b26d0107e120742daf9800f35"
+    },
+    {
+      "path": "mobile/src/screens/ClassesScreen.js",
+      "sha256": "84380a76ed89b6b29325846eab2d882a39fb8180e78469a8144b0a998ebba306"
+    },
+    {
+      "path": "mobile/src/screens/CommunicationsScreen.js",
+      "sha256": "23dd04d38dc9bffd029f0f8f8b7f9c1e66c7a83cd74e35fc0fddde1a9185dbac"
+    },
+    {
+      "path": "mobile/src/screens/DashboardScreen.js",
+      "sha256": "d586634f6d9f8cbf62b0b98dd855d41846b7ee849f1128863bd4e79b3e846fb9"
+    },
+    {
+      "path": "mobile/src/screens/FinanceScreen.js",
+      "sha256": "f845c705bd6cb6a09164cd10328ada05a213a0fb4481688e6cd5e9bc69e68ca5"
+    },
+    {
+      "path": "mobile/src/screens/LoginScreen.js",
+      "sha256": "abf397ad15b1e92c49da927cd7cee5a15da4f160dd85ac6d191fc8dbd71a3078"
+    },
+    {
+      "path": "mobile/src/screens/MoreScreen.js",
+      "sha256": "d78b361a55f43864d1aef46e31c3265c29f1416c84c8329c2180578ce6281b65"
+    },
+    {
+      "path": "mobile/src/screens/PlatformWorkspaceScreen.js",
+      "sha256": "1b042efaf727812aa6dea9b0b7b210a295c9b66654cd6eb970c4b386bb5aede5"
+    },
+    {
+      "path": "mobile/src/screens/ReportsScreen.js",
+      "sha256": "bdac3547545e157b535e1cfecc4c7753800e9d678152966e54a4ca05affb1111"
+    },
+    {
+      "path": "mobile/src/screens/ResourcesScreen.js",
+      "sha256": "408f4269e04df4be4cd854822407f0127a4b2d099235463219130d74b7cde0f8"
+    },
+    {
+      "path": "mobile/src/screens/RolesScreen.js",
+      "sha256": "eb0910ffa7032af9a24ba4fee535e3046f58f3eb43780cf81f671be9490496ac"
+    },
+    {
+      "path": "mobile/src/screens/SettingsScreen.js",
+      "sha256": "0909d594b0138a36b3f38898b87637de91aaa305fe0e7e695289162727523f78"
+    },
+    {
+      "path": "mobile/src/screens/StudentsScreen.js",
+      "sha256": "21ebc4984ba0451dd94fcf40ac662daee79d5125079191a68b0893a43e9dcf93"
+    },
+    {
+      "path": "mobile/src/screens/UsersScreen.js",
+      "sha256": "4b7002b6ca1f95ace023c89f40515bc071ca429eb6695e007f85d70ab95de275"
+    },
+    {
+      "path": "mobile/src/store/authStore.js",
+      "sha256": "64a3ddf050894e348fc87d831a89cc1c683846789dda3ce1c198669e3b418c10"
+    },
+    {
+      "path": "mobile/src/utils/responsive.js",
+      "sha256": "1c54929df147eb3b972d210de3761224af05581c13739160118a6232dc6c2c82"
+    },
+    {
+      "path": "mobile/tests/auth-storage.test.mjs",
+      "sha256": "167993985a14a3c3ecc738f21fe9c096cc4adf34678b10289759e3d31eb98847"
+    },
+    {
+      "path": "mobile/tests/checkout.test.mjs",
+      "sha256": "8d1af2db6967f363dada8b09a89ef7470065cfe43c72005083432a1e0aefa298"
+    }
+  ]
+}

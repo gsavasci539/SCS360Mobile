@@ -81,7 +81,7 @@ class NativeRegistryContractTest {
             assertEquals(1, posts); assertFalse(payload!!.has("id")); assertEquals(org, payload!!.getString("organization_id"))
             assertTrue(payload!!.isNull("student_number") && payload!!.isNull("birth_date") && payload!!.isNull("gender"))
             assertFalse(payload!!.has("blood_type") || payload!!.has("parent_phone") || payload!!.has("today_attendance_status"))
-            try { client.deleteStudent(id(0)); fail("Negative envelope must fail") } catch (_: IllegalStateException) { }
+            try { client.deleteStudent(id(0)); fail("Negative envelope must fail") } catch (_: java.io.IOException) { }
         }
     }
     @Test fun changedRemoteRecordsCannotBeOverwrittenByAnOlderLoadedDraft() = runBlocking {

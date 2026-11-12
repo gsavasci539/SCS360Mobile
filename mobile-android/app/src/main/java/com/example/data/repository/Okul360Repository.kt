@@ -307,29 +307,8 @@ class Okul360Repository(private val context: Context) {
         true
     }
 
-    suspend fun getFinanceSummary(branchId: String?): FinanceSummary = requestContext {
-        try {
-            val debts = getInvoices(branchId?.takeIf { it != "all" && it.isNotBlank() }, null)
-            val totalInvoiced = debts.sumOf { it.amount }
-            val totalPaid = debts.filter { it.status == "PAID" || it.paid_amount >= it.amount }.sumOf { if (it.paid_amount > 0) it.paid_amount else it.amount }
-            val overdue = debts.filter { it.status == "OVERDUE" }.sumOf { it.amount }
-            val pending = debts.filter { it.status == "PENDING" }.sumOf { it.amount }
-            val rate = if (totalInvoiced > 0) (totalPaid / totalInvoiced) * 100.0 else 0.0
-            val expenses = getExpenses(branchId)
-            val totalExpenses = expenses.sumOf { it.amount }
-
-            FinanceSummary(
-                total_invoiced_monthly = totalInvoiced,
-                total_collected_monthly = totalPaid,
-                pending_balance = pending,
-                overdue_balance = overdue,
-                collection_rate_percentage = (rate * 10).toInt() / 10.0,
-                student_paying_count = debts.size,
-                total_expenses_monthly = totalExpenses
-            )
-        } catch (e: Exception) {
-            FinanceSummary()
-        }
+    suspend fun getFinanceSummary(branchId: String?): RecordedFinanceSummary = requestContext {
+        com.example.data.remote.NativeFinanceSummaryClient().load(branchId)
     }
 
     suspend fun getInvoices(branchId: String?, status: String?): List<Invoice> = requestContext {

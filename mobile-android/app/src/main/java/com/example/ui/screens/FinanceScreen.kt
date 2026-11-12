@@ -73,7 +73,8 @@ fun FinanceScreen(
     onCreateDebt: (studentId: String, studentName: String, className: String, debtType: String, description: String, amount: Double, dueDate: String) -> Unit = { _, _, _, _, _, _, _ -> },
     onUpdateDebtStatus: (debtId: String, newStatus: String, paidAmount: Double?) -> Unit = { _, _, _ -> },
     onDeleteDebt: (debtId: String) -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onRetry: () -> Unit = {}
 ) {
     val summary = state.financeSummary
     var selectedFinanceTab by remember { mutableStateOf(0) } // 0: Gelir & Faturalar, 1: Borçlar & Alacaklar, 2: Giderler
@@ -342,152 +343,14 @@ fun FinanceScreen(
     
                         Spacer(modifier = Modifier.height(14.dp))
     
-                        // Summary Cards
-                        when (selectedFinanceTab) {
-                            0 -> {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    MetricStatCard(
-                                        title = "Toplam Tahakkuk",
-                                        value = "₺${String.format("%,.0f", summary?.total_invoiced_monthly ?: 485000.0)}",
-                                        subtitle = "Aylık Planlanan",
-                                        icon = Icons.Default.ReceiptLong,
-                                        accentColor = PrimaryBlue,
-                                        modifier = Modifier.weight(1f)
-                                    )
-    
-                                    MetricStatCard(
-                                        title = "Tahsil Edilen",
-                                        value = "₺${String.format("%,.0f", summary?.total_collected_monthly ?: 380000.0)}",
-                                        subtitle = "%${summary?.collection_rate_percentage ?: 78.4} Başarı",
-                                        icon = Icons.Default.CheckCircle,
-                                        accentColor = SecondaryEmerald,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-    
-                                Spacer(modifier = Modifier.height(12.dp))
-    
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    MetricStatCard(
-                                        title = "Bekleyen Ödemeler",
-                                        value = "₺${String.format("%,.0f", summary?.pending_balance ?: 96500.0)}",
-                                        subtitle = "Vadesi Gelmemiş",
-                                        icon = Icons.Default.HourglassTop,
-                                        accentColor = AccentAmber,
-                                        modifier = Modifier.weight(1f)
-                                    )
-    
-                                    MetricStatCard(
-                                        title = "Geciken Bakiye",
-                                        value = "₺${String.format("%,.0f", summary?.overdue_balance ?: 8500.0)}",
-                                        subtitle = "Acil Takip",
-                                        icon = Icons.Default.Warning,
-                                        accentColor = AccentRose,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                            }
-                            1 -> {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    MetricStatCard(
-                                        title = "Toplam Borç",
-                                        value = "₺${String.format("%,.0f", totalDebtsAmount)}",
-                                        subtitle = "${state.debts.size} Kalem Borç",
-                                        icon = Icons.Default.AccountBalanceWallet,
-                                        accentColor = Color(0xFFD97706),
-                                        modifier = Modifier.weight(1f)
-                                    )
-    
-                                    MetricStatCard(
-                                        title = "Tahsil Edilen",
-                                        value = "₺${String.format("%,.0f", totalDebtsPaid)}",
-                                        subtitle = "Ödenen Tutar",
-                                        icon = Icons.Default.CheckCircle,
-                                        accentColor = SecondaryEmerald,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-    
-                                Spacer(modifier = Modifier.height(12.dp))
-    
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    MetricStatCard(
-                                        title = "Kalan Alacak",
-                                        value = "₺${String.format("%,.0f", totalDebtsRemaining)}",
-                                        subtitle = "Açık Bakiye",
-                                        icon = Icons.Default.PendingActions,
-                                        accentColor = if (totalDebtsRemaining > 0) Color(0xFFDC2626) else SecondaryEmerald,
-                                        modifier = Modifier.weight(1f)
-                                    )
-    
-                                    val overdueDebtsCount = state.debts.count { it.status.equals("OVERDUE", ignoreCase = true) }
-                                    MetricStatCard(
-                                        title = "Gecikmiş Borç",
-                                        value = "$overdueDebtsCount Adet",
-                                        subtitle = "Vadesi Geçen",
-                                        icon = Icons.Default.Warning,
-                                        accentColor = AccentRose,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                            }
-                            else -> {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    MetricStatCard(
-                                        title = "Toplam Gider",
-                                        value = "₺${String.format("%,.0f", totalExpenses)}",
-                                        subtitle = "${state.expenses.size} Kasa Çıkışı",
-                                        icon = Icons.Default.TrendingDown,
-                                        accentColor = Color(0xFFDC2626),
-                                        modifier = Modifier.weight(1f)
-                                    )
-    
-                                    MetricStatCard(
-                                        title = "Net Kasa Durumu",
-                                        value = "₺${String.format("%,.0f", netCashflow)}",
-                                        subtitle = if (netCashflow >= 0) "Pozitif Kasa" else "Açık",
-                                        icon = Icons.Default.AccountBalanceWallet,
-                                        accentColor = if (netCashflow >= 0) SecondaryEmerald else AccentRose,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                            }
-                        }
+                        com.example.ui.components.RecordedFinanceSummaryCard(state.recordedFinanceSummary,
+                            state.isFinanceLoading, state.financeSummaryError, onRetry)
+                        state.financeRowsError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     }
                 }
     
                 // TAB 0: INVOICES & COLLECTIONS
                 if (selectedFinanceTab == 0) {
-                    // Interactive Pie Chart
-                    item {
-                        PaymentStatusPieChart(
-                            invoices = state.invoices,
-                            totalInvoiced = summary?.total_invoiced_monthly,
-                            totalCollected = summary?.total_collected_monthly,
-                            pendingBalance = summary?.pending_balance,
-                            overdueBalance = summary?.overdue_balance,
-                            onSliceClicked = { slice ->
-                                onFilterChanged(slice.id)
-                            },
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-                        )
-                    }
-    
                     // Search Bar
                     item {
                         OutlinedTextField(

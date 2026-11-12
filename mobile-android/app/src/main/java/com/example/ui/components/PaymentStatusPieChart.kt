@@ -56,6 +56,10 @@ fun PaymentStatusPieChart(
     onSliceClicked: ((PaymentChartSlice) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    if (invoices.isEmpty() && totalInvoiced == null && totalCollected == null && pendingBalance == null && overdueBalance == null) {
+        FinanceDataUnavailable("Ödeme dağılımı henüz yüklenmedi.", modifier)
+        return
+    }
     var selectedSliceId by remember { mutableStateOf<String?>(null) }
     var viewMode by remember { mutableStateOf("AMOUNT") } // "AMOUNT" or "COUNT"
 
@@ -70,7 +74,7 @@ fun PaymentStatusPieChart(
         invoices.filter { it.status.equals("PAID", ignoreCase = true) || it.status.equals("ODENDI", ignoreCase = true) || (it.paid_amount >= it.amount && it.amount > 0) }
     }
     val pendingInvoices = remember(invoices) {
-        invoices.filter { it.status.equals("PENDING", ignoreCase = true) || it.status.equals("BEKLIYOR", ignoreCase = true) }
+        invoices.filter { it.status.uppercase() in setOf("PENDING", "BEKLIYOR", "UNPAID", "PARTIALLY_PAID") }
     }
     val overdueInvoices = remember(invoices) {
         invoices.filter { it.status.equals("OVERDUE", ignoreCase = true) || it.status.equals("GECIKTI", ignoreCase = true) }
@@ -79,10 +83,10 @@ fun PaymentStatusPieChart(
         invoices.filter { it.paid_amount > 0 && it.paid_amount < it.amount && !it.status.equals("PAID", ignoreCase = true) }
     }
 
-    val calcCollected = totalCollected ?: (paidInvoices.sumOf { it.amount } + partialInvoices.sumOf { it.paid_amount }).takeIf { it > 0 } ?: 380000.0
-    val calcPending = pendingBalance ?: pendingInvoices.sumOf { it.amount - it.paid_amount }.takeIf { it > 0 } ?: 96500.0
-    val calcOverdue = overdueBalance ?: overdueInvoices.sumOf { it.amount - it.paid_amount }.takeIf { it > 0 } ?: 8500.0
-    val calcPartial = partialInvoices.sumOf { it.paid_amount }.takeIf { it > 0 } ?: 18000.0
+    val calcCollected = totalCollected ?: invoices.sumOf { it.paid_amount }
+    val calcPending = pendingBalance ?: pendingInvoices.sumOf { (it.amount - it.paid_amount).coerceAtLeast(0.0) }
+    val calcOverdue = overdueBalance ?: overdueInvoices.sumOf { (it.amount - it.paid_amount).coerceAtLeast(0.0) }
+    val calcPartial = partialInvoices.sumOf { it.paid_amount }
 
     val totalAmount = calcCollected + calcPending + calcOverdue
     val totalCount = (invoices.size).coerceAtLeast(paidInvoices.size + pendingInvoices.size + overdueInvoices.size).coerceAtLeast(1)
@@ -94,7 +98,7 @@ fun PaymentStatusPieChart(
                 title = "Ödenen / Tahsilat",
                 subtitle = "Eksiksiz Ödenen Veli Taksitleri",
                 amount = calcCollected,
-                count = paidInvoices.size.coerceAtLeast(24),
+                count = paidInvoices.size,
                 color = SecondaryEmerald,
                 secondaryColor = Color(0xFF10B981),
                 icon = Icons.Default.CheckCircle
@@ -104,7 +108,7 @@ fun PaymentStatusPieChart(
                 title = "Bekleyen Taksitler",
                 subtitle = "Vadesi Gelmemiş Aylık Aidatlar",
                 amount = calcPending,
-                count = pendingInvoices.size.coerceAtLeast(6),
+                count = pendingInvoices.size,
                 color = AccentAmber,
                 secondaryColor = Color(0xFFFBBF24),
                 icon = Icons.Default.HourglassTop
@@ -114,7 +118,7 @@ fun PaymentStatusPieChart(
                 title = "Geciken Ödemeler",
                 subtitle = "Vadesi Geçmiş / Takipteki Borçlar",
                 amount = calcOverdue,
-                count = overdueInvoices.size.coerceAtLeast(2),
+                count = overdueInvoices.size,
                 color = AccentRose,
                 secondaryColor = Color(0xFFF87171),
                 icon = Icons.Default.WarningAmber

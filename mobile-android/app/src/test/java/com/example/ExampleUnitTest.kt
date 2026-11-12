@@ -155,37 +155,12 @@ class ExampleUnitTest {
   }
 
   @Test
-  fun yearlyFinancialTrendRecharts_metricsAndCalculations_areAccurate() {
-    val trends2026 = com.example.ui.components.FinancialTrendDataProvider.getTrendsForYear(2026)
-    assertEquals(12, trends2026.size)
-
-    // Verify all 12 months are populated
-    assertEquals("Ocak", trends2026.first().monthName)
-    assertEquals("Aralık", trends2026.last().monthName)
-
-    // Verify positive revenue and expenses
-    val totalIncome2026 = trends2026.sumOf { it.income }
-    val totalExpense2026 = trends2026.sumOf { it.expense }
-    val netSurplus2026 = totalIncome2026 - totalExpense2026
-
-    assertTrue(totalIncome2026 > 5000000.0)
-    assertTrue(totalExpense2026 > 3000000.0)
-    assertTrue(netSurplus2026 > 0.0)
-
-    // Verify year multipliers work comparatively
-    val trends2025 = com.example.ui.components.FinancialTrendDataProvider.getTrendsForYear(2025)
-    val totalIncome2025 = trends2025.sumOf { it.income }
-    assertTrue(totalIncome2026 > totalIncome2025)
-
-    // Verify month net profit calculation
-    val eylul = trends2026[8] // Eylül
-    assertEquals("Eylül", eylul.monthName)
-    assertEquals("01 - 30 Eylül", eylul.dateRangeText)
-    assertTrue(eylul.quarterLabel.contains("Q3"))
-    assertNotNull(eylul.previousMonthIncome)
-    assertTrue(eylul.income > eylul.expense)
-    assertTrue(eylul.profitMarginPercent > 0)
-    assertTrue(eylul.collectionRate >= 90)
+  fun yearlyFinancialTrend_neverInventsHistoricalIncomeOrExpenses() {
+    for (year in listOf(2024, 2025, 2026)) {
+      assertTrue(com.example.ui.components.FinancialTrendDataProvider.getTrendsForYear(year).isEmpty())
+      assertTrue(com.example.ui.components.FinancialTrendDataProvider.getTrendsForYear(year,
+        com.example.data.model.FinanceSummary(total_collected_monthly = 100.0)).isEmpty())
+    }
   }
 
   @Test

@@ -1591,6 +1591,9 @@ class UnwrapApiResponseInterceptor : Interceptor {
 
         try {
             val json = org.json.JSONObject(bodyString)
+            if (json.has("success") && !json.optBoolean("success", false)) {
+                throw java.io.IOException("Sunucu işlemi onaylamadı")
+            }
             // If response is wrapped by FastAPI success_response: { "success": true, "data": ... }
             if (json.has("success") && json.has("data") && !json.isNull("data")) {
                 val dataObj = json.get("data")
@@ -1598,6 +1601,8 @@ class UnwrapApiResponseInterceptor : Interceptor {
                 val newBody = okhttp3.ResponseBody.create(contentType, unwrappedString)
                 return response.newBuilder().body(newBody).build()
             }
+        } catch (rejected: java.io.IOException) {
+            throw rejected
         } catch (_: Exception) {}
 
         val newBody = okhttp3.ResponseBody.create(contentType, bodyString)

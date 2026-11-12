@@ -115,6 +115,7 @@ fun Okul360NavHost(
         // 4. Finance Overview Destination
         composable(Screen.FinanceOverview.route) {
             FinanceScreen(
+                                onRetry = { viewModel.loadFinance() },
                 state = state,
                 onFilterChanged = { viewModel.setInvoiceFilter(it) },
                 onSelectInvoiceForPayment = { viewModel.selectInvoiceForPayment(it) },

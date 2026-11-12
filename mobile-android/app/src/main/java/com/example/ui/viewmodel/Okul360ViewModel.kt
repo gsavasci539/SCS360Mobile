@@ -78,7 +78,10 @@ data class Okul360UiState(
     val attendanceSaveSuccess: Boolean = false,
 
     // Finance State
-    val financeSummary: FinanceSummary? = null,
+    val financeSummary: FinanceSummary? = null, // Legacy mutation model; never used as a recorded ledger summary.
+    val recordedFinanceSummary: RecordedFinanceSummary? = null,
+    val financeSummaryError: String? = null,
+    val financeRowsError: String? = null,
     val invoices: List<Invoice> = emptyList(),
     val invoiceFilter: String = "ALL", // ALL, PAID, PENDING, OVERDUE
     val financeSearchQuery: String = "",
@@ -1094,50 +1097,47 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    private var financeGeneration = 0L
+    private var financeJob: kotlinx.coroutines.Job? = null
     fun loadFinance() {
-        viewModelScope.launch(requestFailures) {
-            _uiState.update { it.copy(isFinanceLoading = true) }
+        val state = _uiState.value
+        val generation = ++financeGeneration
+        financeJob?.cancel()
+        val scope = com.example.data.remote.ApiClientProvider.interceptor.captureScope()
+        _uiState.update { it.copy(isFinanceLoading = true, recordedFinanceSummary = null, financeSummary = null,
+            financeSummaryError = null, financeRowsError = null, invoices = emptyList(), expenses = emptyList(), debts = emptyList()) }
+        financeJob = viewModelScope.launch(requestFailures) {
             try {
-                val summary = repository.getFinanceSummary(_uiState.value.selectedBranchId)
-                val invList = repository.getInvoices(
-                    branchId = _uiState.value.selectedBranchId,
-                    status = if (_uiState.value.invoiceFilter == "ALL") null else _uiState.value.invoiceFilter
-                )
-                val expList = repository.getExpenses(_uiState.value.selectedBranchId)
-                val debtList = repository.getDebts()
-
-                if (invList.isNotEmpty()) {
-                    repository.cacheInvoicesLocally(invList)
-                    _uiState.update {
-                        it.copy(
-                            financeSummary = summary,
-                            invoices = invList,
-                            expenses = expList,
-                            debts = debtList,
-                            isFinanceLoading = false
-                        )
-                    }
-                } else {
-                    val cached = repository.getCachedInvoices(_uiState.value.invoiceFilter)
-                    _uiState.update {
-                        it.copy(
-                            financeSummary = summary,
-                            invoices = cached,
-                            expenses = expList,
-                            debts = debtList,
-                            isFinanceLoading = false
-                        )
-                    }
+                val summary = scope.io { repository.getFinanceSummary(state.selectedBranchId) }
+                if (generation != financeGeneration) return@launch
+                _uiState.update { it.copy(recordedFinanceSummary = summary, isFinanceLoading = false) }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (failure: Exception) {
+                if (scope.current() && generation == financeGeneration) {
+                    val code = (failure as? com.example.data.remote.FinanceSummaryHttpException)?.code
+                    if (code == 401) logout()
+                    else _uiState.update { it.copy(isFinanceLoading = false, financeSummaryError = when (code) {
+                        403 -> "Finans özetini görme yetkiniz yok."
+                        404 -> "Seçili şube bulunamadı veya erişilemiyor."
+                        402 -> "Üyelik erişiminizi kontrol edin."
+                        else -> "Finans özeti doğrulanamadı. Yeniden yükleyin."
+                    }) }
                 }
-            } catch (e: Exception) {
-                val cached = repository.getCachedInvoices(_uiState.value.invoiceFilter)
-                val expList = repository.getExpenses(_uiState.value.selectedBranchId)
-                _uiState.update {
-                    it.copy(
-                        invoices = cached,
-                        expenses = expList,
-                        isFinanceLoading = false
-                    )
+                return@launch
+            }
+            // Remaining legacy row contracts are independent of the accepted aggregate.
+            // A row failure must neither replace the summary with zero nor reveal old cache rows.
+            try {
+                val invoices = scope.io { repository.getInvoices(state.selectedBranchId, state.invoiceFilter.takeUnless { it == "ALL" }) }
+                val expenses = scope.io { repository.getExpenses(state.selectedBranchId) }
+                val debts = scope.io { repository.getDebts() }
+                if (generation == financeGeneration && scope.current()) _uiState.update {
+                    it.copy(invoices = invoices, expenses = expenses, debts = debts)
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (failure: Exception) {
+                if (scope.current() && generation == financeGeneration) _uiState.update {
+                    it.copy(financeRowsError = "Finans satırları doğrulanamadı; listeyi yeniden yükleyin.")
                 }
             }
         }

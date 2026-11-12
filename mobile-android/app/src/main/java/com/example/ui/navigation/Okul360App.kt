@@ -441,6 +441,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                         }
                         UserRole.FINANCE -> {
                             FinancePortalScreen(
+                                onRetry = { viewModel.loadFinance() },
                                 state = state,
                                 onRecordPayment = { invId, amt, method -> viewModel.recordPayment(invId, amt, method) },
                                 onCreateInvoice = { stdId, title, amt, due, desc -> viewModel.createInvoice(stdId, title, amt, due, desc) },
@@ -1603,6 +1604,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onNoteChanged = { id, note -> viewModel.updateAttendanceNote(id, note) }
                             )
                             MainTab.FINANCE -> FinanceScreen(
+                                onRetry = { viewModel.loadFinance() },
                                 state = state,
                                 onFilterChanged = { viewModel.setInvoiceFilter(it) },
                                 onSelectInvoiceForPayment = { viewModel.selectInvoiceForPayment(it) },

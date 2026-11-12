@@ -66,7 +66,8 @@ fun FinancePortalScreen(
     onSendReminder: (invoiceId: String, studentName: String) -> Unit,
     onRoleSelected: (UserRole) -> Unit = {},
     onOpenChatbot: (() -> Unit)? = null,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onRetry: () -> Unit = {}
 ) {
     var selectedTab by remember { mutableStateOf(FinanceNavTab.SUMMARY) }
     var showNewInvoiceDialog by remember { mutableStateOf(false) }
@@ -266,7 +267,8 @@ fun FinancePortalScreen(
                     state = state,
                     currencyFormatter = currencyFormatter,
                     onOpenNewInvoice = { showNewInvoiceDialog = true },
-                    onSelectTab = { selectedTab = it }
+                    onSelectTab = { selectedTab = it },
+                    onRetry = onRetry
                 )
                 FinanceNavTab.INVOICES -> FinanceInvoicesTab(
                     state = state,
@@ -594,194 +596,14 @@ private fun FinanceSummaryTab(
     state: Okul360UiState,
     currencyFormatter: NumberFormat,
     onOpenNewInvoice: () -> Unit,
-    onSelectTab: (FinanceNavTab) -> Unit
+    onSelectTab: (FinanceNavTab) -> Unit,
+    onRetry: () -> Unit
 ) {
-    val summary = state.financeSummary ?: FinanceSummary(
-        total_invoiced_monthly = 480000.0,
-        total_collected_monthly = 422400.0,
-        pending_balance = 57600.0,
-        overdue_balance = 18500.0,
-        collection_rate_percentage = 88.0,
-        student_paying_count = 32
-    )
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text("📊 Aylık Kasa & Tahsilat Durumu", fontSize = 18.sp, fontWeight = FontWeight.Black, color = BrandNavy)
-                    Text("Ağustos 2026 Konsolide Tahsilat Özeti", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-
-                Button(
-                    onClick = onOpenNewInvoice,
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentAmber),
-                    shape = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Fatura Kes", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-
-        // Finans ve Tahsilat Akıllı Yapay Zeka Analizi
-        item {
-            RoleContextualAiCard(
-                screenName = "FINANCE",
-                state = state,
-                initialExpanded = true
-            )
-        }
-
-        // Hero Metric Cards
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text("Toplam Tahsil Edilen", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(
-                                currencyFormatter.format(summary.total_collected_monthly),
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.Black,
-                                color = SecondaryEmerald
-                            )
-                        }
-
-                        Surface(
-                            color = SecondaryEmerald.copy(alpha = 0.12f),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(
-                                text = "Tahsilat: %${summary.collection_rate_percentage.toInt()}",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = SecondaryEmerald,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                            )
-                        }
-                    }
-
-                    LinearProgressIndicator(
-                        progress = { (summary.collection_rate_percentage / 100f).toFloat() },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(8.dp)
-                            .clip(CircleShape),
-                        color = SecondaryEmerald,
-                        trackColor = SecondaryEmerald.copy(alpha = 0.15f)
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        FinanceMiniMetric("Toplam Tahakkuk", currencyFormatter.format(summary.total_invoiced_monthly), BrandNavy, Modifier.weight(1f))
-                        FinanceMiniMetric("Bekleyen Taksit", currencyFormatter.format(summary.pending_balance), AccentAmber, Modifier.weight(1f))
-                        FinanceMiniMetric("Geciken Alacak", currencyFormatter.format(summary.overdue_balance), MaterialTheme.colorScheme.error, Modifier.weight(1f))
-                    }
-                }
-            }
-        }
-
-        // Interactive Pie Chart
-        item {
-            PaymentStatusPieChart(
-                invoices = state.invoices,
-                totalInvoiced = summary.total_invoiced_monthly,
-                totalCollected = summary.total_collected_monthly,
-                pendingBalance = summary.pending_balance,
-                overdueBalance = summary.overdue_balance,
-                onSliceClicked = { slice ->
-                    if (slice.id == "OVERDUE") {
-                        onSelectTab(FinanceNavTab.DUNNING)
-                    } else {
-                        onSelectTab(FinanceNavTab.INVOICES)
-                    }
-                }
-            )
-        }
-
-        // Quick Navigation Buttons
-        item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(
-                    onClick = { onSelectTab(FinanceNavTab.INVOICES) },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
-                ) {
-                    Icon(Icons.Default.Receipt, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Taksitler", fontSize = 13.sp)
-                }
-
-                Button(
-                    onClick = { onSelectTab(FinanceNavTab.DUNNING) },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Gecikenler", fontSize = 13.sp)
-                }
-            }
-        }
-
-        // Recent Invoices / Receipts
-        item {
-            Text("💳 Son Tahsilat ve Faturalar", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = BrandNavy)
-        }
-
-        items(state.invoices.take(5)) { inv ->
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = Color.White,
-                shape = RoundedCornerShape(14.dp),
-                tonalElevation = 1.dp,
-                shadowElevation = 1.dp
-            ) {
-                Row(
-                    modifier = Modifier.padding(14.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(inv.student_name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = BrandNavy)
-                        Text("${inv.description} • Vade: ${inv.due_date}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(currencyFormatter.format(inv.amount), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = BrandNavy)
-                        Text(
-                            text = if (inv.status == "PAID") "ÖDENDİ" else if (inv.status == "OVERDUE") "GECİKTİ" else "BEKLİYOR",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (inv.status == "PAID") SecondaryEmerald else if (inv.status == "OVERDUE") MaterialTheme.colorScheme.error else AccentAmber
-                        )
-                    }
-                }
-            }
-        }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { com.example.ui.components.RecordedFinanceSummaryCard(state.recordedFinanceSummary, state.isFinanceLoading,
+            state.financeSummaryError, onRetry) }
+        state.financeRowsError?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
+        item { Button(onClick = { onSelectTab(FinanceNavTab.INVOICES) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Taksit kayıtları") } }
     }
 }
 
