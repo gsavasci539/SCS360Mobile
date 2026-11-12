@@ -24,15 +24,21 @@ class FinanceScopeUiTest {
     private val initial = Okul360UiState(isLoggedIn = true,
         currentUser = User(id = UUID(1, 1).toString(), organization_id = UUID(2, 2).toString(), permissions = listOf("finance.write")),
         selectedRole = UserRole.FINANCE)
-    @Test fun branchChangeClosesOldInvoiceDraftAndExpandedActions() {
-        var state by mutableStateOf(initial)
-        compose.setContent { Okul360Theme { FinancePortalScreen(state, { _, _, _ -> }, { _, _, _, _, _ -> }, { _, _ -> }, onLogout = {}) } }
-        compose.onNodeWithTag("finance_speed_dial_fab").performClick()
-        compose.onNodeWithTag("finance_fab_action_invoice").performClick()
-        compose.onNodeWithText("📄 Yeni Fatura / Taksit Tanımla").assertExists()
-        compose.runOnIdle { state = state.copy(selectedBranchId = UUID(3, 3).toString()) }
-        compose.onNodeWithText("📄 Yeni Fatura / Taksit Tanımla").assertDoesNotExist()
-        compose.onNodeWithTag("finance_fab_action_invoice").assertDoesNotExist()
+    @Test fun branchChangeClosesOldCollectionDraftAndExpandedActions() {
+        val oldBase = ApiClientProvider.activeBaseUrl; val oldToken = ApiClientProvider.interceptor.authToken
+        val server = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/") { e -> e.sendResponseHeaders(503, -1); e.close() }; server.start()
+        ApiClientProvider.createService("http://127.0.0.1:${server.address.port}/api/"); ApiClientProvider.interceptor.setSession("synthetic-portal-scope")
+        var state by mutableStateOf(initial.copy(invoices = listOf(Invoice(id = UUID(8, 8).toString(), amount = 100.0))))
+        try {
+            compose.setContent { Okul360Theme { FinancePortalScreen(state, { _, _, _ -> }, { _, _, _, _, _ -> }, { _, _ -> }, onLogout = {}) } }
+            compose.onNodeWithTag("finance_speed_dial_fab").performClick()
+            compose.onNodeWithTag("finance_fab_action_collect").performClick()
+            compose.onNodeWithText("Tahsilat kaydı").assertExists()
+            compose.runOnIdle { state = state.copy(selectedBranchId = UUID(3, 3).toString()) }
+            compose.onNodeWithText("Tahsilat kaydı").assertDoesNotExist()
+            compose.onNodeWithTag("finance_fab_action_collect").assertDoesNotExist()
+        } finally { server.stop(0); ApiClientProvider.createService(oldBase); ApiClientProvider.interceptor.setSession(oldToken) }
     }
     @Test fun allAccessIdentityChangesResetPresentationButDataRefreshDoesNot() {
         val original = financePresentationScope(initial)
