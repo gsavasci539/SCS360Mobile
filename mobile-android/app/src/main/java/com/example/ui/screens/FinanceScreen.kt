@@ -82,17 +82,17 @@ fun FinanceScreen(
 
     var searchQuery by remember { mutableStateOf("") }
     var showAddInvoiceDialog by remember(presentationScope) { mutableStateOf(false) }
-    var showInstallmentDialog by remember { mutableStateOf(false) }
+    var showInstallmentDialog by remember(presentationScope) { mutableStateOf(false) }
     var showAddDebtDialog by remember(presentationScope) { mutableStateOf(false) }
     var debtFilterType by remember { mutableStateOf("ALL") }
-    var invoiceForIyzicoPayment by remember { mutableStateOf<Invoice?>(null) }
-    var invoiceToEdit by remember { mutableStateOf<Invoice?>(null) }
-    var invoiceToDelete by remember { mutableStateOf<Invoice?>(null) }
+    var invoiceForIyzicoPayment by remember(presentationScope) { mutableStateOf<Invoice?>(null) }
+    var invoiceToEdit by remember(presentationScope) { mutableStateOf<Invoice?>(null) }
+    var invoiceToDelete by remember(presentationScope) { mutableStateOf<Invoice?>(null) }
 
-    var showAddExpenseDialog by remember { mutableStateOf(false) }
-    var expenseToDelete by remember { mutableStateOf<Expense?>(null) }
+    var showAddExpenseDialog by remember(presentationScope) { mutableStateOf(false) }
+    var expenseToDelete by remember(presentationScope) { mutableStateOf<Expense?>(null) }
     var expenseCategoryFilter by remember { mutableStateOf("ALL") }
-    var debtToDelete by remember { mutableStateOf<Debt?>(null) }
+    var debtToDelete by remember(presentationScope) { mutableStateOf<Debt?>(null) }
 
     var isFabExpanded by remember { mutableStateOf(false) }
     val tableModeState = rememberResolvedTableMode()
@@ -890,20 +890,18 @@ fun FinanceScreen(
     }
 
     invoiceToEdit?.let { inv ->
-        EditInvoiceDialog(
+        FinanceDebtEditDialog(
+            state = state,
             invoice = inv,
             onDismiss = { invoiceToEdit = null },
-            onConfirm = { updated ->
-                onUpdateInvoice(updated)
-                invoiceToEdit = null
-            }
+            onRecorded = { invoiceToEdit = null; onRetry() }
         )
     }
 
     invoiceToDelete?.let { inv ->
         ConfirmDeleteDialog(
-            title = "Faturayı Sil",
-            message = "${inv.invoice_number} numaralı faturayı silmek istediğinize emin misiniz?",
+            title = "Tahakkuku iptal et",
+            message = "${inv.id} kimlikli tahakkuku iptal etmek istediğinize emin misiniz?",
             onDismiss = { invoiceToDelete = null },
             onConfirm = {
                 onDeleteInvoice(inv.id)

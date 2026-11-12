@@ -600,59 +600,6 @@ fun AddInvoiceDialog(
 }
 
 @Composable
-fun EditInvoiceDialog(
-    invoice: Invoice,
-    onDismiss: () -> Unit,
-    onConfirm: (Invoice) -> Unit
-) {
-    var amountText by remember { mutableStateOf(invoice.amount.toInt().toString()) }
-    var dueDate by remember { mutableStateOf(invoice.due_date) }
-    var description by remember { mutableStateOf(invoice.description) }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp).padding(vertical = 16.dp)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(20.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Faturayı Düzenle", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = null) }
-                }
-
-                Text("Fatura No: ${invoice.invoice_number}", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = PrimaryBlue)
-                Text("Öğrenci: ${invoice.student_name} (${invoice.class_name})", fontSize = 13.sp)
-
-                OutlinedTextField(value = amountText, onValueChange = { amountText = it }, label = { Text("Tutar (₺)") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = dueDate, onValueChange = { dueDate = it }, label = { Text("Son Ödeme Tarihi") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Açıklama") }, modifier = Modifier.fillMaxWidth())
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Button(
-                    onClick = {
-                        val amount = amountText.toDoubleOrNull() ?: invoice.amount
-                        onConfirm(invoice.copy(amount = amount, due_date = dueDate, description = description))
-                    },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Değişiklikleri Kaydet", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun AddClassDialog(state: com.example.ui.viewmodel.Okul360UiState, onDismiss: () -> Unit, onConfirm: (ClassGroup) -> Unit) {
     RegistryClassDialog(null, state, onDismiss, onConfirm)
 }

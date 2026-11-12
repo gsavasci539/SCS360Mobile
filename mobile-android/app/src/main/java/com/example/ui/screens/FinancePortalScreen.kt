@@ -502,7 +502,7 @@ private fun FinanceInvoicesTab(
 
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(inv.description, fontSize = 13.sp, color = BrandNavy)
-                    Text("Vade Tarihi: ${inv.due_date} • Fatura No: ${inv.invoice_number}", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Vade Tarihi: ${inv.due_date} • Tahakkuk: ${inv.id}", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
                     Spacer(modifier = Modifier.height(10.dp))
                     Row(
