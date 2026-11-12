@@ -329,7 +329,8 @@ fun FinancePortalScreen(
     }
     deletingExpense?.let { expense ->
         com.example.ui.dialogs.FinanceExpenseDeleteDialog(expense,state,
-            onDismiss={ deletingExpense=null },onRecorded={ deletingExpense=null; onRetry() })
+            onDismiss={ deletingExpense=null },onRecorded={ deletingExpense=null; onRetry() },
+            onCheck={ deletingExpense=null; onRetry() })
     }
     if (showNewInvoiceDialog) {
         com.example.ui.dialogs.FinanceInvoiceDraftDialog(state,

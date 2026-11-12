@@ -73,6 +73,19 @@ class NativeExpenseDeleteUiTest {
             scroll("expense_delete_close"); compose.onNodeWithTag("expense_delete_close").assertIsDisplayed(); assertEquals(0,paths.size)
         } finally { RuntimeEnvironment.setFontScale(old) }
     }
+    @Test fun uncertainDeleteCanRecheckPortalListWithoutAnotherDeleteOrFalseAcknowledgement() {
+        var reload=0; status.set(500)
+        compose.setContent { Okul360Theme { FinancePortalScreen(state,{ _,_,_-> },{ _,_,_,_,_-> },{ _,_-> },onLogout={},onRetry={ reload++ }) } }
+        compose.onNodeWithText("Giderler").performClick()
+        compose.onNodeWithTag("finance_expenses_list").performScrollToNode(hasTestTag("finance_delete_expense_${second.id}"))
+        compose.onNodeWithTag("finance_delete_expense_${second.id}").performClick()
+        scroll("expense_delete_submit"); compose.onNodeWithTag("expense_delete_submit").performClick()
+        compose.waitUntil(10000) { compose.onAllNodesWithTag("expense_delete_error").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("expense_delete_ack").assertDoesNotExist(); assertEquals(0,reload)
+        scroll("expense_delete_check"); compose.onNodeWithTag("expense_delete_check").assertIsDisplayed().performClick()
+        assertEquals(1,reload); assertEquals(listOf("DELETE /api/expenses/${second.id}"),paths.toList())
+        compose.onNodeWithTag("expense_delete_list").assertDoesNotExist()
+    }
     @Test fun staleWorkspaceResponseDoesNotAcknowledgeOrReloadAnotherWorkspace() {
         hold=CountDownLatch(1); var reload=0; var closed=0
         var current by mutableStateOf(state)

@@ -1,0 +1,15 @@
+{
+  "status": "WIP: targeted UI7 PASS; remaining106 regression running; new APK pending",
+  "targeted": {
+    "passed": 7,
+    "failed": 0,
+    "skipped": 0,
+    "duration": "5m23s"
+  },
+  "scope": "Uncertain expense deletion explicit list recheck; no repeated DELETE or false acknowledgement; isolated HTTP UI acceptance",
+  "files": {
+    "mobile-android/app/src/main/java/com/example/ui/screens/FinancePortalScreen.kt": "10d07d516dc0cb399fac7339712ed0bee5856fef202bfbf63ff2e8454fa978a7",
+    "mobile-android/app/src/main/java/com/example/ui/dialogs/FinanceExpenseDeleteDialog.kt": "6f39c954aeee8b1eafb69e3ccfd5d91152c4e80e16cbdd43103d310457ea3609",
+    "mobile-android/app/src/test/java/com/example/NativeExpenseDeleteUiTest.kt": "87d084411bd77b7ed5629bdbfa33fb83ee955a793b9fb2f9c92f057a247ccb18"
+  }
+}

@@ -22,7 +22,7 @@ import java.util.Locale
 
 /** Deletes only the explicitly selected ledger row; never moves money. */
 @Composable
-fun FinanceExpenseDeleteDialog(expense: Expense, state: Okul360UiState, onDismiss: () -> Unit, onRecorded: () -> Unit) {
+fun FinanceExpenseDeleteDialog(expense: Expense, state: Okul360UiState, onDismiss: () -> Unit, onRecorded: () -> Unit, onCheck: () -> Unit = onDismiss) {
     val identity=financePresentationScope(state); val opening=remember { identity }
     val openingId=remember { expense.id }
     if(identity!=opening || expense.id!=openingId) { LaunchedEffect(identity,expense.id) { onDismiss() }; return }
@@ -45,7 +45,11 @@ fun FinanceExpenseDeleteDialog(expense: Expense, state: Okul360UiState, onDismis
                 item { Text("Bu işlem gider kaydını listeden kaldırır; banka ödemesi veya iade yapmaz.") }
                 if(!canWrite) item { Text("Gider silme yetkiniz yok; kayıt salt okunur.") }
                 if(busy) item { Text("Sunucu yanıtı bekleniyor…") }
-                error?.let { message -> item { Text(message,color=MaterialTheme.colorScheme.error,modifier=Modifier.testTag("expense_delete_error")) } }
+                error?.let { message ->
+                    item { Text(message,color=MaterialTheme.colorScheme.error,modifier=Modifier.testTag("expense_delete_error")) }
+                    item { TextButton(enabled=!busy,onClick={ if(requestScope.current()) onCheck() else onDismiss() },
+                        modifier=Modifier.heightIn(min=48.dp).testTag("expense_delete_check")) { Text("Listeyi yeniden oku") } }
+                }
                 if(acknowledged) {
                     item { Text("Gider kaydının silindiği sunucuda doğrulandı.",modifier=Modifier.testTag("expense_delete_ack")) }
                     item { Button(onClick=onRecorded,modifier=Modifier.heightIn(min=48.dp).testTag("expense_delete_done")) { Text("Tamam") } }

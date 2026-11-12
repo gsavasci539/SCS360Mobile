@@ -88,3 +88,7 @@ Targeted6 UI tests PASS: selected row, failed acknowledgement, readonly large-fo
 ## Native finance portal expense delete checkpoint
 
 Current native112 unique PASS, no failures/skips:6 targeted plus remaining106 in disjoint runs at identical source hashes. The Finance role portal now confirms only the explicitly selected expense; failed/stale replies cannot produce success or reload another workspace. Readonly, long text and landscape font2/48dp contracts passed. Same-source debug APK signature/package/SDK verification passed. Backend940 PASS/two DB-specific skips and frontend352/63 +TypeScript/Vite retained at unchanged source hashes. Existing actual Kotlin/FastAPI/tempDB expense API acceptance retained; these UI tests do not prove physical A26/iOS/provider acceptance. Native expense edit/reference notes, other module parity, real providers/HTTPS/store/release acceptance stay open. See docs/acceptance/native-expense-delete-20261112.json. No real payments/messages, user DB changes or deployment.
+
+## Native uncertain expense delete recheck WIP
+
+Targeted7 UI tests PASS, including explicit list refresh without another DELETE or a false acknowledgement. Remaining106 regressions running; prior112/debug APK belong to previous source. Physical/provider/store acceptance stays open.
