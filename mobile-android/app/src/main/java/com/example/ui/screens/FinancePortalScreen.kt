@@ -321,7 +321,7 @@ fun FinancePortalScreen(
     // Native bounded form; no invented amounts or dates.
     if (showNewInvoiceDialog) {
         com.example.ui.dialogs.FinanceInvoiceDraftDialog(state,
-            onDismiss = { showNewInvoiceDialog = false }, onCreate = onCreateInvoice,
+            onDismiss = { showNewInvoiceDialog = false },
             onRecorded = { showNewInvoiceDialog = false; onRetry() })
     }
 

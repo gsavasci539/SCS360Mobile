@@ -1,3 +1,4 @@
+import java.net.URI
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
 
 plugins {
@@ -20,6 +21,7 @@ android {
     versionCode = 1
     versionName = "1.0"
 
+    manifestPlaceholders["cleartextAllowed"] = "false"
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     val apiEndpoint = providers.gradleProperty("API_BASE_URL").orElse("http://10.0.2.2:8000/api/").get()
     require(!apiEndpoint.contains('"') && !apiEndpoint.contains('\\'))
@@ -31,7 +33,7 @@ android {
       val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
       storeFile = file(keystorePath)
       storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
+      keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
       keyPassword = System.getenv("KEY_PASSWORD")
     }
     create("debugConfig") {
@@ -49,7 +51,7 @@ android {
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
-    debug { /* Standard local Android debug signing. */ }
+    debug { manifestPlaceholders["cleartextAllowed"] = "true" }
   }
   compileOptions {
     isCoreLibraryDesugaringEnabled = true
@@ -160,3 +162,28 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
 }
+
+
+// Release builds must never silently ship the emulator URL or debug signing material.
+val validateReleaseInputs = tasks.register("validateReleaseInputs") {
+  doLast {
+    val endpoint = providers.gradleProperty("API_BASE_URL").orNull
+      ?: throw GradleException("Release requires an explicit HTTPS API_BASE_URL ending with /api/.")
+    val uri = runCatching { URI(endpoint) }.getOrNull()
+      ?: throw GradleException("Release API URL is invalid.")
+    val host = uri.host.orEmpty().lowercase()
+    if (uri.scheme != "https" || host.isBlank() || uri.userInfo != null || uri.query != null || uri.fragment != null ||
+      !uri.path.endsWith("/api/") || host in setOf("localhost", "10.0.2.2", "127.0.0.1", "::1") ||
+      host.endsWith(".invalid") || host.endsWith(".example") || host == "example.com") {
+      throw GradleException("Release requires the real HTTPS API endpoint; local/test URLs are not allowed.")
+    }
+    val path = System.getenv("KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
+      ?: throw GradleException("Release requires KEYSTORE_PATH, STORE_PASSWORD and KEY_PASSWORD from the build environment.")
+    val keyFile = file(path)
+    if (!keyFile.isFile || keyFile.name.contains("debug", ignoreCase = true) ||
+      System.getenv("STORE_PASSWORD").isNullOrBlank() || System.getenv("KEY_PASSWORD").isNullOrBlank()) {
+      throw GradleException("Release signing material is absent or points to a debug key.")
+    }
+  }
+}
+tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(validateReleaseInputs) }

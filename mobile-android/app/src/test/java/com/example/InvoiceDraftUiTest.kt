@@ -26,11 +26,13 @@ class InvoiceDraftUiTest {
     private lateinit var server: com.sun.net.httpserver.HttpServer
     private lateinit var oldBase: String
     private var oldToken: String? = null
+    private val posts = java.util.concurrent.atomic.AtomicInteger()
     @Before fun server() {
         oldBase = com.example.data.remote.ApiClientProvider.activeBaseUrl
         oldToken = com.example.data.remote.ApiClientProvider.interceptor.authToken
         server = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/") { e ->
+            if (e.requestMethod == "POST") posts.incrementAndGet()
             val bytes = "{\"success\":true,\"data\":{\"total\":0,\"items\":[]}}".toByteArray()
             e.responseHeaders.add("Content-Type", "application/json"); e.sendResponseHeaders(200, bytes.size.toLong()); e.responseBody.use { it.write(bytes) }
         }; server.start()
@@ -40,14 +42,14 @@ class InvoiceDraftUiTest {
     @After fun stop() { server.stop(0); com.example.data.remote.ApiClientProvider.createService(oldBase); com.example.data.remote.ApiClientProvider.interceptor.setSession(oldToken) }
     @Test fun blankDraftValidationDoesNotSubmitAndDoesNotClose() {
         var calls = 0; var closes = 0
-        compose.setContent { Okul360Theme { FinanceInvoiceDraftDialog(state, { closes++ }, { _, _, _, _, _ -> calls++ }) } }
+        compose.setContent { Okul360Theme { FinanceInvoiceDraftDialog(state, { closes++ }, { calls++ }) } }
         compose.onNodeWithTag("invoice_draft_list").performScrollToNode(hasTestTag("invoice_amount"))
         compose.onNodeWithTag("invoice_amount").assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
         compose.onNodeWithTag("invoice_draft_list").performScrollToNode(hasTestTag("invoice_due"))
         compose.onNodeWithTag("invoice_due").assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
         compose.onNodeWithTag("invoice_draft_list").performScrollToNode(hasTestTag("invoice_submit"))
         compose.onNodeWithTag("invoice_submit").performClick()
-        assertEquals(0, calls); assertEquals(0, closes)
+        assertEquals(0, calls); assertEquals(0, closes); assertEquals(0, posts.get())
         compose.onNodeWithTag("invoice_submit").assertIsEnabled()
     }
     @Test fun actualPortalScopeChangeDisposesInvoiceDialog() {
@@ -63,7 +65,7 @@ class InvoiceDraftUiTest {
     fun largeFontLandscapeKeepsActionsVisibleAndReadonlyBlocked() {
         val old = RuntimeEnvironment.getFontScale(); RuntimeEnvironment.setFontScale(2f)
         try {
-            compose.setContent { Okul360Theme { FinanceInvoiceDraftDialog(state.copy(currentUser = state.currentUser.copy(permissions = emptyList())), {}, { _, _, _, _, _ -> fail("Readonly") }) } }
+            compose.setContent { Okul360Theme { FinanceInvoiceDraftDialog(state.copy(currentUser = state.currentUser.copy(permissions = emptyList())), {}, { fail("Readonly") }) } }
             compose.onNodeWithTag("invoice_draft_list").performScrollToNode(hasTestTag("invoice_submit"))
             val node = compose.onNodeWithTag("invoice_submit").assertIsNotEnabled().assertIsDisplayed().fetchSemanticsNode()
             assertTrue(node.boundsInRoot.top >= 0 && node.boundsInRoot.bottom <= 360f && node.boundsInRoot.height >= 48f)

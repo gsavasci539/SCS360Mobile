@@ -20,7 +20,7 @@ import java.time.LocalDate
 /** User-entered draft only; submission never closes this dialog before server review. */
 @Composable
 fun FinanceInvoiceDraftDialog(state: Okul360UiState, onDismiss: () -> Unit,
-    onCreate: (String, String, Double, String, String) -> Unit, onRecorded: () -> Unit = {}) {
+    onRecorded: () -> Unit = {}) {
     var student by remember { mutableStateOf("") }; var title by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }; var due by remember { mutableStateOf("") }
     val context = LocalContext.current

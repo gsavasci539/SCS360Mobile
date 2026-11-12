@@ -863,7 +863,7 @@ fun FinanceScreen(
 
     // Dialogs
     if (showAddInvoiceDialog) {
-        FinanceInvoiceDraftDialog(state, onDismiss = { showAddInvoiceDialog = false }, onCreate = { _, _, _, _, _ -> },
+        FinanceInvoiceDraftDialog(state, onDismiss = { showAddInvoiceDialog = false },
             onRecorded = { showAddInvoiceDialog = false; onRetry() })
     }
 
@@ -1003,7 +1003,7 @@ fun FinanceScreen(
     }
 
     if (showAddDebtDialog) {
-        FinanceInvoiceDraftDialog(state, onDismiss = { showAddDebtDialog = false }, onCreate = { _, _, _, _, _ -> },
+        FinanceInvoiceDraftDialog(state, onDismiss = { showAddDebtDialog = false },
             onRecorded = { showAddDebtDialog = false; onRetry() })
     }
 
