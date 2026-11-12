@@ -1,0 +1,15 @@
+{
+  "status": "WIP: targeted UI6 PASS; remaining106 regression running; new APK pending",
+  "targeted": {
+    "passed": 6,
+    "failed": 0,
+    "skipped": 0,
+    "duration": "5m22s"
+  },
+  "scope": "Native Finance role selected-expense confirmation; isolated HTTP/Compose, not physical or provider acceptance",
+  "files": {
+    "mobile-android/app/src/main/java/com/example/ui/screens/FinancePortalScreen.kt": "9e5037811d75ebcb6d04f945a60126e7e36a51f1fb29666064c934c3de484b19",
+    "mobile-android/app/src/main/java/com/example/ui/dialogs/FinanceExpenseDeleteDialog.kt": "829e5cc9a63775575b631e86171cccf363781a4e671078a4c79ca3158e8b57b1",
+    "mobile-android/app/src/test/java/com/example/NativeExpenseDeleteUiTest.kt": "54957225f490613f23c8036a09bee5373ff5b519f0b88b4f69c7e2b630390885"
+  }
+}

@@ -73,6 +73,7 @@ fun FinancePortalScreen(
     val presentationScope = com.example.ui.components.financePresentationScope(state)
     var selectedTab by remember(presentationScope) { mutableStateOf(FinanceNavTab.SUMMARY) }
     var showExpenseDialog by remember(presentationScope) { mutableStateOf(false) }
+    var deletingExpense by remember(presentationScope) { mutableStateOf<Expense?>(null) }
     var showNewInvoiceDialog by remember(presentationScope) { mutableStateOf(false) }
     var showPaymentDialogForInvoice by remember(presentationScope) { mutableStateOf<Invoice?>(null) }
     var viewingReceipt by remember(presentationScope) { mutableStateOf<Invoice?>(null) }
@@ -287,7 +288,8 @@ fun FinancePortalScreen(
                 )
                 FinanceNavTab.EXPENSES -> FinanceExpensesTab(
                     state = state, currencyFormatter = currencyFormatter,
-                    onNew = { showExpenseDialog = true }, onRetry = onRetry
+                    onNew = { showExpenseDialog = true }, onRetry = onRetry,
+                    onDelete = { deletingExpense = it }
                 )
                 FinanceNavTab.PROFILE -> FinanceReportsAndProfileTab(
                     state = state,
@@ -324,6 +326,10 @@ fun FinancePortalScreen(
     if (showExpenseDialog) {
         com.example.ui.dialogs.FinanceExpenseCreateDialog(state, onDismiss = { showExpenseDialog = false },
             onRecorded = { showExpenseDialog = false; onRetry() })
+    }
+    deletingExpense?.let { expense ->
+        com.example.ui.dialogs.FinanceExpenseDeleteDialog(expense,state,
+            onDismiss={ deletingExpense=null },onRecorded={ deletingExpense=null; onRetry() })
     }
     if (showNewInvoiceDialog) {
         com.example.ui.dialogs.FinanceInvoiceDraftDialog(state,
@@ -660,7 +666,7 @@ private fun FinanceDunningTab(
 // 4. FINANCE EXPENSES TAB
 // -------------------------------------------------------------
 @Composable
-private fun FinanceExpensesTab(state: Okul360UiState, currencyFormatter: NumberFormat, onNew: () -> Unit, onRetry: () -> Unit) {
+private fun FinanceExpensesTab(state: Okul360UiState, currencyFormatter: NumberFormat, onNew: () -> Unit, onRetry: () -> Unit, onDelete: (Expense) -> Unit) {
     val canWrite="finance.write" in state.currentUser.permissions || (state.currentUser.is_super_admin==true && !state.workspaceOrganizationId.isNullOrBlank())
     LazyColumn(Modifier.fillMaxSize().testTag("finance_expenses_list"), contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
         item { Text("Giderler & Harcamalar",fontSize=18.sp,fontWeight=FontWeight.Bold) }
@@ -674,6 +680,7 @@ private fun FinanceExpensesTab(state: Okul360UiState, currencyFormatter: NumberF
                     Text(expense.title,fontWeight=FontWeight.Bold)
                     Text("${expense.category} • ${expense.date}")
                     Text(currencyFormatter.format(expense.amount),fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.error)
+                    if(canWrite) TextButton(onClick={ onDelete(expense) },modifier=Modifier.heightIn(min=48.dp).testTag("finance_delete_expense_${expense.id}")) { Text("Gideri sil") }
                 }
             }
         }

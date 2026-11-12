@@ -80,3 +80,7 @@ Backend21 targeted cases PASS on temporary SQLite/PostgreSQL; native client2/UI3
 ## Expense create/list/delete regression checkpoint
 
 Native109/109 PASS, no failures/errors/skips. Same-source debug APK verified. Current backend full SQLite/PostgreSQL union 940 unique PASS with only two documented DB-specific skips. Expense API targeted21 and native client2/UI3/real API bridge accepted: numeric/string cents, scoped complete pagination, lost committed ACK creates one expense, web edits/category/date visible natively, native and web deletes yield authoritative empty ledger, zero payments/delivery jobs/Room writes. Hardcoded native expense rows and local fallback removed. Unchanged frontend344/build and Expo8/web export retained. This does not accept native expense edit UI, remaining parent/custom-role/module parity, physical A26/iOS, real provider/HTTPS/store products or production signing. See docs/acceptance/native-expense-20261112.json.
+
+## Native expense delete targeted WIP
+
+Targeted6 UI tests PASS: selected row, failed acknowledgement, readonly large-font landscape and stale workspace response. Remaining106 native regressions are running with these two target classes excluded. The prior109 full suite and debug APK belong to the earlier source; no new full/APK/device acceptance claimed. See docs/acceptance/native-expense-delete-wip-20261112.json.
