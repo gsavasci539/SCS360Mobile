@@ -1153,171 +1153,14 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun recordPayment(invoiceId: String, amount: Double, method: String) {
-        viewModelScope.launch(requestFailures) {
-            val req = RecordPaymentRequest(invoice_id = invoiceId, amount = amount, payment_method = method)
-            repository.recordPayment(req)
-
-            val targetInvoice = _uiState.value.invoices.find { it.id == invoiceId }
-            val studentId = targetInvoice?.student_id
-            val studentName = targetInvoice?.student_name ?: "Öğrenci"
-
-            // 1. Immediately mark invoice as PAID in memory
-            val updatedInvoices = _uiState.value.invoices.map { inv ->
-                if (inv.id == invoiceId) {
-                    inv.copy(
-                        status = "PAID",
-                        paid_amount = amount,
-                        payment_method = method
-                    )
-                } else inv
-            }
-
-            // 2. Decrement tuition balance for the corresponding student
-            var updatedStudentObj: Student? = null
-            val updatedStudents = _uiState.value.students.map { std ->
-                val isTarget = (studentId != null && studentId.isNotBlank() && std.id == studentId) ||
-                        (studentName.isNotBlank() && (std.full_name.equals(studentName, ignoreCase = true) ||
-                                (studentName.contains(std.first_name, ignoreCase = true) && studentName.contains(std.last_name, ignoreCase = true))))
-                if (isTarget) {
-                    val newBalance = (std.tuition_balance - amount).coerceAtLeast(0.0)
-                    val updated = std.copy(tuition_balance = newBalance)
-                    updatedStudentObj = updated
-                    updated
-                } else std
-            }
-
-            // 3. Update finance summary
-            val currentSummary = _uiState.value.financeSummary
-            val updatedSummary = currentSummary?.let { s ->
-                val newCollected = s.total_collected_monthly + amount
-                val newPending = (s.pending_balance - amount).coerceAtLeast(0.0)
-                val newRate = if (s.total_invoiced_monthly > 0) ((newCollected / s.total_invoiced_monthly) * 100.0) else 100.0
-                s.copy(
-                    total_collected_monthly = newCollected,
-                    pending_balance = newPending,
-                    collection_rate_percentage = (newRate * 10).toInt() / 10.0
-                )
-            }
-
-            _uiState.update { currentState ->
-                currentState.copy(
-                    invoices = updatedInvoices,
-                    students = updatedStudents,
-                    selectedStudent = if (currentState.selectedStudent?.id == updatedStudentObj?.id) updatedStudentObj else currentState.selectedStudent,
-                    selectedStudentForFullProfile = if (currentState.selectedStudentForFullProfile?.id == updatedStudentObj?.id) updatedStudentObj else currentState.selectedStudentForFullProfile,
-                    financeSummary = updatedSummary ?: currentState.financeSummary,
-                    selectedInvoiceForPayment = null,
-                    toastMessage = "₺${amount.toInt()} tahsilat başarıyla kaydedildi. Öğrenci bakiyesinden düşüldü."
-                )
-            }
-
-            // 4. Persist updated student and invoices to local cache
-            try {
-                repository.cacheInvoicesLocally(updatedInvoices)
-                if (updatedStudentObj != null) {
-                    repository.updateStudent(updatedStudentObj!!)
-                    repository.cacheStudentsLocally(updatedStudents)
-                }
-            } catch (_: Exception) { }
-
-            val remainingBalanceStr = updatedStudentObj?.let { "Kalan bakiye: ₺${it.tuition_balance.toInt()}" } ?: ""
-            NotificationHelper.showPushNotification(
-                context = getApplication<android.app.Application>(),
-                title = "Ödeme Alındı - Bakiye Güncellendi",
-                message = "$studentName için ₺${amount.toInt()} tutarında tahsilat yapıldı. $remainingBalanceStr",
-                channelId = NotificationHelper.CHANNEL_FINANCE,
-                targetScreen = "FINANCE"
-            )
-            loadDashboard()
-            loadReports()
-        }
+        // Open the canonical native editor; it loads the current debt and owns the durable request UUID.
+        val invoice = _uiState.value.invoices.find { it.id == invoiceId } ?: Invoice(id = invoiceId)
+        _uiState.update { it.copy(selectedInvoiceForPayment = invoice) }
     }
 
-    fun recordIyzicoPayment(
-        invoiceId: String,
-        amount: Double,
-        paymentResult: IyzicoPaymentResult,
-        methodTitle: String = "İyzico Sandbox 3D Kredi Kartı"
-    ) {
-        viewModelScope.launch(requestFailures) {
-            val paymentMethodStr = "$methodTitle (Ref: ${paymentResult.paymentId})"
-            val req = RecordPaymentRequest(invoice_id = invoiceId, amount = amount, payment_method = paymentMethodStr)
-            repository.recordPayment(req)
-
-            val targetInvoice = _uiState.value.invoices.find { it.id == invoiceId }
-            val studentId = targetInvoice?.student_id
-            val studentName = targetInvoice?.student_name ?: "Öğrenci"
-
-            // 1. Immediately mark invoice as PAID in memory
-            val updatedInvoices = _uiState.value.invoices.map { inv ->
-                if (inv.id == invoiceId) {
-                    inv.copy(
-                        status = "PAID",
-                        paid_amount = amount,
-                        payment_method = paymentMethodStr
-                    )
-                } else inv
-            }
-
-            // 2. Decrement tuition balance for the corresponding student
-            var updatedStudentObj: Student? = null
-            val updatedStudents = _uiState.value.students.map { std ->
-                val isTarget = (studentId != null && studentId.isNotBlank() && std.id == studentId) ||
-                        (studentName.isNotBlank() && (std.full_name.equals(studentName, ignoreCase = true) ||
-                                (studentName.contains(std.first_name, ignoreCase = true) && studentName.contains(std.last_name, ignoreCase = true))))
-                if (isTarget) {
-                    val newBalance = (std.tuition_balance - amount).coerceAtLeast(0.0)
-                    val updated = std.copy(tuition_balance = newBalance)
-                    updatedStudentObj = updated
-                    updated
-                } else std
-            }
-
-            // 3. Update finance summary
-            val currentSummary = _uiState.value.financeSummary
-            val updatedSummary = currentSummary?.let { s ->
-                val newCollected = s.total_collected_monthly + amount
-                val newPending = (s.pending_balance - amount).coerceAtLeast(0.0)
-                val newRate = if (s.total_invoiced_monthly > 0) ((newCollected / s.total_invoiced_monthly) * 100.0) else 100.0
-                s.copy(
-                    total_collected_monthly = newCollected,
-                    pending_balance = newPending,
-                    collection_rate_percentage = (newRate * 10).toInt() / 10.0
-                )
-            }
-
-            _uiState.update { currentState ->
-                currentState.copy(
-                    invoices = updatedInvoices,
-                    students = updatedStudents,
-                    selectedStudent = if (currentState.selectedStudent?.id == updatedStudentObj?.id) updatedStudentObj else currentState.selectedStudent,
-                    selectedStudentForFullProfile = if (currentState.selectedStudentForFullProfile?.id == updatedStudentObj?.id) updatedStudentObj else currentState.selectedStudentForFullProfile,
-                    financeSummary = updatedSummary ?: currentState.financeSummary,
-                    selectedInvoiceForPayment = null,
-                    toastMessage = "✅ İyzico Onaylandı (Ref: ${paymentResult.paymentId}). ₺${amount.toInt()} öğrenci bakiyesinden düşüldü."
-                )
-            }
-
-            // 4. Persist updated student and invoices to local cache
-            try {
-                repository.cacheInvoicesLocally(updatedInvoices)
-                if (updatedStudentObj != null) {
-                    repository.updateStudent(updatedStudentObj!!)
-                    repository.cacheStudentsLocally(updatedStudents)
-                }
-            } catch (_: Exception) { }
-
-            val remainingBalanceStr = updatedStudentObj?.let { "Kalan bakiye: ₺${it.tuition_balance.toInt()}" } ?: ""
-            NotificationHelper.showPushNotification(
-                context = getApplication<android.app.Application>(),
-                title = "💳 İyzico ile Ödeme Alındı",
-                message = "$studentName için ₺${amount.toInt()} tutarında online tahsilat İyzico Sandbox ile alındı. $remainingBalanceStr (Ref: ${paymentResult.paymentId}).",
-                channelId = NotificationHelper.CHANNEL_FINANCE,
-                targetScreen = "FINANCE"
-            )
-            loadDashboard()
-            loadReports()
-        }
+    fun recordIyzicoPayment(invoiceId: String, amount: Double, paymentResult: IyzicoPaymentResult,
+        methodTitle: String = "Online ödeme") {
+        _uiState.update { it.copy(toastMessage = "Online tahsilat sonucu yalnız sunucu ödeme durumundan doğrulanır.") }
     }
 
     fun createInvoice(studentId: String, title: String, amount: Double, dueDate: String, desc: String) {
@@ -3696,11 +3539,7 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     // Finans & iyzico Ödeme
     // ==========================================
     fun payInvoiceWithIyzico(invoiceId: String, amount: Double, cardNumber: String, holderName: String) {
-        viewModelScope.launch(requestFailures) {
-            repository.initializeIyzicoPayment(invoiceId, amount, cardNumber, holderName)
-            loadFinance()
-            _uiState.update { it.copy(toastMessage = "iyzico 3D Secure ile ₺${String.format(java.util.Locale.US, "%,.2f", amount)} tahsil edildi.") }
-        }
+        _uiState.update { it.copy(toastMessage = "Kart bilgileri bu yoldan gönderilmez; güvenli online ödeme ekranını kullanın.") }
     }
 
     // ==========================================

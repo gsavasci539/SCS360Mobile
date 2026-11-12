@@ -1770,11 +1770,9 @@ fun Okul360App(viewModel: Okul360ViewModel) {
 
             state.selectedInvoiceForPayment?.let { invoice ->
                 RecordPaymentDialog(
-                    invoice = invoice,
+                    invoice = invoice, actorId = state.currentUser.id,
                     onDismiss = { viewModel.selectInvoiceForPayment(null) },
-                    onConfirm = { method ->
-                        viewModel.recordPayment(invoice.id, invoice.amount, method)
-                    }
+                    onRecorded = { viewModel.selectInvoiceForPayment(null); viewModel.loadFinance() }
                 )
             }
 

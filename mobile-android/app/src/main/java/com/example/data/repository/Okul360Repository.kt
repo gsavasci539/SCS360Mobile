@@ -418,43 +418,7 @@ class Okul360Repository(private val context: Context) {
     }
 
     suspend fun recordPayment(request: RecordPaymentRequest): Boolean = requestContext {
-        ensureLocalSeedData()
-        var success = false
-
-        // 1. Immediately update Invoice and deduct Student balance in Room database
-        try {
-            val existingInvoice = invoiceDao.getInvoiceByIdDirect(request.invoice_id)
-                ?: invoiceDao.getAllInvoicesList().find { it.id == request.invoice_id || it.invoice_number == request.invoice_id }
-
-            if (existingInvoice != null) {
-                invoiceDao.updateInvoice(
-                    existingInvoice.copy(
-                        status = "PAID",
-                        paid_amount = request.amount
-                    )
-                )
-
-                // Locate student and reduce balance
-                val student = studentDao.getStudentByIdDirect(existingInvoice.student_id)
-                    ?: studentDao.getAllStudentsList().find {
-                        it.id == existingInvoice.student_id ||
-                        existingInvoice.student_name.contains(it.first_name, ignoreCase = true) ||
-                        "${it.first_name} ${it.last_name}".equals(existingInvoice.student_name, ignoreCase = true)
-                    }
-
-                if (student != null) {
-                    val updatedBalance = (student.tuition_balance - request.amount).coerceAtLeast(0.0)
-                    studentDao.insertStudent(student.copy(tuition_balance = updatedBalance))
-                }
-            }
-        } catch (failure: Exception) { throw failure }
-
-        // 2. Transmit to remote API endpoints
-        try {
-            apiService.recordPayment(request)
-            success = true
-        } catch (failure: Exception) { throw failure }
-        success
+        throw IllegalStateException("Tahsilatı güncel borç ve kalıcı işlem kimliğiyle tahsilat ekranından kaydedin")
     }
 
     suspend fun getReceiptForInvoice(invoiceId: String): PaymentReceipt? = requestContext {
@@ -1387,28 +1351,8 @@ class Okul360Repository(private val context: Context) {
         true
     }
 
-    suspend fun initializeIyzicoPayment(
-        invoiceId: String,
-        amount: Double,
-        cardNumber: String,
-        holderName: String
-    ): Map<String, Any> = requestContext {
-        try {
-            apiService.initializeIyzicoPayment(
-                mapOf(
-                    "invoice_id" to invoiceId,
-                    "amount" to amount,
-                    "card_number" to cardNumber,
-                    "card_holder" to holderName
-                )
-            )
-        } catch (failure: Exception) { throw failure }
-        // Ödemeyi doğrudan yerel faturada da işaretle
-        val inv = invoiceDao.getInvoiceByIdDirect(invoiceId)
-        if (inv != null) {
-            invoiceDao.insertInvoice(inv.copy(status = "PAID", paid_amount = inv.amount))
-        }
-        mapOf("status" to "success", "paymentId" to "iyz-${System.currentTimeMillis()}", "message" to "Ödeme başarıyla tamamlandı")
+    suspend fun initializeIyzicoPayment(invoiceId: String, amount: Double, cardNumber: String, holderName: String): Map<String, Any> = requestContext {
+        throw IllegalStateException("Kart bilgileri bu yoldan gönderilemez; güvenli sağlayıcı ödeme sayfasını kullanın")
     }
 
     suspend fun clearLocalCache() = requestContext {
