@@ -76,13 +76,14 @@ fun FinanceScreen(
     modifier: Modifier = Modifier,
     onRetry: () -> Unit = {}
 ) {
+    val presentationScope = com.example.ui.components.financePresentationScope(state)
     val summary = state.financeSummary
     var selectedFinanceTab by remember { mutableStateOf(0) } // 0: Gelir & Faturalar, 1: Borçlar & Alacaklar, 2: Giderler
 
     var searchQuery by remember { mutableStateOf("") }
-    var showAddInvoiceDialog by remember { mutableStateOf(false) }
+    var showAddInvoiceDialog by remember(presentationScope) { mutableStateOf(false) }
     var showInstallmentDialog by remember { mutableStateOf(false) }
-    var showAddDebtDialog by remember { mutableStateOf(false) }
+    var showAddDebtDialog by remember(presentationScope) { mutableStateOf(false) }
     var debtFilterType by remember { mutableStateOf("ALL") }
     var invoiceForIyzicoPayment by remember { mutableStateOf<Invoice?>(null) }
     var invoiceToEdit by remember { mutableStateOf<Invoice?>(null) }
@@ -862,14 +863,8 @@ fun FinanceScreen(
 
     // Dialogs
     if (showAddInvoiceDialog) {
-        AddInvoiceDialog(
-            students = state.students,
-            onDismiss = { showAddInvoiceDialog = false },
-            onConfirm = { studentId, studentName, className, amount, dueDate, desc ->
-                onAddInvoice(studentId, studentName, className, amount, dueDate, desc)
-                showAddInvoiceDialog = false
-            }
-        )
+        FinanceInvoiceDraftDialog(state, onDismiss = { showAddInvoiceDialog = false }, onCreate = { _, _, _, _, _ -> },
+            onRecorded = { showAddInvoiceDialog = false; onRetry() })
     }
 
     if (showAddExpenseDialog) {
@@ -1008,14 +1003,8 @@ fun FinanceScreen(
     }
 
     if (showAddDebtDialog) {
-        AddDebtDialog(
-            students = state.students,
-            onDismiss = { showAddDebtDialog = false },
-            onConfirm = { studentId, studentName, className, debtType, desc, amount, dueDate ->
-                onCreateDebt(studentId, studentName, className, debtType, desc, amount, dueDate)
-                showAddDebtDialog = false
-            }
-        )
+        FinanceInvoiceDraftDialog(state, onDismiss = { showAddDebtDialog = false }, onCreate = { _, _, _, _, _ -> },
+            onRecorded = { showAddDebtDialog = false; onRetry() })
     }
 
     debtToDelete?.let { debt ->

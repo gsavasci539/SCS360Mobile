@@ -23,10 +23,27 @@ class InvoiceDraftUiTest {
     private val student = Student(id = UUID(1, 1).toString(), first_name = "Synthetic", last_name = "Student")
     private val state = Okul360UiState(isLoggedIn = true, currentUser = User(id = UUID(2, 2).toString(), permissions = listOf("finance.write")),
         selectedRole = UserRole.FINANCE, students = listOf(student))
+    private lateinit var server: com.sun.net.httpserver.HttpServer
+    private lateinit var oldBase: String
+    private var oldToken: String? = null
+    @Before fun server() {
+        oldBase = com.example.data.remote.ApiClientProvider.activeBaseUrl
+        oldToken = com.example.data.remote.ApiClientProvider.interceptor.authToken
+        server = com.sun.net.httpserver.HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/") { e ->
+            val bytes = "{\"success\":true,\"data\":{\"total\":0,\"items\":[]}}".toByteArray()
+            e.responseHeaders.add("Content-Type", "application/json"); e.sendResponseHeaders(200, bytes.size.toLong()); e.responseBody.use { it.write(bytes) }
+        }; server.start()
+        com.example.data.remote.ApiClientProvider.createService("http://127.0.0.1:${server.address.port}/api/")
+        com.example.data.remote.ApiClientProvider.interceptor.setSession("synthetic-debt-ui")
+    }
+    @After fun stop() { server.stop(0); com.example.data.remote.ApiClientProvider.createService(oldBase); com.example.data.remote.ApiClientProvider.interceptor.setSession(oldToken) }
     @Test fun blankDraftValidationDoesNotSubmitAndDoesNotClose() {
         var calls = 0; var closes = 0
         compose.setContent { Okul360Theme { FinanceInvoiceDraftDialog(state, { closes++ }, { _, _, _, _, _ -> calls++ }) } }
+        compose.onNodeWithTag("invoice_draft_list").performScrollToNode(hasTestTag("invoice_amount"))
         compose.onNodeWithTag("invoice_amount").assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
+        compose.onNodeWithTag("invoice_draft_list").performScrollToNode(hasTestTag("invoice_due"))
         compose.onNodeWithTag("invoice_due").assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
         compose.onNodeWithTag("invoice_draft_list").performScrollToNode(hasTestTag("invoice_submit"))
         compose.onNodeWithTag("invoice_submit").performClick()

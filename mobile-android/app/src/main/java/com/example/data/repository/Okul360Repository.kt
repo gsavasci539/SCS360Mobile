@@ -323,24 +323,7 @@ class Okul360Repository(private val context: Context) {
     }
 
     suspend fun addInvoice(invoice: Invoice): Invoice = requestContext {
-        try {
-            invoiceDao.insertInvoice(
-                InvoiceEntity(
-                    id = invoice.id,
-                    invoice_number = invoice.invoice_number,
-                    student_id = invoice.student_id,
-                    student_name = invoice.student_name,
-                    class_name = invoice.class_name,
-                    amount = invoice.amount,
-                    paid_amount = invoice.paid_amount,
-                    due_date = invoice.due_date,
-                    issue_date = invoice.issue_date,
-                    status = invoice.status,
-                    description = invoice.description
-                )
-            )
-            apiService.createDebt(invoice)
-        } catch (failure: Exception) { throw failure }
+        throw IllegalStateException("Tahakkuku kalıcı işlem kimliği kullanan güncel tahakkuk formundan oluşturun")
     }
 
     suspend fun updateInvoice(invoice: Invoice): Invoice = requestContext {
@@ -1348,11 +1331,7 @@ class Okul360Repository(private val context: Context) {
     }
 
     suspend fun createDebt(debt: Debt): Debt = requestContext {
-        try {
-            apiService.createDebtRecord(debt)
-        } catch (failure: Exception) { throw failure }
-        localDebts.add(0, debt)
-        debt
+        throw IllegalStateException("Tahakkuku kalıcı işlem kimliği kullanan güncel tahakkuk formundan oluşturun")
     }
 
     suspend fun updateDebt(debt: Debt): Debt = requestContext {

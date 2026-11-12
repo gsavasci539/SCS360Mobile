@@ -1177,24 +1177,7 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun addInvoice(studentId: String, studentName: String, className: String, amount: Double, dueDate: String, desc: String) {
-        viewModelScope.launch(requestFailures) {
-            val inv = Invoice(
-                id = "inv-${UUID.randomUUID()}",
-                invoice_number = "FAT-2026-${(1000..9999).random()}",
-                student_id = studentId,
-                student_name = studentName,
-                class_name = className,
-                amount = amount,
-                paid_amount = 0.0,
-                due_date = dueDate,
-                issue_date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()),
-                status = "PENDING",
-                description = desc
-            )
-            repository.addInvoice(inv)
-            _uiState.update { it.copy(toastMessage = "${inv.invoice_number} numaralı fatura oluşturuldu.") }
-            loadFinance()
-        }
+        _uiState.update { it.copy(toastMessage = "Yeni tahakkuk için Finans > Tahakkuk taslağı ekranını kullanın. Eski kayıt yolu gönderilmedi.") }
     }
 
     fun addExpense(category: String, title: String, amount: Double, date: String, receiptUrl: String? = null) {
@@ -3553,24 +3536,7 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun createDebt(studentId: String, studentName: String, className: String, debtType: String, description: String, amount: Double, dueDate: String) {
-        viewModelScope.launch(requestFailures) {
-            val newDebt = Debt(
-                id = "debt-${System.currentTimeMillis()}",
-                student_id = studentId,
-                student_name = studentName,
-                class_name = className,
-                debt_type = debtType,
-                description = description,
-                amount = amount,
-                paid_amount = 0.0,
-                status = "UNPAID",
-                due_date = dueDate,
-                created_at = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-            )
-            repository.createDebt(newDebt)
-            loadDebts()
-            _uiState.update { it.copy(toastMessage = "$studentName için ₺${amount.toInt()} tutarında borç tahakkuk ettirildi.") }
-        }
+        _uiState.update { it.copy(toastMessage = "Yeni tahakkuk için Finans > Tahakkuk taslağı ekranını kullanın. Eski kayıt yolu gönderilmedi.") }
     }
 
     fun updateDebtStatus(debtId: String, newStatus: String, paidAmount: Double? = null) {
