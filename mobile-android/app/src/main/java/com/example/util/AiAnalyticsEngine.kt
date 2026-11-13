@@ -631,6 +631,7 @@ object AiAnalyticsEngine {
         val upperScreen = screenName.uppercase()
 
         val roleBadgeText = when (role) {
+            UserRole.CUSTOM -> "Özel rol"
             UserRole.SUPERADMIN -> "⚡ Süper Admin & Sistem AI Çekirdeği"
             UserRole.OWNER -> "👑 Kurum Sahibi AI Öngörüsü"
             UserRole.ADMIN -> "🛡️ Yönetici AI Operasyon Analizi"
@@ -645,6 +646,7 @@ object AiAnalyticsEngine {
             // ================= DASHBOARD / HOME =================
             upperScreen.contains("DASHBOARD") || upperScreen.contains("HOME") -> {
                 when (role) {
+                    UserRole.CUSTOM -> PageAiInsight("Doğrulanmış analiz yok", "Özel rol", "Sunucuda yetkilendirilmiş bir analiz yanıtı yok.", riskLevel = "UNKNOWN", confidenceScore = 0, modelName = "", roleBadge = "Özel rol")
                     UserRole.SUPERADMIN -> PageAiInsight(
                         title = "Süper Admin LLM Denetim & Sistem Mimarisi",
                         subtitle = "Tüm şubeler, kullanıcı logları, AI chat kayıtları ve fine-tuning havuzu",

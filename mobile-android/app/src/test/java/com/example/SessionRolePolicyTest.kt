@@ -47,13 +47,21 @@ class SessionRolePolicyTest {
         assertEquals(UserRole.TEACHER, session().getUserRole())
         assertEquals(teacher.id, session().getUser()?.id)
     }
-    @Test fun unknownAndInactiveRolesCannotFallBackToLegacyAdmin() {
+    @Test fun unassignedAndInactiveRolesCannotFallBackToLegacyAdmin() {
         for (user in listOf(User(id = "synthetic"), User(id = "synthetic", role = "ADMIN", roles = listOf(UserRoleInfo("admin", false))),
-            User(id = "synthetic", role = "ADMIN", roles = listOf(UserRoleInfo("unknown"))))) {
+            User(id = "synthetic", role = "ADMIN", roles = listOf(UserRoleInfo("custom", false))))) {
             save(user)
             assertNull(session().getUserRole())
             assertFalse(session().isLoggedIn())
         }
+    }
+    @Test fun activeCustomRoleRestoresWithoutAdministratorImpersonation() {
+        val actor = User(id = "synthetic-custom", roles = listOf(UserRoleInfo("library_assistant")), permissions = listOf("library.read"))
+        save(actor)
+        assertEquals(UserRole.CUSTOM, session().getUserRole())
+        assertTrue(session().isLoggedIn())
+        assertEquals(actor.roles, session().getUser()!!.roles)
+        assertFalse(SessionRolePolicy.canSelect(actor, UserRole.ADMIN))
     }
     @Test fun rootRequiresTheRealSuperadminFlagAndLogoutClearsProfileMetadata() {
         save(User(id = "synthetic-root", role = "SUPERADMIN"))

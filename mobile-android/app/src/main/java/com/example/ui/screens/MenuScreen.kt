@@ -87,6 +87,7 @@ fun MenuScreen(
     onNavigateToPlatformSaas: () -> Unit = {},
     onNavigateToSubscriptionBilling: () -> Unit = {},
     onNavigateToDismissal: () -> Unit = {},
+    onNavigateToParents: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showServerSettingsModal by remember { mutableStateOf(false) }
@@ -96,6 +97,7 @@ fun MenuScreen(
 
     val educationItems = remember(state) {
         listOf(
+            MenuItemData("Veliler", "Veli, öğrenci ve giriş hesabı bağları", Icons.Default.FamilyRestroom, Color(0xFFEDE9FE), Color(0xFF7C3AED), null, onNavigateToParents),
             MenuItemData("Sınıflar & Şubeler", "${state.classes.size} Sınıf", Icons.Default.School, Color(0xFFDBEAFE), Color(0xFF1D4ED8), "${state.classes.size}", onNavigateToClasses),
             MenuItemData("Sınavlar & Takvim", "${state.exams.size} Sınav", Icons.Default.Assessment, Color(0xFFFEE2E2), Color(0xFFDC2626), "${state.exams.size}", onNavigateToExams),
             MenuItemData("Ders Programı", "Haftalık Derslik & Saat", Icons.Default.CalendarMonth, Color(0xFFE0F2FE), Color(0xFF0284C7), null, onNavigateToSchedule),

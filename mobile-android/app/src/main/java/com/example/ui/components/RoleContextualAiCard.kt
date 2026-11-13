@@ -98,6 +98,7 @@ fun RoleContextualAiCard(
                 Color(0xFF581C87),
                 Color(0xFFA78BFA)
             )
+            UserRole.CUSTOM -> Triple(listOf(Color(0xFF334155), Color(0xFF475569)), Color(0xFF334155), Color(0xFF94A3B8))
             UserRole.CANTEEN -> Triple(
                 listOf(Color(0xFF7C2D12), Color(0xFFEA580C), Color(0xFFF97316)),
                 Color(0xFF7C2D12),

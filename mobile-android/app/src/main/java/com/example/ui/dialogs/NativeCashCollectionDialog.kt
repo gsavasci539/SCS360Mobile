@@ -42,7 +42,12 @@ fun NativeCashCollectionDialog(debtId: String, actorId: String, onDismiss: () ->
         catch (_: Exception) { error = "Güncel borç yüklenemedi. Yetki ve bağlantınızı kontrol edin." }
         finally { busy = false }
     }
-    if (online) { HostedPaymentDialog(debtId) { online = false }; return }
+    if (session != null && !session.current()) { LaunchedEffect(session) { onDismiss() }; return }
+    if (online) {
+        HostedPaymentDialog(debtId, onDismiss = { online = false; revision++ },
+            onReconciled = { if (session?.current() == true) onRecorded() })
+        return
+    }
     if (session != null && !session.current()) {
         LaunchedEffect(session) { onDismiss() }
         return

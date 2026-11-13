@@ -11,9 +11,10 @@ fun IyzicoPaymentDialog(
     invoice: Invoice? = null, canteenTopupAmount: Double? = null, studentName: String = "Öğrenci",
     initialAmount: Double = invoice?.amount ?: canteenTopupAmount ?: 0.0,
     paymentDescription: String = invoice?.description ?: "", onDismiss: () -> Unit,
+    onReconciled: () -> Unit = {},
     onPaymentSuccess: (IyzicoPaymentResult, String) -> Unit
 ) {
-    if (invoice != null) HostedPaymentDialog(invoice.id, onDismiss)
+    if (invoice != null) HostedPaymentDialog(invoice.id, onDismiss, onReconciled)
     else AlertDialog(onDismissRequest = onDismiss, title = { Text("Online bakiye yükleme") },
         text = { Text("Kantin cüzdanına online bakiye yükleme kabulü henüz tamamlanmamış. Tahsilat yapılmadı.") },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Kapat") } })

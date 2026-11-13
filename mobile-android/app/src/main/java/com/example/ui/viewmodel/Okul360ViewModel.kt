@@ -49,6 +49,10 @@ data class Okul360UiState(
     val dashboardSummary: DashboardSummary? = null,
     val isDashboardLoading: Boolean = false,
 
+    val parentChildren: List<Student> = emptyList(),
+    val isParentPortalLoading: Boolean = false,
+    val parentPortalError: String? = null,
+
     // Students State
     val students: List<Student> = emptyList(),
     val searchQuery: String = "",
@@ -640,38 +644,53 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             refreshSubscriptionAccessStatus()
             return
         }
+        val actor = _uiState.value.currentUser
+        if (_uiState.value.selectedRole == UserRole.PARENT) { loadParentPortal(); refreshSubscriptionAccessStatus(); return }
+        fun allowed(vararg codes: String) = com.example.ui.navigation.NativeNavigationPolicy.has(actor, *codes)
         viewModelScope.launch(requestFailures) {
-            loadOrganizations()
-            loadBranches()
-            loadClasses()
-            loadDashboard()
-            loadStudents()
-            loadAttendance()
-            loadFinance()
-            loadAnnouncements()
-            loadTemplates()
-            loadDailyReports()
-            loadOutboxLogs()
-            loadReports()
-            loadResources()
-            loadRoles()
-            loadUsers()
-            loadRfidCards()
-            loadHardwareDevices()
-            checkSystemHealth()
-            loadAiAnalyticsData()
-            loadConsents()
-            loadGuidanceRecords()
-            loadInfirmaryVisits()
-            loadClubs()
-            loadSurveys()
-            loadTutoringSessions()
-            loadPayrollRecords()
-            loadAuditLogs()
-            loadExams()
-            loadBroadcastData()
-            loadParentRequests()
+            if (allowed("org.read")) loadOrganizations()
+            if (allowed("branch.read")) loadBranches()
+            if (allowed("classes.read", "class.read")) loadClasses()
+            if (allowed("dashboard.read")) loadDashboard()
+            if (allowed("students.read", "student.read")) loadStudents()
+            if (allowed("attendance.read")) loadAttendance()
+            if (allowed("finance.read")) loadFinance()
+            if (allowed("announcement.read")) loadAnnouncements()
+            if (allowed("notification.read")) { loadTemplates(); loadOutboxLogs(); loadBroadcastData() }
+            if (allowed("daily_reports.read")) loadDailyReports()
+            if (allowed("report.read")) loadReports()
+            if (allowed("inventory.read")) loadResources()
+            if (allowed("users.read")) { loadRoles(); loadUsers() }
+            if (allowed("settings.read")) { loadRfidCards(); loadHardwareDevices(); checkSystemHealth() }
+            if (actor.is_super_admin == true) loadAiAnalyticsData()
+            if (allowed("consents.read")) loadConsents()
+            if (allowed("guidance.read")) loadGuidanceRecords()
+            if (allowed("health.read")) loadInfirmaryVisits()
+            if (allowed("clubs.read")) loadClubs()
+            if (allowed("surveys.read", "surveys.respond")) loadSurveys()
+            if (allowed("tutoring.read")) loadTutoringSessions()
+            if (allowed("payroll.read")) loadPayrollRecords()
+            if (allowed("audit.read")) loadAuditLogs()
+            if (allowed("exam.read", "exam.write")) loadExams()
             refreshSubscriptionAccessStatus()
+        }
+    }
+
+    private var parentPortalJob: kotlinx.coroutines.Job? = null
+    fun loadParentPortal() {
+        if (!_uiState.value.isLoggedIn || _uiState.value.selectedRole != UserRole.PARENT) return
+        parentPortalJob?.cancel()
+        val captured = com.example.data.remote.ApiClientProvider.interceptor.captureScope()
+        _uiState.update { it.copy(parentChildren = emptyList(), invoices = emptyList(), isParentPortalLoading = true, parentPortalError = null) }
+        parentPortalJob = viewModelScope.launch {
+            try {
+                val client = com.example.data.remote.NativeParentPortalClient()
+                val children = captured.io { client.children() }
+                val invoices = if ("parent.view_finances" in _uiState.value.currentUser.permissions) children.flatMap { child -> captured.io { client.invoices(child) } } else emptyList()
+                captured.ensureCurrent()
+                if (_uiState.value.selectedRole == UserRole.PARENT) _uiState.update { it.copy(parentChildren = children, students = children, invoices = invoices, isParentPortalLoading = false) }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (_: Exception) { if (captured.current() && _uiState.value.selectedRole == UserRole.PARENT) _uiState.update { it.copy(parentChildren = emptyList(), invoices = emptyList(), isParentPortalLoading = false, parentPortalError = "Veli kayıtları sunucudan yüklenemedi. Yeniden deneyin.") } }
         }
     }
 
@@ -756,7 +775,10 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         }
         // Change only the presentation mode. JWT actor, profile, organization,
         // persisted roles and identity must remain those returned by the server.
-        _uiState.update { it.copy(selectedRole = role, toastMessage = "${role.displayName} görünümü açıldı.") }
+        com.example.data.remote.ApiClientProvider.interceptor.invalidateContext()
+        parentPortalJob?.cancel()
+        _uiState.update { freshState(it).copy(selectedRole = role, toastMessage = "${role.displayName} görünümü açıldı.") }
+        loadInitialData()
     }
 
     fun switchBranch(branchId: String) {

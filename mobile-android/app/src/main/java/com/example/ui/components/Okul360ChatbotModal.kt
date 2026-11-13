@@ -88,6 +88,7 @@ object Okul360ChatbotEngine {
 
     fun getInitialGreeting(role: UserRole, userName: String): ChatbotMessage {
         val greetingText = when (role) {
+            UserRole.CUSTOM -> "Merhaba $userName. Erişimleriniz hesabınıza atanmış izinlerle belirlenir."
             UserRole.SUPERADMIN -> "Merhaba Sayın $userName (Süper Admin). SCS360 Sistem Yönetimi, LLM Fine-Tuning ve Chat Analitik Merkezine hoş geldiniz. Tüm şubelerin konsolide verileri, konuşma denetimi, prompt optimizasyonu ve AI model eğitimi konusunda emrinizdeyim."
             UserRole.OWNER -> "Merhaba Sayın $userName. Ben SCS360 Kurumsal Yönetim & Finans Yapay Zeka Danışmanınızım. Şubelerinizin 3 aylık nakit akışı, toplam öğrenci kapasitesi, tahsilat riskleri ve büyüme hedefleriniz hakkında sorularınızı yanıtlamaya hazırım."
             UserRole.ADMIN -> "Merhaba Sayın $userName. SCS360 Yönetici Asistanına hoş geldiniz. Günlük yoklama verileri, sınıf dağılımları, personel durumu, duyurular ve turnike güvenlik logları hakkında size nasıl yardımcı olabilirim?"
@@ -108,6 +109,7 @@ object Okul360ChatbotEngine {
 
     fun getDefaultSuggestionsForRole(role: UserRole): List<String> {
         return when (role) {
+            UserRole.CUSTOM -> emptyList()
             UserRole.SUPERADMIN -> listOf(
                 "🧠 LLM Chat Analitiği ve Konuşma Denetimi",
                 "📦 Fine-Tuning Eğitim Veri Seti Çıkar",
@@ -168,6 +170,7 @@ object Okul360ChatbotEngine {
 
     private fun getDefaultActionsForRole(role: UserRole): List<ChatbotAction> {
         return when (role) {
+            UserRole.CUSTOM -> emptyList()
             UserRole.SUPERADMIN -> listOf(
                 ChatbotAction("LLM Eğitim Merkezi", Icons.Default.Psychology, "NAV_AI_CHAT_AUDIT"),
                 ChatbotAction("AI Analitik Hub", Icons.Default.AutoAwesome, "NAV_AI_ANALYTICS"),
@@ -326,6 +329,7 @@ object Okul360ChatbotEngine {
             globalDbResult
         } else {
             when (role) {
+                UserRole.CUSTOM -> ("Bu özel rol için doğrulanmış AI yanıtı bulunmuyor." to emptyList<ChatbotAction>())
                 UserRole.SUPERADMIN, UserRole.ADMIN -> handleAdminQuery(searchQ, state, activeBranch, totalStudents, totalClasses)
                 UserRole.OWNER -> handleOwnerQuery(searchQ, state, activeBranch, totalStudents, totalOverdueAmount)
                 UserRole.MANAGER -> handleManagerQuery(searchQ, state, activeBranch, totalStudents, totalClasses)
@@ -2549,6 +2553,7 @@ private fun DeprecatedOldOkul360ChatbotModal(
     // Role Gradient
     val headerGradient = remember(role) {
         when (role) {
+            UserRole.CUSTOM -> listOf(Color(0xFF334155), Color(0xFF475569))
             UserRole.SUPERADMIN -> listOf(Color(0xFF3B0764), Color(0xFF6D28D9), Color(0xFF8B5CF6))
             UserRole.OWNER -> listOf(Color(0xFF312E81), Color(0xFF4338CA), Color(0xFF6366F1))
             UserRole.ADMIN -> listOf(Color(0xFF1E3A8A), Color(0xFF1D4ED8), Color(0xFF3B82F6))

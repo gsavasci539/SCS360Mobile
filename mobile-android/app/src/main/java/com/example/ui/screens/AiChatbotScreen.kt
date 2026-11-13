@@ -102,6 +102,7 @@ fun AiChatbotScreen(
 
     val roleGradient = remember(role) {
         when (role) {
+            UserRole.CUSTOM -> listOf(Color(0xFF334155), Color(0xFF475569))
             UserRole.SUPERADMIN -> listOf(Color(0xFF4C1D95), Color(0xFF6D28D9), Color(0xFF8B5CF6))
             UserRole.OWNER -> listOf(Color(0xFF312E81), Color(0xFF4338CA), Color(0xFF6366F1))
             UserRole.ADMIN -> listOf(Color(0xFF1E3A8A), Color(0xFF1D4ED8), Color(0xFF3B82F6))

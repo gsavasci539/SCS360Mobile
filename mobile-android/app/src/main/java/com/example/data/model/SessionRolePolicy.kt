@@ -6,7 +6,8 @@ object SessionRolePolicy {
         if (user.is_super_admin == true) return UserRole.SUPERADMIN
         if (user.roles.isNotEmpty() && user.roles.none { it.is_active }) return null
         val canonical = if (user.roles.isEmpty()) user.resolvedRole else user.copy(role = "").resolvedRole
-        return UserRole.entries.firstOrNull { it.name == canonical && it != UserRole.SUPERADMIN }
+        return UserRole.entries.firstOrNull { it.name == canonical && it !in setOf(UserRole.SUPERADMIN, UserRole.CUSTOM) }
+            ?: if (user.roles.any { it.is_active && it.slug.isNotBlank() && !it.slug.equals("superadmin", true) }) UserRole.CUSTOM else null
     }
 
     fun canSelect(user: User, requested: UserRole): Boolean {

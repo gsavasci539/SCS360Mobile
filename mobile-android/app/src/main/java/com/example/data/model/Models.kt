@@ -11,7 +11,8 @@ enum class UserRole(val displayName: String, val badgeColorHex: Long) {
     TEACHER("Öğretmen", 0xFF059669),
     FINANCE("Muhasebe & Finans", 0xFFD97706),
     PARENT("Veli", 0xFF7C3AED),
-    CANTEEN("Kantin Personeli", 0xFFEA580C);
+    CANTEEN("Kantin Personeli", 0xFFEA580C),
+    CUSTOM("Özel Rol", 0xFF475569);
 
     val title: String get() = displayName
 }

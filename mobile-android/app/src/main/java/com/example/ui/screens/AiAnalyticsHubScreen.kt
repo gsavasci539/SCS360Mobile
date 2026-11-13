@@ -84,6 +84,7 @@ fun AiAnalyticsHubScreen(
 
     val allowedTabs = remember(state.selectedRole) {
         when (state.selectedRole) {
+            UserRole.CUSTOM -> listOf(AnalyticsMainTab.CUSTOM_REPORTS)
             UserRole.SUPERADMIN, UserRole.OWNER, UserRole.ADMIN, UserRole.MANAGER -> AnalyticsMainTab.entries
             UserRole.FINANCE -> listOf(
                 AnalyticsMainTab.FINANCE_CHARTS,

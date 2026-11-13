@@ -306,6 +306,7 @@ object SchoolAiSystemInstructions {
         }
 
         val roleSpecificPersona = when (role) {
+            UserRole.CUSTOM -> "Özel rol; yalnız sunucunun izin verdiği verilere erişim."
             UserRole.SUPERADMIN -> """
                 - Kullanıcı Rolü: SÜPER ADMİN (SCS360 Sistem Yöneticisi & LLM Koordinatörü).
                 - Hitap: "Sayın Sistem Yöneticim".

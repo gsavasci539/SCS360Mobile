@@ -91,37 +91,29 @@ fun ParentPortalScreen(
     onOpenSurveys: () -> Unit = {},
     onOpenTransport: () -> Unit = {},
     onOpenDismissal: () -> Unit = {},
+    onRefresh: () -> Unit = {},
     onLogout: () -> Unit
 ) {
     val context = LocalContext.current
     var selectedTab by remember { mutableStateOf(ParentNavTab.TODAY) }
     var parentFabExpanded by remember { mutableStateOf(false) }
 
-    // Multi-child support: Get students belonging to this parent (linked_parent_user_id, phone, email, name)
-    val parentChildren = remember(state.students, state.currentUser) {
-        val filtered = state.students.filter {
-            (it.linked_parent_user_id != null && it.linked_parent_user_id == state.currentUser.id) ||
-            (it.parent_phone.isNotBlank() && it.parent_phone == state.currentUser.phone) ||
-            (it.sms_phone != null && it.sms_phone == state.currentUser.phone) ||
-            (it.whatsapp_phone != null && it.whatsapp_phone == state.currentUser.phone) ||
-            (state.currentUser.email.isNotBlank() && it.parent_email?.equals(state.currentUser.email, ignoreCase = true) == true) ||
-            (it.parent_name.isNotBlank() && it.parent_name.contains(state.currentUser.full_name, ignoreCase = true))
-        }
-        if (filtered.isNotEmpty()) filtered else state.students
-    }
+    val presentationScope = com.example.ui.components.financePresentationScope(state)
+    // The parent portal endpoint has already authorized every relationship.
+    val parentChildren = state.parentChildren
 
-    var selectedChildId by remember(parentChildren) { mutableStateOf(parentChildren.firstOrNull()?.id ?: "") }
+    var selectedChildId by remember(presentationScope) { mutableStateOf(parentChildren.firstOrNull()?.id ?: "") }
     val currentChild = parentChildren.find { it.id == selectedChildId } ?: parentChildren.firstOrNull()
 
     // Dialog States
-    var showMedicineDialog by remember { mutableStateOf(false) }
-    var showLeaveDialog by remember { mutableStateOf(false) }
-    var showPickupDialog by remember { mutableStateOf(false) }
-    var showMessageDialog by remember { mutableStateOf(false) }
-    var showPaymentDialogForInvoice by remember { mutableStateOf<Invoice?>(null) }
-    var showReceiptForInvoice by remember { mutableStateOf<Invoice?>(null) }
+    var showMedicineDialog by remember(presentationScope, selectedChildId) { mutableStateOf(false) }
+    var showLeaveDialog by remember(presentationScope, selectedChildId) { mutableStateOf(false) }
+    var showPickupDialog by remember(presentationScope, selectedChildId) { mutableStateOf(false) }
+    var showMessageDialog by remember(presentationScope, selectedChildId) { mutableStateOf(false) }
+    var showPaymentDialogForInvoice by remember(presentationScope, selectedChildId) { mutableStateOf<Invoice?>(null) }
+    var showReceiptForInvoice by remember(presentationScope, selectedChildId) { mutableStateOf<Invoice?>(null) }
 
-    val parentActions = remember {
+    val parentActions = remember(presentationScope, selectedChildId) {
         listOf(
             SpeedDialAction(
                 id = "parent_pay_tuition",
@@ -421,7 +413,7 @@ fun ParentPortalScreen(
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Sistemde veli hesabınıza bağlı öğrenci kaydı bulunamadı. Şube yönetimi ile irtibata geçebilirsiniz.",
+                                text = state.parentPortalError ?: "Sistemde veli hesabınıza bağlı öğrenci kaydı bulunamadı. Şube yönetimi ile irtibata geçebilirsiniz.",
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -522,125 +514,9 @@ fun ParentPortalScreen(
             }
 
             showPaymentDialogForInvoice?.let { invoice ->
-                var selectedGateway by remember { mutableStateOf("CHOICE") } // "CHOICE", "CEPPOS", "IYZICO"
-
-                when (selectedGateway) {
-                    "CEPPOS" -> {
-                        CepPosPaymentDialog(
-                            invoice = invoice,
-                            studentName = currentChild?.full_name ?: "Öğrenci",
-                            paymentDescription = "${invoice.invoice_number} - ${invoice.description}",
-                            onDismiss = { showPaymentDialogForInvoice = null },
-                            onPaymentSuccess = { result, methodTitle ->
-                                onPayInvoice(invoice.id, invoice.amount, "$methodTitle (Ref: ${result.rrn})")
-                                showPaymentDialogForInvoice = null
-                            }
-                        )
-                    }
-                    "IYZICO" -> {
-                        IyzicoPaymentDialog(
-                            invoice = invoice,
-                            studentName = currentChild?.full_name ?: "Öğrenci",
-                            paymentDescription = "${invoice.invoice_number} - ${invoice.description}",
-                            onDismiss = { showPaymentDialogForInvoice = null },
-                            onPaymentSuccess = { result, methodTitle ->
-                                onPayInvoice(invoice.id, invoice.amount, "$methodTitle (Ref: ${result.paymentId})")
-                                showPaymentDialogForInvoice = null
-                            }
-                        )
-                    }
-                    else -> {
-                        AlertDialog(
-                            onDismissRequest = { showPaymentDialogForInvoice = null },
-                            title = {
-                                Text("💳 Güvenli Ödeme Kanalı Seçin", fontWeight = FontWeight.Bold, color = BrandNavy)
-                            },
-                            text = {
-                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Text(
-                                        text = "${invoice.invoice_number} - ${invoice.description}",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = BrandNavy
-                                    )
-                                    Text(
-                                        text = "Ödenecek Tutar: ₺${invoice.amount.toInt()}",
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Black,
-                                        color = SecondaryEmerald
-                                    )
-
-                                    Spacer(modifier = Modifier.height(4.dp))
-
-                                    // Cep POS Option
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = Color(0xFFF0FDF4),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF86EFAC)),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { selectedGateway = "CEPPOS" }
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(12.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Surface(
-                                                color = Color(0xFF059669),
-                                                shape = CircleShape,
-                                                modifier = Modifier.size(36.dp)
-                                            ) {
-                                                Box(contentAlignment = Alignment.Center) {
-                                                    Icon(Icons.Default.Nfc, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-                                                }
-                                            }
-                                            Spacer(modifier = Modifier.width(10.dp))
-                                            Column {
-                                                Text("Cep POS (SoftPOS)", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF065F46))
-                                                Text("Telefona Temassız NFC Dokundurma veya TR-Karekod", fontSize = 11.sp, color = Color(0xFF047857))
-                                            }
-                                        }
-                                    }
-
-                                    // İyzico Option
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = Color(0xFFEFF6FF),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF93C5FD)),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { selectedGateway = "IYZICO" }
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(12.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Surface(
-                                                color = PrimaryBlue,
-                                                shape = CircleShape,
-                                                modifier = Modifier.size(36.dp)
-                                            ) {
-                                                Box(contentAlignment = Alignment.Center) {
-                                                    Icon(Icons.Default.CreditCard, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-                                                }
-                                            }
-                                            Spacer(modifier = Modifier.width(10.dp))
-                                            Column {
-                                                Text("İyzico Sanal POS", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = PrimaryBlue)
-                                                Text("Kredi / Banka Kartı ile 3D Secure Doğrulamalı Ödeme", fontSize = 11.sp, color = Color(0xFF1E40AF))
-                                            }
-                                        }
-                                    }
-                                }
-                            },
-                            confirmButton = {},
-                            dismissButton = {
-                                TextButton(onClick = { showPaymentDialogForInvoice = null }) {
-                                    Text("İptal")
-                                }
-                            }
-                        )
-                    }
+                if (invoice.student_id == currentChild?.id && state.parentChildren.any { it.id == invoice.student_id }) {
+                    com.example.ui.dialogs.iyzico.HostedPaymentDialog(invoice.id,
+                        onDismiss = { showPaymentDialogForInvoice = null }, onReconciled = onRefresh)
                 }
             }
 
@@ -650,6 +526,8 @@ fun ParentPortalScreen(
                     onDismiss = { showReceiptForInvoice = null }
                 )
             }
+
+            TextButton(onClick = onRefresh, enabled = !state.isParentPortalLoading, modifier = Modifier.align(Alignment.TopEnd)) { Text("Yenile") }
 
             // Role-specific Floating Action Button for Parent
             RoleSpeedDialFab(

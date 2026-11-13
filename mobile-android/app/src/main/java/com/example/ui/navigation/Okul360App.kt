@@ -57,6 +57,7 @@ enum class MainTab(
 enum class SubScreen(val title: String) {
     NONE(""),
     CLASSES("Sınıflar & Şubeler"),
+    PARENTS("Veliler"),
     COMMUNICATION("İletişim & Duyuru Yönetimi"),
     NOTIFICATIONS("Bildirim Merkezi"),
     DIGITAL_REPORT_CARD("Dijital Karne & Not Çizelgesi"),
@@ -127,7 +128,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
             state.selectedAnnouncementForDetail != null ||
             state.selectedConversationId != null ||
             currentSubScreen != SubScreen.NONE ||
-            (currentTab != MainTab.HOME && (state.selectedRole == UserRole.ADMIN || state.selectedRole == UserRole.SUPERADMIN))
+            (currentTab != MainTab.HOME && (state.selectedRole in setOf(UserRole.ADMIN, UserRole.SUPERADMIN, UserRole.CUSTOM)))
 
     BackHandler(enabled = canGoBack) {
         when {
@@ -311,7 +312,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
     }
 
     // Role-specific screens when no SubScreen is open (Wrapped with SaaS Banner & Shared Modals)
-    if (state.selectedRole != UserRole.ADMIN && state.selectedRole != UserRole.SUPERADMIN && currentSubScreen == SubScreen.NONE) {
+    if (state.selectedRole !in setOf(UserRole.ADMIN, UserRole.SUPERADMIN) && (state.selectedRole != UserRole.CUSTOM || currentTab in setOf(MainTab.HOME, MainTab.OTHER)) && currentSubScreen == SubScreen.NONE) {
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -380,7 +381,8 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             ParentPortalScreen(
                                 state = state,
                                 onRoleSelected = { role -> viewModel.switchRole(role) },
-                                onPayInvoice = { invId, amt, method -> viewModel.recordPayment(invId, amt, method) },
+                                onPayInvoice = { _, _, _ -> },
+                                onRefresh = { viewModel.loadParentPortal() },
                                 onSubmitMedicine = { stdId, med, dose, time, note -> viewModel.submitMedicineNotice(stdId, med, dose, time, note) },
                                 onSubmitLeave = { stdId, start, end, reason, note -> viewModel.submitLeaveNotice(stdId, start, end, reason, note) },
                                 onSubmitPickup = { stdId, person, rel, phone -> viewModel.submitPickupNotice(stdId, person, rel, phone) },
@@ -501,6 +503,10 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onLogout = { viewModel.logout() }
                             )
                         }
+                        UserRole.CUSTOM -> CustomRolePortalScreen(state.currentUser,
+                            onTab = { if (NativeNavigationPolicy.tab(state.currentUser, it)) currentTab = it },
+                            onScreen = { if (NativeNavigationPolicy.screen(state.currentUser, it)) currentSubScreen = it },
+                            onLogout = { viewModel.logout() })
                         UserRole.ADMIN, UserRole.SUPERADMIN -> {}
                     }
 
@@ -571,7 +577,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
         MainTab.NOTIFICATIONS,
         MainTab.FINANCE,
         MainTab.OTHER
-    )
+    ).filter { state.selectedRole != UserRole.CUSTOM || NativeNavigationPolicy.tab(state.currentUser, it) }
 
     val subscreensWithOwnTopBar = remember {
         setOf(
@@ -1025,8 +1031,11 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                         },
                         label = "ScreenFadeTransition"
                     ) { (tab, subScreen) ->
-                    if (subScreen != SubScreen.NONE) {
+                    if (state.selectedRole == UserRole.CUSTOM && !(if (subScreen == SubScreen.NONE) NativeNavigationPolicy.tab(state.currentUser, tab) else NativeNavigationPolicy.screen(state.currentUser, subScreen))) {
+                        Text("Bu ekrana erişme yetkiniz yok.", Modifier.padding(24.dp).testTag("native_access_denied"))
+                    } else if (subScreen != SubScreen.NONE) {
                         when (subScreen) {
+                            SubScreen.PARENTS -> ParentManagementScreen(state)
                             SubScreen.CLASSES -> ClassesScreen(
                                 state = state,
                                 onAddClass = { viewModel.addClass(it) },
@@ -1658,6 +1667,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 }
                             )
                             MainTab.OTHER -> MenuScreen(
+                                onNavigateToParents = { currentSubScreen = SubScreen.PARENTS },
                                 state = state,
                                 onNavigateToClasses = { currentSubScreen = SubScreen.CLASSES },
                                 onNavigateToCommunication = { currentSubScreen = SubScreen.COMMUNICATION },

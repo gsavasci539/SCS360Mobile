@@ -922,6 +922,7 @@ fun FinanceScreen(
             initialAmount = inv.amount,
             paymentDescription = "${inv.class_name} - ${inv.invoice_number} nolu fatura tahsilatı",
             onDismiss = { invoiceForIyzicoPayment = null },
+            onReconciled = { onRetry() },
             onPaymentSuccess = { _, _ -> } // Hosted checkout owns server verification; no second manual payment.
         )
     }
