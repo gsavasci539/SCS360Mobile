@@ -269,7 +269,8 @@ data class Expense(
     val amount: Double = 0.0,
     val date: String = "",
     val receipt_url: String? = null,
-    val created_by: String = ""
+    val created_by: String = "",
+    val notes: String? = null
 )
 
 @JsonClass(generateAdapter = true)

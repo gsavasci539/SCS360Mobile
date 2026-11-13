@@ -24,9 +24,12 @@ class NativeExpenseClient {
     private val client = ApiClientProvider.createOkHttpClient()
     fun current() = scope.current()
     fun ensureCurrent() = scope.ensureCurrent()
-    suspend fun request(path: String, body: String? = null, delete: Boolean = false): JSONObject = scope.io {
+    suspend fun request(path: String, body: String? = null, delete: Boolean = false, put: Boolean = false): JSONObject = scope.io {
         val builder = Request.Builder().url(base + path).tag(NativeRequestScope::class.java, scope)
-        if (body != null) builder.post(body.toRequestBody("application/json".toMediaType()))
+        if (body != null) {
+            val payload=body.toRequestBody("application/json".toMediaType())
+            if(put) builder.put(payload) else builder.post(payload)
+        }
         if (delete) builder.delete()
         client.newCall(builder.build()).execute().use { response ->
             if (!response.isSuccessful) throw ExpenseHttpException(response.code)
@@ -44,7 +47,8 @@ class NativeExpenseClient {
         val title = row.getString("title"); val category = row.getString("category")
         check(title.isNotBlank() && category.isNotBlank())
         return Expense(id=uuid("id"), branch_id=selected, category=category, title=title, amount=amount.toDouble(),
-            date=LocalDate.parse(row.getString("date")).toString(), receipt_url=null, created_by=text("created_by"))
+            date=LocalDate.parse(row.getString("date")).toString(), receipt_url=null, created_by=text("created_by"),
+            notes=if(row.isNull("notes") || !row.has("notes")) null else row.getString("notes"))
     }
     suspend fun load(branchId: String?): List<Expense> {
         val selected = branchId?.takeUnless { it.isBlank() || it == "all" } ?: branch

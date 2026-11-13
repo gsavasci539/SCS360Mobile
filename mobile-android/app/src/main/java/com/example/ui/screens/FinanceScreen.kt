@@ -91,6 +91,7 @@ fun FinanceScreen(
 
     var showAddExpenseDialog by remember(presentationScope) { mutableStateOf(false) }
     var expenseToDelete by remember(presentationScope) { mutableStateOf<Expense?>(null) }
+    var expenseToEdit by remember(presentationScope) { mutableStateOf<String?>(null) }
     var expenseCategoryFilter by remember { mutableStateOf("ALL") }
     var debtToDelete by remember(presentationScope) { mutableStateOf<Debt?>(null) }
 
@@ -212,7 +213,7 @@ fun FinanceScreen(
                 expense.title.contains(searchQuery, ignoreCase = true) ||
                 expense.category.contains(searchQuery, ignoreCase = true) ||
                 expense.created_by.contains(searchQuery, ignoreCase = true) ||
-                (expense.receipt_url?.contains(searchQuery, ignoreCase = true) ?: false)
+                (expense.notes?.contains(searchQuery, ignoreCase = true) ?: false)
             }
             matchesCategory && matchesSearch
         }
@@ -851,6 +852,9 @@ fun FinanceScreen(
                                 }
                             }
                         }
+                        if("finance.write" in state.currentUser.permissions || (state.currentUser.is_super_admin==true && !state.workspaceOrganizationId.isNullOrBlank())) {
+                            TextButton(onClick={ expenseToEdit=expense.id },modifier=Modifier.padding(horizontal=12.dp).heightIn(min=48.dp).testTag("finance_edit_expense_${expense.id}")) { Text("Gideri düzenle") }
+                        }
                     }
                 }
             }
@@ -880,15 +884,13 @@ fun FinanceScreen(
     }
 
     expenseToDelete?.let { exp ->
-        ConfirmDeleteDialog(
-            title = "Gider Kaydını Sil",
-            message = "\"${exp.title}\" başlıklı ₺${exp.amount.toInt()} tutarındaki gideri silmek istediğinize emin misiniz?",
-            onDismiss = { expenseToDelete = null },
-            onConfirm = {
-                onDeleteExpense(exp.id)
-                expenseToDelete = null
-            }
-        )
+        com.example.ui.dialogs.FinanceExpenseDeleteDialog(exp,state,
+            onDismiss={ expenseToDelete=null },onRecorded={ expenseToDelete=null; onRetry() },
+            onCheck={ expenseToDelete=null; onRetry() })
+    }
+    expenseToEdit?.let { id ->
+        com.example.ui.dialogs.FinanceExpenseEditDialog(id,state,
+            onDismiss={ expenseToEdit=null },onRecorded={ expenseToEdit=null; onRetry() })
     }
 
     invoiceToEdit?.let { inv ->
@@ -1191,7 +1193,7 @@ fun ExpenseCardItem(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "${expense.date} • ${expense.created_by}" + (if (!expense.receipt_url.isNullOrBlank()) " • Ref: ${expense.receipt_url}" else ""),
+                        text = "${expense.date} • ${expense.created_by}" + (expense.notes?.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""),
                         fontSize = 11.sp,
                         color = Color(0xFF64748B),
                         maxLines = 1,
