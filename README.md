@@ -76,3 +76,5 @@ Güncel yeni gider notu/durum checkpoint:122 benzersiz native test geçti (14hed
 Current parent/custom-role/payment checkpoint:138 native tests plus actual native login/FastAPI/tempSQLite acceptance passed. Remaining operational modules and legacy role administration remain open. Latest evidence: docs/acceptance/native-parent-parity-20261113.json.
 
 Branch-limited parent creation accepted:21 affected/new native tests and actual native login/FastAPI/tempSQLite acceptance. Source evidence: docs/acceptance/native-parent-branch-20261113.json. Other operational modules remain open.
+
+Native library core checkpoint:154 native tests and actual native login/FastAPI/tempSQLite acceptance passed. Library detail/edit/delete and real reminder queue remain open; web stock mapping is fixed with two new frontend tests and current TypeScript/Vite. This is not full library or all-module parity. Evidence: docs/acceptance/native-library-core-20261113.json.
