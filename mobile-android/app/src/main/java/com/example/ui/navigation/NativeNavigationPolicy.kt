@@ -4,7 +4,11 @@ import com.example.data.model.User
 
 /** Same canonical permission codes as web navigation. Role names grant no powers. */
 object NativeNavigationPolicy {
-    fun has(user: User, vararg codes: String) = user.is_super_admin == true || codes.any { it in user.permissions }
+    private fun isOrganizationOwner(user: User) = user.is_super_admin != true &&
+        !user.organization_id.isNullOrBlank() && user.roles.any { it.is_active && it.slug == "owner" }
+
+    fun has(user: User, vararg codes: String) = user.is_super_admin == true ||
+        (isOrganizationOwner(user) && codes.any { it != "super_admin" }) || codes.any { it in user.permissions }
     fun tab(user: User, tab: MainTab): Boolean = when (tab) {
         MainTab.HOME, MainTab.OTHER -> true
         MainTab.STUDENTS -> has(user, "students.read", "student.read")
@@ -44,6 +48,7 @@ object NativeNavigationPolicy {
         SubScreen.SECURITY -> has(user, "audit.read")
         SubScreen.OUTBOX -> has(user, "notification.read")
         SubScreen.DISMISSAL -> has(user, "dismissal.read")
-        SubScreen.AI_ANALYTICS, SubScreen.AI_CHAT_AUDIT, SubScreen.PLATFORM_SAAS -> user.is_super_admin == true
+        SubScreen.AI_ANALYTICS -> user.is_super_admin == true || has(user, "dashboard.read")
+        SubScreen.AI_CHAT_AUDIT, SubScreen.PLATFORM_SAAS -> user.is_super_admin == true
     }
 }

@@ -104,6 +104,15 @@ class NativeMobileParityContractTest {
             assertFalse(SessionRolePolicy.canSelect(user, UserRole.ADMIN)); assertFalse(SessionRolePolicy.canSelect(user, UserRole.SUPERADMIN))
         }
     }
+    @Test fun organizationOwnerCanNavigateEveryInstitutionModuleButNotPlatformModules() {
+        val owner = User(organization_id = id(30), roles = listOf(UserRoleInfo(slug = "owner", is_active = true)), permissions = emptyList())
+        assertTrue(NativeNavigationPolicy.tab(owner, MainTab.FINANCE))
+        assertTrue(NativeNavigationPolicy.screen(owner, SubScreen.INFIRMARY))
+        assertTrue(NativeNavigationPolicy.screen(owner, SubScreen.AI_ANALYTICS))
+        assertFalse(NativeNavigationPolicy.screen(owner, SubScreen.PLATFORM_SAAS))
+        assertFalse(NativeNavigationPolicy.screen(owner, SubScreen.AI_CHAT_AUDIT))
+        assertFalse(NativeNavigationPolicy.has(owner, "super_admin"))
+    }
     @Test fun parentRequestsWhitelistPayloadAndValidateStudentAcknowledgement() = runBlocking {
         val writes = mutableListOf<JSONObject>(); var wrong = false
         server({ e ->
