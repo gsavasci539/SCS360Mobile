@@ -2,6 +2,7 @@ package com.example.ui.dialogs
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -46,21 +47,25 @@ fun NativeCashCollectionDialog(debtId: String, actorId: String, onDismiss: () ->
         LaunchedEffect(session) { onDismiss() }
         return
     }
+    // Observe the ACK in composition, so semantics and lazy content use the same
+    // snapshot. A shorter confirmation must not inherit the form's bottom offset.
+    val acknowledgement = ack
+    val listState = key(acknowledgement != null) { rememberLazyListState() }
     Dialog(onDismissRequest = { if (!busy) onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.padding(12.dp).widthIn(max = 600.dp).fillMaxWidth()
             .heightIn(max = (LocalConfiguration.current.screenHeightDp * .9f).dp).imePadding(), shape = MaterialTheme.shapes.large) {
             LazyColumn(Modifier.padding(16.dp).testTag("cash_list").semantics {
-                stateDescription = when { ack != null -> "Kaydedildi"; pending -> "Bekleyen işlem"; debt != null -> "Hazır"; else -> "Yükleniyor" }
-            }, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                item { Text("Tahsilat kaydı", style = MaterialTheme.typography.titleLarge) }
-                item { Text("Bu ekran önceden alınmış nakit/havale tutarını deftere işler. Online ödeme ayrı sağlayıcı ekranında yapılır.") }
+                stateDescription = when { acknowledgement != null -> "Kaydedildi"; pending -> "Bekleyen işlem"; debt != null -> "Hazır"; else -> "Yükleniyor" }
+            }, state=listState, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                item(key="cash_heading") { Text("Tahsilat kaydı", style = MaterialTheme.typography.titleLarge) }
+                item(key="cash_instructions") { Text("Bu ekran önceden alınmış nakit/havale tutarını deftere işler. Online ödeme ayrı sağlayıcı ekranında yapılır.") }
                 if (!canCollect) item { Text("Tahsilat kaydı yetkiniz yok; bu ekran salt okunur.") }
                 if (busy) item { Text("Sunucu yanıtı bekleniyor…") }
                 error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
                 if (debt == null) item {
                     Button(onClick = { revision++ }, enabled = !busy, modifier = Modifier.heightIn(min = 48.dp)) { Text("Yeniden yükle") }
                 }
-                if (ack == null && debt != null) {
+                if (acknowledgement == null && debt != null) {
                     item { Text("Sunucudaki kalan borç: ${currency.format(debt!!.remaining)}") }
                     if (pending) item { Text("Sonucu belirsiz istek korunuyor. Aynı tutar/yöntem/kimlik ile doğrulayın; yeni tahsilat oluşturulmaz.") }
                     item { OutlinedTextField(amount, { amount = it }, enabled = canCollect && !busy && !pending,
@@ -89,12 +94,12 @@ fun NativeCashCollectionDialog(debtId: String, actorId: String, onDismiss: () ->
                     item { TextButton(onClick = { online = true }, enabled = canCollect && !busy && !pending,
                         modifier = Modifier.heightIn(min = 48.dp)) { Text("Güvenli online ödeme") } }
                 }
-                ack?.let { result ->
-                    item { Text("Sunucu tahsilatı kaydetti. Makbuz: ${result.receiptNumber}") }
-                    item { Text("Sunucunun bildirdiği öğrenci toplam kalan borcu: ${currency.format(result.remainingStudentDebt)}") }
-                    item { Button(onClick = { session!!.finish(); onRecorded() }, modifier = Modifier.heightIn(min = 48.dp).testTag("cash_done")) { Text("Tamam") } }
+                acknowledgement?.let { result ->
+                    item(key="cash_receipt") { Text("Sunucu tahsilatı kaydetti. Makbuz: ${result.receiptNumber}") }
+                    item(key="cash_remaining") { Text("Sunucunun bildirdiği öğrenci toplam kalan borcu: ${currency.format(result.remainingStudentDebt)}") }
+                    item(key="cash_done") { Button(onClick = { session!!.finish(); onRecorded() }, modifier = Modifier.heightIn(min = 48.dp).testTag("cash_done")) { Text("Tamam") } }
                 }
-                if (ack == null) item { TextButton(onClick = onDismiss, enabled = !busy, modifier = Modifier.heightIn(min = 48.dp)) { Text("Kapat") } }
+                if (acknowledgement == null) item { TextButton(onClick = onDismiss, enabled = !busy, modifier = Modifier.heightIn(min = 48.dp)) { Text("Kapat") } }
             }
         }
     }
