@@ -58,6 +58,7 @@ private fun ParentManagementContent(state: Okul360UiState) {
     LaunchedEffect(revision) { run { rows = it.list(query) } }
     if (!captured.current()) return
     if (!NativeNavigationPolicy.has(state.currentUser, "parents.read")) { Text("Veli listesini görme yetkiniz yok."); return }
+    val shownRows = rows
     LazyColumn(Modifier.fillMaxSize().testTag("parent_management"), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { Text("Veliler", style = MaterialTheme.typography.titleLarge) }
         item { OutlinedTextField(query, { query = it }, label = { Text("Ad, soyad veya telefon ara") }, modifier = Modifier.fillMaxWidth().testTag("parents_search")) }
@@ -66,8 +67,8 @@ private fun ParentManagementContent(state: Okul360UiState) {
         item { if (uncertain) Text("Oluşturma sonucu belirsiz. Yeni kayıt açmadan önce listeyi yenileyip kaydı kontrol edin.") }
         item { Button(enabled = canWrite && !busy && !uncertain, onClick = { editing = null; form = true }, modifier = Modifier.heightIn(min = 48.dp).testTag("parent_new")) { Text("Veli ekle") } }
         if (busy) item { CircularProgressIndicator() }
-        if (!busy && rows.isEmpty() && error.isBlank()) item { Text("Veli kaydı bulunamadı.") }
-        items(rows, key = { it.id }) { parent ->
+        if (!busy && shownRows.isEmpty() && error.isBlank()) item { Text("Veli kaydı bulunamadı.") }
+        items(shownRows, key = { it.id }) { parent ->
             OutlinedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(parent.name, style = MaterialTheme.typography.titleMedium)
                 Text(listOf(parent.value("relation_type"), parent.value("phone"), parent.value("email")).filter { it.isNotBlank() }.joinToString(" · "))
@@ -84,7 +85,7 @@ private fun ParentManagementContent(state: Okul360UiState) {
             catch (failure: Exception) { if (editing == null && failure !is IllegalArgumentException && (failure as? RegistryHttpException)?.code != 422) uncertain = true; throw failure }
         }
     }, canSave = canWrite && !(editing == null && uncertain))
-    deleting?.let { parent -> AlertDialog(onDismissRequest = { if (!busy) deleting = null }, title = { Text("Veliyi sil") }, text = { Text("${parent.name} kaydı pasife alınacak. ${error}") },
+    deleting?.let { parent -> AlertDialog(onDismissRequest = { if (!busy) deleting = null }, title = { Text("Veliyi sil") }, text = { Text("${parent.name} veli kaydı silinecek. Bu işlem geri alınamaz. ${error}") },
         confirmButton = { TextButton(enabled = !busy && canWrite, onClick = { run { it.delete(parent.id); deleting = null; revision++ } }) { Text("Sil") } },
         dismissButton = { TextButton(enabled = !busy, onClick = { deleting = null }) { Text("Vazgeç") } }) }
     linking?.let { parent -> ParentLinksDialog(parent, client.getOrThrow(), canAccounts, canStudents,
@@ -128,6 +129,10 @@ private fun ParentLinksDialog(parent: NativeParent, client: NativeParentClient, 
         coroutine.launch { try { action() } catch (cancelled: CancellationException) { throw cancelled } catch (failure: Exception) { if (client.current()) error = failure.message ?: "Bağlantı doğrulanamadı" } finally { if (client.current()) busy = false } }
     }
     LaunchedEffect(parent.id) { run { if (canAccounts) accounts = client.accounts(parent.id); if (canStudents) students = NativeRegistryClient().students(null, null, null) } }
+    val shownAccounts = accounts
+    val shownStudents = students
+    val selectedStudent = selected
+    val isLinked = linked
     if (!client.current()) return
     Dialog(onDismissRequest = { if (!busy) onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.padding(12.dp).widthIn(max = 600.dp).fillMaxWidth().heightIn(max = (LocalConfiguration.current.screenHeightDp * .9f).dp).imePadding()) {
@@ -136,15 +141,15 @@ private fun ParentLinksDialog(parent: NativeParent, client: NativeParentClient, 
                 item { if (error.isNotBlank()) Text(error); if (info.isNotBlank()) Text(info) }
                 if (canAccounts) {
                     item { Text("Uygun veli giriş hesapları") }
-                    items(accounts, key = { "account_${it.id}" }) { account -> TextButton(enabled = !busy, onClick = { run { client.linkAccount(parent.id, account.id); info = "Giriş hesabı sunucuda bağlandı" } }) { Text(account.name) } }
+                    items(shownAccounts, key = { "account_${it.id}" }) { account -> TextButton(enabled = !busy, onClick = { run { client.linkAccount(parent.id, account.id); info = "Giriş hesabı sunucuda bağlandı" } }) { Text(account.name) } }
                     item { TextButton(enabled = !busy, onClick = { run { client.linkAccount(parent.id, null); info = "Giriş hesabı bağlantısı kaldırıldı" } }) { Text("Giriş hesabı bağlantısını kaldır") } }
                 }
                 if (canStudents) {
                     item { Text("Öğrenci seçin") }
-                    items(students, key = { "student_${it.id}" }) { student -> TextButton(enabled = !busy, onClick = { run { selected = student; linked = parent.id in client.studentParents(student.id) } }) { Text(student.full_name) } }
-                    selected?.let { student ->
+                    items(shownStudents, key = { "student_${it.id}" }) { student -> TextButton(enabled = !busy, onClick = { run { selected = student; linked = parent.id in client.studentParents(student.id) } }) { Text(student.full_name) } }
+                    selectedStudent?.let { student ->
                         item { Text("${student.full_name}: ${if (linked) "Bağlı" else "Bağlı değil"}") }
-                        if (!linked) {
+                        if (!isLinked) {
                             item { Row { Checkbox(primary, { primary = it }); Text("Birincil veli") } }
                             item { Row { Checkbox(emergency, { emergency = it }); Text("Acil durumda aranacak") } }
                         }

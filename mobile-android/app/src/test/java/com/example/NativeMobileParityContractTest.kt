@@ -61,6 +61,12 @@ class NativeMobileParityContractTest {
             try { api.save(JSONObject().put("user_id", id(1)), updated); fail("Account bypass") } catch (_: IllegalArgumentException) { }
             contact.put("first_name", "Concurrent")
             try { api.save(JSONObject().put("first_name", "Stale"), updated); fail("Stale overwrite") } catch (_: IllegalStateException) { }
+            val created = api.save(JSONObject().put("first_name", "Created").put("last_name", "Contact"))
+            assertEquals("Created", created.value("first_name"))
+            assertEquals(id(500), writes.last().second.getString("organization_id"))
+            assertEquals(setOf("first_name", "last_name", "organization_id"), writes.last().second.keys().asSequence().toSet())
+            try { api.save(JSONObject().put("first_name", "X").put("last_name", "Contact")); fail("Short first name") } catch (_: IllegalArgumentException) { }
+            try { api.save(JSONObject().put("organization_id", id(501))); fail("Editable organization") } catch (_: IllegalArgumentException) { }
         }
     }
     @Test fun foreignContactOrStaleSessionCannotSupplyAnotherWorkspacesRows() = runBlocking {
@@ -98,4 +104,37 @@ class NativeMobileParityContractTest {
             assertFalse(SessionRolePolicy.canSelect(user, UserRole.ADMIN)); assertFalse(SessionRolePolicy.canSelect(user, UserRole.SUPERADMIN))
         }
     }
+    @Test fun parentRequestsWhitelistPayloadAndValidateStudentAcknowledgement() = runBlocking {
+        val writes = mutableListOf<JSONObject>(); var wrong = false
+        server({ e ->
+            writes.add(JSONObject(e.requestBody.readBytes().toString(Charsets.UTF_8)))
+            JSONObject().put("id", id(600)).put("student_id", id(if (wrong) 8 else 7)).put("status", "PENDING")
+        }) {
+            val api = NativeParentPortalClient()
+            val body = JSONObject().put("medicine_name", "Synthetic request").put("dosage", "Recorded dose").put("time_to_give", "10:00")
+            try { api.submit(id(7), "MEDICINE", JSONObject(body.toString()).put("given_by", id(1))); fail("Unsupported medical write") } catch (_: IllegalArgumentException) { }
+            assertEquals(0, writes.size)
+            val ack = api.submit(id(7), "MEDICINE", body); assertEquals("PENDING", ack.getString("status"))
+            assertEquals(setOf("medicine_name", "dosage", "time_to_give"), writes.single().keys().asSequence().toSet())
+            wrong = true
+            try { api.submit(id(7), "MEDICINE", body); fail("Wrong child request ACK") } catch (_: IllegalStateException) { }
+            val before = writes.size; ApiClientProvider.interceptor.invalidateContext()
+            try { api.submit(id(7), "MEDICINE", body); fail("Stale request") } catch (_: kotlinx.coroutines.CancellationException) { }
+            assertEquals(before, writes.size)
+        }
+    }
+
+    @Test fun parentMessageAcknowledgementMustMatchActorRecipientAndContent() = runBlocking {
+        var wrong = false
+        server({ e ->
+            val content = JSONObject(e.requestBody.readBytes().toString(Charsets.UTF_8)).getString("message")
+            JSONObject().put("id", id(900)).put("sender_id", id(if (wrong) 3 else 1)).put("receiver_id", id(2)).put("content", content)
+        }) {
+            val api = NativeParentPortalClient()
+            assertEquals(id(900), api.sendChat(id(7), id(2), "Synthetic message", id(1)).getString("id"))
+            wrong = true
+            try { api.sendChat(id(7), id(2), "Synthetic message", id(1)); fail("Wrong sender ACK") } catch (_: IllegalStateException) { }
+        }
+    }
+
 }

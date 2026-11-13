@@ -55,7 +55,7 @@ class NativeParentClient(private val organization: String) {
             val value = result.getString(key).trim()
             result.put(key, if (value.isEmpty() && key !in listOf("first_name", "last_name", "relation_type")) JSONObject.NULL else value)
         }
-        for (key in listOf("first_name", "last_name")) if (result.has(key)) require(result.getString(key).length in 1..100) { "Ad ve soyad gerekli" }
+        for (key in listOf("first_name", "last_name")) if (result.has(key)) require(result.getString(key).length in 2..100) { "Ad ve soyad gerekli" }
         if (result.has("relation_type")) require(result.getString("relation_type") in setOf("MOTHER", "FATHER", "GUARDIAN", "OTHER"))
         return result
     }
@@ -63,7 +63,7 @@ class NativeParentClient(private val organization: String) {
         val body = write(input)
         val result = if (original == null) {
             require(body.has("first_name") && body.has("last_name"))
-            parent(call("parents", "POST", body) as JSONObject)
+            parent(call("parents", "POST", body.put("organization_id", organization)) as JSONObject)
         } else {
             val fresh = get(original.id)
             val old = JSONObject(original.fields); val actual = JSONObject(fresh.fields)
