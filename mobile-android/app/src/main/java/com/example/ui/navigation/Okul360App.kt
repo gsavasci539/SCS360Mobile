@@ -1218,15 +1218,10 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 }
                             )
                             SubScreen.LIBRARY -> NativeLibraryScreen(state, onNavigateBack = { currentSubScreen = SubScreen.NONE })
-                            SubScreen.STAFF -> StaffManagementScreen(
+                            SubScreen.STAFF -> NativeStaffScreen(
                                 state = state,
-                                onNavigateBack = { currentSubScreen = SubScreen.NONE },
-                                onSubmitLeaveRequest = { type, start, end, days, reason ->
-                                    viewModel.submitTeacherLeaveRequest(type, start, end, days, reason)
-                                },
-                                onReviewLeaveRequest = { id, approved, comment ->
-                                    viewModel.reviewTeacherLeaveRequest(id, approved, comment)
-                                }
+                                onNavigateBack = { currentSubScreen = SubScreen.NONE }
+
                             )
                             SubScreen.AI_ANALYTICS -> AiAnalyticsHubScreen(
                                 state = state,

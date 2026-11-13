@@ -3,6 +3,8 @@ package com.example.ui.screens
 import com.example.ui.components.ResponsiveTableScope
 import androidx.compose.animation.*
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -46,11 +48,16 @@ import com.example.ui.viewmodel.Okul360UiState
 fun StaffManagementScreen(
     state: Okul360UiState,
     onNavigateBack: () -> Unit,
+    actionsEnabled: Boolean = false,
+    canReview: Boolean = false,
+    savedRevision: Int = 0,
+    operationError: String = "",
     onSubmitLeaveRequest: (String, String, String, Int, String) -> Unit,
     onReviewLeaveRequest: (String, Boolean, String) -> Unit
 ) {
     var selectedTab by remember { mutableStateOf("DUTY") } // DUTY, LEAVES
     var showNewLeaveDialog by remember { mutableStateOf(false) }
+    LaunchedEffect(savedRevision) { if (savedRevision > 0) showNewLeaveDialog = false }
     val tableModeState = rememberResolvedTableMode()
     val isCardMode = isCompactCardMode(tableModeState.value)
 
@@ -75,7 +82,7 @@ fun StaffManagementScreen(
             )
         },
         floatingActionButton = {
-            if (selectedTab == "LEAVES") {
+            if (selectedTab == "LEAVES" && actionsEnabled) {
                 ExtendedFloatingActionButton(
                     onClick = { showNewLeaveDialog = true },
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
@@ -335,10 +342,10 @@ fun StaffManagementScreen(
     
                                         Text("Tarih: ${req.start_date} -> ${req.end_date} • ${req.reason}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
     
-                                        if (req.status == "PENDING") {
+                                        if (req.status == "PENDING" && actionsEnabled && canReview) {
                                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                                                 FilledTonalButton(
-                                                    onClick = { onReviewLeaveRequest(req.id, true, "Zümre telafisi yapılarak izin onaylanmıştır.") },
+                                                    onClick = { onReviewLeaveRequest(req.id, true, "") },
                                                     colors = ButtonDefaults.filledTonalButtonColors(containerColor = EmeraldPrimary.copy(alpha = 0.2f), contentColor = EmeraldPrimary),
                                                     shape = RoundedCornerShape(8.dp),
                                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
@@ -348,7 +355,7 @@ fun StaffManagementScreen(
                                                 }
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 OutlinedButton(
-                                                    onClick = { onReviewLeaveRequest(req.id, false, "Ders programı yoğunluğu dolayısıyla uygun görülmemiştir.") },
+                                                    onClick = { onReviewLeaveRequest(req.id, false, "") },
                                                     colors = ButtonDefaults.outlinedButtonColors(contentColor = CrimsonPrimary),
                                                     shape = RoundedCornerShape(8.dp),
                                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
@@ -380,20 +387,20 @@ fun StaffManagementScreen(
                                             Surface(shape = RoundedCornerShape(5.dp), color = statusColor.copy(alpha = 0.15f)) {
                                                 Text(statusLabel, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp), fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = statusColor)
                                             }
-                                            if (req.status == "PENDING") {
+                                            if (req.status == "PENDING" && actionsEnabled && canReview) {
                                                 CompactRowActionIcon(
                                                     icon = Icons.Default.Check,
                                                     contentDescription = "Onayla",
                                                     tint = EmeraldPrimary,
                                                     containerColor = EmeraldPrimary.copy(alpha = 0.15f),
-                                                    onClick = { onReviewLeaveRequest(req.id, true, "Zümre telafisi yapılarak izin onaylanmıştır.") }
+                                                    onClick = { onReviewLeaveRequest(req.id, true, "") }
                                                 )
                                                 CompactRowActionIcon(
                                                     icon = Icons.Default.Close,
                                                     contentDescription = "Reddet",
                                                     tint = CrimsonPrimary,
                                                     containerColor = CrimsonPrimary.copy(alpha = 0.15f),
-                                                    onClick = { onReviewLeaveRequest(req.id, false, "Ders programı yoğunluğu dolayısıyla uygun görülmemiştir.") }
+                                                    onClick = { onReviewLeaveRequest(req.id, false, "") }
                                                 )
                                             }
                                         }
@@ -410,16 +417,20 @@ fun StaffManagementScreen(
     // New Leave Request Dialog
     if (showNewLeaveDialog) {
         var leaveType by remember { mutableStateOf("Mazeret İzni") }
-        var startDate by remember { mutableStateOf("2026-09-05") }
-        var endDate by remember { mutableStateOf("2026-09-06") }
-        var totalDaysInput by remember { mutableStateOf("2") }
+        var startDate by remember { mutableStateOf("") }
+        var endDate by remember { mutableStateOf("") }
+        val totalDaysInput = remember(startDate, endDate) { runCatching { (java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDate.parse(startDate), java.time.LocalDate.parse(endDate)) + 1).takeIf { it > 0 }?.toString().orEmpty() }.getOrDefault("") }
         var reason by remember { mutableStateOf("") }
 
-        AlertDialog(
+        androidx.compose.ui.window.Dialog(
             onDismissRequest = { showNewLeaveDialog = false },
-            title = { Text("Yeni İzin / Mazeret Talebi") },
-            text = {
-                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(Modifier.fillMaxWidth().padding(12.dp).heightIn(max = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp * 0.9f), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.imePadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Yeni İzin / Mazeret Talebi", style = MaterialTheme.typography.titleMedium)
+                Column(modifier = Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (operationError.isNotBlank()) Text(operationError, color = MaterialTheme.colorScheme.error)
                     Text("İzin Türü:", fontSize = 12.sp, fontWeight = FontWeight.Medium)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(listOf("Mazeret İzni", "Sevk / Sağlık", "İdari İzin", "Yıllık İzin")) { type ->
@@ -448,7 +459,8 @@ fun StaffManagementScreen(
 
                     OutlinedTextField(
                         value = totalDaysInput,
-                        onValueChange = { totalDaysInput = it.filter { ch -> ch.isDigit() } },
+                        onValueChange = {},
+                        readOnly = true,
                         label = { Text("Toplam Gün Sayısı") },
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -461,23 +473,22 @@ fun StaffManagementScreen(
                         minLines = 2
                     )
                 }
-            },
-            confirmButton = {
+
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { showNewLeaveDialog = false }) { Text("İptal") }
                 Button(
+                    enabled = actionsEnabled && reason.isNotBlank() && startDate.isNotBlank() && endDate.isNotBlank() && totalDaysInput.isNotBlank(),
                     onClick = {
                         val days = totalDaysInput.toIntOrNull() ?: 1
-                        onSubmitLeaveRequest(leaveType, startDate, endDate, days, reason.ifBlank { "Mazeret izni talebi" })
-                        showNewLeaveDialog = false
+                        onSubmitLeaveRequest(leaveType, startDate, endDate, days, reason)
                     }
                 ) {
                     Text("Talebi İlet")
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNewLeaveDialog = false }) {
-                    Text("İptal")
+
+                    }
                 }
             }
-        )
+        }
     }
 }

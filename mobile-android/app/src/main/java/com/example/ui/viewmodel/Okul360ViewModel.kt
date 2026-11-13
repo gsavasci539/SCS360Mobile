@@ -2616,55 +2616,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     // ==========================================
     // 6. Staff Duty & Leave Requests Management
     // ==========================================
-    fun submitTeacherLeaveRequest(leaveType: String, startDate: String, endDate: String, totalDays: Int, reason: String) {
-        val now = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-        val newLeave = TeacherLeaveRequest(
-            id = "leave-${System.currentTimeMillis()}",
-            teacher_id = _uiState.value.currentUser.id,
-            teacher_name = _uiState.value.currentUser.full_name,
-            branch = "Matematik",
-            leave_type = leaveType,
-            start_date = startDate,
-            end_date = endDate,
-            total_days = totalDays,
-            reason = reason,
-            status = "PENDING",
-            admin_response = null,
-            created_at = now
-        )
-
-        _uiState.update { current ->
-            current.copy(
-                leaveRequests = listOf(newLeave) + current.leaveRequests,
-                toastMessage = "$totalDays günlük $leaveType talebiniz idareye iletildi."
-            )
-        }
-
-        NotificationHelper.showPushNotification(
-            context = getApplication(),
-            title = "📋 İzin Talebi Alındı",
-            message = "$startDate - $endDate tarihleri arasındaki $leaveType talebiniz okul yönetimine iletildi.",
-            channelId = NotificationHelper.CHANNEL_MESSAGES
-        )
-    }
-
-    fun reviewTeacherLeaveRequest(leaveId: String, isApproved: Boolean, adminComment: String) {
-        _uiState.update { current ->
-            val updated = current.leaveRequests.map { req ->
-                if (req.id == leaveId) {
-                    req.copy(
-                        status = if (isApproved) "APPROVED" else "REJECTED",
-                        admin_response = adminComment
-                    )
-                } else req
-            }
-            current.copy(
-                leaveRequests = updated,
-                toastMessage = if (isApproved) "İzin talebi onaylandı." else "İzin talebi reddedildi."
-            )
-        }
-    }
-
     // ==========================================
     // 7. Yapay Zeka (AI / Gemini) Motoru Fonksiyonları
     // ==========================================

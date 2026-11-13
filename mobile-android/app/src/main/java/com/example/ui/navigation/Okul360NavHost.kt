@@ -368,15 +368,10 @@ fun Okul360NavHost(
 
         // 19. Staff Management & Duty Roster Destination
         composable(Screen.StaffManagement.route) {
-            StaffManagementScreen(
+            NativeStaffScreen(
                 state = state,
-                onNavigateBack = { navController.popBackStack() },
-                onSubmitLeaveRequest = { type, start, end, days, reason ->
-                    viewModel.submitTeacherLeaveRequest(type, start, end, days, reason)
-                },
-                onReviewLeaveRequest = { id, approved, comment ->
-                    viewModel.reviewTeacherLeaveRequest(id, approved, comment)
-                }
+                onNavigateBack = { navController.popBackStack() }
+
             )
         }
 
