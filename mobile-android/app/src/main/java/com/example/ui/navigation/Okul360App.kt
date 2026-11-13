@@ -1217,19 +1217,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                     viewModel.gradeHomeworkSubmission(subId, score, feedback)
                                 }
                             )
-                            SubScreen.LIBRARY -> LibraryScreen(
-                                state = state,
-                                onNavigateBack = { currentSubScreen = SubScreen.NONE },
-                                onBorrowBook = { bookId, stdId, stdName, stdNo, clsName, days ->
-                                    viewModel.borrowLibraryBook(bookId, stdId, stdName, stdNo, clsName, days)
-                                },
-                                onReturnBook = { loanId ->
-                                    viewModel.returnLibraryBook(loanId)
-                                },
-                                onSendOverdueReminder = { loanId ->
-                                    viewModel.sendLibraryOverdueReminder(loanId)
-                                }
-                            )
+                            SubScreen.LIBRARY -> NativeLibraryScreen(state, onNavigateBack = { currentSubScreen = SubScreen.NONE })
                             SubScreen.STAFF -> StaffManagementScreen(
                                 state = state,
                                 onNavigateBack = { currentSubScreen = SubScreen.NONE },

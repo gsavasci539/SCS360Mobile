@@ -885,37 +885,43 @@ data class HomeworkSubmission(
 // ==========================================
 @JsonClass(generateAdapter = true)
 data class LibraryBook(
-    val id: String = "book-1",
-    val isbn: String = "978-975-07-1853-2",
-    val title: String = "Küçük Prens",
-    val author: String = "Antoine de Saint-Exupéry",
-    val publisher: String = "Can Çocuk",
-    val category: String = "Dünya Klasikleri",
-    val page_count: Int = 112,
-    val shelf_location: String = "A Blok - Raf 3 / Sıra B",
-    val total_copies: Int = 6,
-    val available_copies: Int = 4,
+    val id: String = "",
+    val isbn: String = "",
+    val title: String = "",
+    val author: String = "",
+    val publisher: String = "",
+    val category: String = "",
+    val page_count: Int = 0,
+    val shelf_location: String = "",
+    val total_copies: Int = 0,
+    val available_copies: Int = 0,
     val cover_color_hex: Long = 0xFF1E40AF
 )
 
 @JsonClass(generateAdapter = true)
 data class BookLoanRecord(
-    val id: String = "loan-1",
-    val book_id: String = "book-1",
-    val book_title: String = "Küçük Prens",
-    val book_author: String = "Antoine de Saint-Exupéry",
-    val student_id: String = "std-1",
-    val student_name: String = "Ali Demir",
-    val student_number: String = "101",
-    val class_name: String = "8-A",
-    val borrowed_at: String = "2026-08-15",
-    val due_date: String = "2026-08-29",
+    val id: String = "",
+    val book_id: String = "",
+    val book_title: String = "",
+    val book_author: String = "",
+    val student_id: String = "",
+    val student_name: String = "",
+    val student_number: String = "",
+    val class_name: String = "",
+    val borrowed_at: String = "",
+    val due_date: String = "",
     val returned_at: String? = null,
     val is_returned: Boolean = false,
     val is_overdue: Boolean = false,
-    val parent_phone: String = "0532 555 1234"
+    val parent_phone: String = ""
 ) {
-    val daysRemainingOrOverdue: String get() = if (is_returned) "İade Edildi" else if (is_overdue) "Gecikti (2 Gün)" else "Kalan: 3 Gün"
+    fun dueLabel(today: java.time.LocalDate): String {
+        if (is_returned) return "İade Edildi"
+        val due = runCatching { java.time.LocalDate.parse(due_date) }.getOrNull() ?: return "Son tarih belirtilmedi"
+        val days = java.time.temporal.ChronoUnit.DAYS.between(today, due)
+        return when { days < 0 -> "Gecikti (${-days} Gün)"; is_overdue -> "Gecikmiş"; days == 0L -> "Bugün teslim"; else -> "Kalan: $days Gün" }
+    }
+    val daysRemainingOrOverdue: String get() = dueLabel(java.time.LocalDate.now(java.time.ZoneId.of("Europe/Istanbul")))
 }
 
 // ==========================================

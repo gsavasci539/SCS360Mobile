@@ -363,19 +363,7 @@ fun Okul360NavHost(
 
         // 18. Library Catalog & Book Loans Destination
         composable(Screen.Library.route) {
-            LibraryScreen(
-                state = state,
-                onNavigateBack = { navController.popBackStack() },
-                onBorrowBook = { bookId, stdId, stdName, stdNo, clsName, days ->
-                    viewModel.borrowLibraryBook(bookId, stdId, stdName, stdNo, clsName, days)
-                },
-                onReturnBook = { loanId ->
-                    viewModel.returnLibraryBook(loanId)
-                },
-                onSendOverdueReminder = { loanId ->
-                    viewModel.sendLibraryOverdueReminder(loanId)
-                }
-            )
+            NativeLibraryScreen(state, onNavigateBack = { navController.popBackStack() })
         }
 
         // 19. Staff Management & Duty Roster Destination

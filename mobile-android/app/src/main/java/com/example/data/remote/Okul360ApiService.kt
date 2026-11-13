@@ -747,26 +747,7 @@ interface Okul360ApiService {
         @Body body: Map<String, Any>
     ): HomeworkSubmission
 
-    // 5. Library Management
-    @GET("library/books")
-    suspend fun getLibraryBooks(
-        @Query("search") search: String? = null,
-        @Query("category") category: String? = null
-    ): List<LibraryBook>
-
-    @POST("library/books")
-    suspend fun createLibraryBook(@Body book: LibraryBook): LibraryBook
-
-    @GET("library/loans")
-    suspend fun getBookLoans(
-        @Query("student_id") studentId: String? = null
-    ): List<BookLoanRecord>
-
-    @POST("library/loans/borrow")
-    suspend fun borrowBook(@Body body: Map<String, String>): BookLoanRecord
-
-    @POST("library/loans/{id}/return")
-    suspend fun returnBookLoan(@Path("id") loanId: String): BookLoanRecord
+    // Library wire operations are scoped and validated by NativeLibraryClient.
 
     // 6. Staff Duty Roster & Leave Requests
     @GET("staff/duty-rosters")
@@ -879,9 +860,6 @@ interface Okul360ApiService {
 
     @GET("bus")
     suspend fun getBuses(): List<BusRoute>
-
-    @GET("library")
-    suspend fun getLibraryItems(): List<LibraryBook>
 
     // --- Ek Modüller (SCS360 Eksiksiz API Seti) ---
     // 1. Veli İzin & Muvafakatnameler (Consents)
@@ -1321,23 +1299,7 @@ interface Okul360ApiService {
     @POST("messages")
     suspend fun sendDirectMessage(@Body body: Map<String, @JvmSuppressWildcards Any>): Map<String, Any>
 
-    // 33. Kütüphane & Ödünç Takibi (/api/library)
-    @POST("library")
-    suspend fun createLibraryItem(@Body body: Map<String, @JvmSuppressWildcards Any>): Map<String, Any>
-
-    @GET("library/{library_id}")
-    suspend fun getLibraryDetail(@Path("library_id") libraryId: String): Map<String, Any>
-
-    @PUT("library/{library_id}")
-    suspend fun updateLibraryItem(@Path("library_id") libraryId: String, @Body body: Map<String, @JvmSuppressWildcards Any>): Map<String, Any>
-
-    @PUT("library/loans/{loan_id}/return")
-    suspend fun returnLibraryBookLoan(@Path("loan_id") loanId: String): Map<String, Any>
-
-    @POST("library/loans/{loan_id}/remind")
-    suspend fun remindLibraryBookLoan(@Path("loan_id") loanId: String): Map<String, Any>
-
-    // 34. Haftalık Ders Programı (/api/timetable & /api/classes/{id}/schedule)
+    // 34. Ders Programı
     @GET("timetable/{class_id}")
     suspend fun getTimetableForClassId(@Path("class_id") classId: String): List<Map<String, Any>>
 

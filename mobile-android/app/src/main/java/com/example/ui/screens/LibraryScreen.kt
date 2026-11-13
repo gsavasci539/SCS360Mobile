@@ -31,7 +31,6 @@ import com.example.data.model.LibraryBook
 import com.example.ui.components.CompactResponsiveCard
 import com.example.ui.components.CompactRowActionIcon
 import com.example.ui.components.CompactTableRow
-import com.example.ui.components.RoleContextualAiCard
 import com.example.ui.components.StickyTableHeaderRow
 import com.example.ui.components.TableColumnSpec
 import com.example.ui.components.isCompactCardMode
@@ -44,13 +43,13 @@ import com.example.ui.viewmodel.Okul360UiState
 fun LibraryScreen(
     state: Okul360UiState,
     onNavigateBack: () -> Unit,
-    onBorrowBook: (String, String, String, String, String, Int) -> Unit,
+    onBorrowBook: (LibraryBook) -> Unit,
     onReturnBook: (String) -> Unit,
-    onSendOverdueReminder: (String) -> Unit
+    canWrite: Boolean,
+    onCreateBook: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf("CATALOG") } // CATALOG, LOANS
     var searchQuery by remember { mutableStateOf("") }
-    var showBorrowDialogForBook by remember { mutableStateOf<LibraryBook?>(null) }
     val tableModeState = rememberResolvedTableMode()
     val isCardMode = isCompactCardMode(tableModeState.value)
 
@@ -68,11 +67,11 @@ fun LibraryScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Kütüphane & Kitap Takibi", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text("Kütüphane & Kitap Takibi", fontWeight = FontWeight.Bold, fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(
                             "Katalog • Ödünç & İade Yönetimi",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis
                         )
                     }
                 },
@@ -80,6 +79,9 @@ fun LibraryScreen(
                     IconButton(onClick = onNavigateBack, modifier = Modifier.testTag("library_back_btn")) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
                     }
+                },
+                actions = {
+                    if (canWrite) IconButton(onClick = onCreateBook, modifier = Modifier.testTag("library_new_book")) { Icon(Icons.Default.Add, contentDescription = "Yeni kitap") }
                 }
             )
         }
@@ -135,13 +137,6 @@ fun LibraryScreen(
                         contentPadding = PaddingValues(top = 4.dp, bottom = 40.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        item {
-                            RoleContextualAiCard(
-                                screenName = "LIBRARY",
-                                state = state,
-                                modifier = Modifier.padding(horizontal = 12.dp)
-                            )
-                        }
     
                         if (filteredBooks.isEmpty()) {
                             item {
@@ -228,10 +223,10 @@ fun LibraryScreen(
                                                     )
                                                 }
                                                 Button(
-                                                    onClick = { showBorrowDialogForBook = book },
-                                                    enabled = book.available_copies > 0,
+                                                    onClick = { onBorrowBook(book) },
+                                                    enabled = canWrite && book.available_copies > 0,
                                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                                                    modifier = Modifier.height(30.dp),
+                                                    modifier = Modifier.heightIn(min = 48.dp).testTag("library_borrow_${book.id}"),
                                                     shape = RoundedCornerShape(8.dp)
                                                 ) {
                                                     Text("Ödünç Ver", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
@@ -264,10 +259,10 @@ fun LibraryScreen(
                                                 color = if (book.available_copies > 0) EmeraldPrimary else CrimsonPrimary
                                             )
                                             Button(
-                                                onClick = { showBorrowDialogForBook = book },
-                                                enabled = book.available_copies > 0,
+                                                onClick = { onBorrowBook(book) },
+                                                enabled = canWrite && book.available_copies > 0,
                                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                                modifier = Modifier.height(28.dp),
+                                                modifier = Modifier.heightIn(min = 48.dp).testTag("library_borrow_${book.id}"),
                                                 shape = RoundedCornerShape(6.dp)
                                             ) {
                                                 Text("Zimmet", fontSize = 10.sp, fontWeight = FontWeight.Bold)
@@ -371,21 +366,13 @@ fun LibraryScreen(
     
                                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                                                 if (!loan.is_returned) {
-                                                    if (loan.is_overdue) {
-                                                        CompactRowActionIcon(
-                                                            icon = Icons.Default.NotificationsActive,
-                                                            contentDescription = "Veliye Hatırlat",
-                                                            tint = CrimsonPrimary,
-                                                            containerColor = CrimsonPrimary.copy(alpha = 0.14f),
-                                                            onClick = { onSendOverdueReminder(loan.id) }
-                                                        )
-                                                    }
     
                                                     Button(
                                                         onClick = { onReturnBook(loan.id) },
+                                                        enabled = canWrite,
                                                         shape = RoundedCornerShape(8.dp),
                                                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                                                        modifier = Modifier.height(30.dp)
+                                                        modifier = Modifier.heightIn(min = 48.dp).testTag("library_return_${loan.id}")
                                                     ) {
                                                         Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
                                                         Spacer(modifier = Modifier.width(3.dp))
@@ -427,7 +414,8 @@ fun LibraryScreen(
                                                     contentDescription = "İade Al",
                                                     tint = EmeraldPrimary,
                                                     containerColor = EmeraldPrimary.copy(alpha = 0.15f),
-                                                    onClick = { onReturnBook(loan.id) }
+                                                    onClick = { onReturnBook(loan.id) },
+                                                    enabled = canWrite
                                                 )
                                             }
                                         }
@@ -441,56 +429,4 @@ fun LibraryScreen(
         }
     }
 
-    // Borrow Dialog
-    showBorrowDialogForBook?.let { book ->
-        var studentName by remember { mutableStateOf(state.students.firstOrNull()?.let { "${it.first_name} ${it.last_name}" } ?: "") }
-        var studentNo by remember { mutableStateOf(state.students.firstOrNull()?.student_number ?: "") }
-        var className by remember { mutableStateOf(state.students.firstOrNull()?.class_name ?: "") }
-
-        AlertDialog(
-            onDismissRequest = { showBorrowDialogForBook = null },
-            title = { Text("Kitap Zimmetle / Ödünç Ver") },
-            text = {
-                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Kitap: ${book.title} (${book.author})", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
-                    OutlinedTextField(
-                        value = studentName,
-                        onValueChange = { studentName = it },
-                        label = { Text("Öğrenci Ad Soyad") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = studentNo,
-                            onValueChange = { studentNo = it },
-                            label = { Text("Öğrenci No") },
-                            modifier = Modifier.weight(1f)
-                        )
-                        OutlinedTextField(
-                            value = className,
-                            onValueChange = { className = it },
-                            label = { Text("Sınıf") },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Text("Ödünç Süresi: 14 Gün (2 Hafta)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onBorrowBook(book.id, "std-1", studentName, studentNo, className, 14)
-                        showBorrowDialogForBook = null
-                    }
-                ) {
-                    Text("Zimmetle")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showBorrowDialogForBook = null }) {
-                    Text("İptal")
-                }
-            }
-        )
-    }
 }
