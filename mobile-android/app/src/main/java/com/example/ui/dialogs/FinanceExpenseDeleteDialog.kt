@@ -2,6 +2,7 @@ package com.example.ui.dialogs
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -32,11 +33,13 @@ fun FinanceExpenseDeleteDialog(expense: Expense, state: Okul360UiState, onDismis
     var error by remember { mutableStateOf<String?>(null) }
     val canWrite="finance.write" in state.currentUser.permissions || (state.currentUser.is_super_admin==true && !state.workspaceOrganizationId.isNullOrBlank())
     if(!requestScope.current()) { LaunchedEffect(requestScope) { onDismiss() }; return }
+    val confirmation=acknowledged
+    val listState=key(confirmation) { rememberLazyListState() }
     val dismiss={ if(!busy) { if(acknowledged) onRecorded() else onDismiss() } }
     Dialog(onDismissRequest=dismiss,properties=DialogProperties(usePlatformDefaultWidth=false)) {
         Surface(Modifier.padding(12.dp).widthIn(max=600.dp).fillMaxWidth()
             .heightIn(max=(LocalConfiguration.current.screenHeightDp*.9f).dp).imePadding(),shape=MaterialTheme.shapes.large) {
-            LazyColumn(Modifier.padding(16.dp).testTag("expense_delete_list"),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            LazyColumn(Modifier.padding(16.dp).testTag("expense_delete_list"),state=listState,verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 item { Text("Gider kaydını sil",style=MaterialTheme.typography.titleLarge) }
                 item { Text(expense.title,modifier=Modifier.testTag("expense_delete_title")) }
                 item { Text("${expense.category} • ${expense.date}") }
@@ -50,9 +53,9 @@ fun FinanceExpenseDeleteDialog(expense: Expense, state: Okul360UiState, onDismis
                     item { TextButton(enabled=!busy,onClick={ if(requestScope.current()) onCheck() else onDismiss() },
                         modifier=Modifier.heightIn(min=48.dp).testTag("expense_delete_check")) { Text("Listeyi yeniden oku") } }
                 }
-                if(acknowledged) {
-                    item { Text("Gider kaydının silindiği sunucuda doğrulandı.",modifier=Modifier.testTag("expense_delete_ack")) }
-                    item { Button(onClick=onRecorded,modifier=Modifier.heightIn(min=48.dp).testTag("expense_delete_done")) { Text("Tamam") } }
+                if(confirmation) {
+                    item(key="expense_delete_ack") { Text("Gider kaydının silindiği sunucuda doğrulandı.",modifier=Modifier.testTag("expense_delete_ack")) }
+                    item(key="expense_delete_done") { Button(onClick=onRecorded,modifier=Modifier.heightIn(min=48.dp).testTag("expense_delete_done")) { Text("Tamam") } }
                 } else item { Button(enabled=canWrite && !busy,onClick={
                     if(busy || acknowledged || !canWrite) return@Button
                     busy=true; error=null
