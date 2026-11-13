@@ -32,6 +32,7 @@ fun FinanceExpenseCreateDialog(state: Okul360UiState, onDismiss: () -> Unit, onR
     var branch by remember { mutableStateOf(session?.selectedBranch) }
     var title by remember { mutableStateOf("") }; var category by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }; var date by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }; var ready by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf(false) }; var ack by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }; var revision by remember { mutableIntStateOf(0) }
@@ -43,7 +44,7 @@ fun FinanceExpenseCreateDialog(state: Okul360UiState, onDismiss: () -> Unit, onR
         catch(cancelled:CancellationException) { throw cancelled }
         catch(_:Exception) { error="Yetkili gider kapsamları yüklenemedi. Yeniden deneyin." }
         finally {
-            session?.pendingDraft()?.let { draft -> chosen=true; branch=draft.branchId; title=draft.title; category=draft.category; amount=draft.amount; date=draft.date }
+            session?.pendingDraft()?.let { draft -> chosen=true; branch=draft.branchId; title=draft.title; category=draft.category; amount=draft.amount; date=draft.date; notes=draft.notes.orEmpty() }
             pending=session?.hasPending==true; busy=false
         }
     }
@@ -67,6 +68,7 @@ fun FinanceExpenseCreateDialog(state: Okul360UiState, onDismiss: () -> Unit, onR
                 item { OutlinedTextField(category,{ category=it; error=null },readOnly=readonly,label={ Text("Kategori") },modifier=Modifier.fillMaxWidth().testTag("expense_category")) }
                 item { OutlinedTextField(amount,{ amount=it; error=null },readOnly=readonly,label={ Text("Tutar (₺)") },keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),modifier=Modifier.fillMaxWidth().testTag("expense_amount")) }
                 item { OutlinedTextField(date,{ date=it; error=null },readOnly=readonly,label={ Text("Tarih (YYYY-AA-GG)") },modifier=Modifier.fillMaxWidth().testTag("expense_date")) }
+                item { OutlinedTextField(notes,{ notes=it; error=null },readOnly=readonly,label={ Text("Not / belge referansı (metin)") },modifier=Modifier.fillMaxWidth().testTag("expense_notes")) }
                 error?.let { message -> item { Text(message,color=MaterialTheme.colorScheme.error,modifier=Modifier.testTag("expense_error")) } }
                 if(ack!=null) {
                     item { Text("Gider kaydı doğrulandı: $ack",modifier=Modifier.testTag("expense_ack")) }
@@ -77,7 +79,8 @@ fun FinanceExpenseCreateDialog(state: Okul360UiState, onDismiss: () -> Unit, onR
                         if(busy || ack!=null || session==null) return@Button
                         val valid=chosen && title.isNotBlank() && category.isNotBlank() && runCatching { NativeExpenseClient.money(amount); LocalDate.parse(date) }.isSuccess
                         if(!valid) { error="Kapsam, açıklama, kategori, kuruşlu tutar ve tarih girin."; return@Button }
-                        val draft=ExpenseDraft(branch,title,category,amount,date); busy=true; error=null
+                        if(notes.trim().length>2000) { error="Not en fazla 2000 karakter olabilir."; return@Button }
+                        val draft=ExpenseDraft(branch,title,category,amount,date,notes); busy=true; error=null
                         coroutine.launch {
                             try { ack=session.create(draft).id }
                             catch(cancelled:CancellationException) { throw cancelled }

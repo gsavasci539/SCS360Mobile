@@ -270,7 +270,8 @@ data class Expense(
     val date: String = "",
     val receipt_url: String? = null,
     val created_by: String = "",
-    val notes: String? = null
+    val notes: String? = null,
+    val status: String? = null
 )
 
 @JsonClass(generateAdapter = true)

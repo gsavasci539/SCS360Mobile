@@ -686,6 +686,7 @@ private fun FinanceExpensesTab(state: Okul360UiState, currencyFormatter: NumberF
                     Text("${expense.category} • ${expense.date}")
                     Text(currencyFormatter.format(expense.amount),fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.error)
                     expense.notes?.takeIf { it.isNotBlank() }?.let { Text(it) }
+                    com.example.ui.components.expenseStatusLabel(expense.status)?.let { Text("Kaydın durumu: $it") }
                     if(canWrite) TextButton(onClick={ onEdit(expense) },modifier=Modifier.heightIn(min=48.dp).testTag("finance_edit_expense_${expense.id}")) { Text("Gideri düzenle") }
                     if(canWrite) TextButton(onClick={ onDelete(expense) },modifier=Modifier.heightIn(min=48.dp).testTag("finance_delete_expense_${expense.id}")) { Text("Gideri sil") }
                 }

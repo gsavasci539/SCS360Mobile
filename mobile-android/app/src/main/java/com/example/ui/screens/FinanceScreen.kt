@@ -828,6 +828,7 @@ fun FinanceScreen(
                                         Text(expense.category, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = categoryColor, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                                     }
                                     Text(expense.date, fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    com.example.ui.components.expenseStatusLabel(expense.status)?.let { Text("Kaydın durumu: $it",fontSize=10.5.sp) }
                                 }
                                 Column(modifier = Modifier.weight(1.6f).padding(end = 6.dp)) {
                                     Text(expense.title, fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = BrandNavy, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -921,10 +922,7 @@ fun FinanceScreen(
             initialAmount = inv.amount,
             paymentDescription = "${inv.class_name} - ${inv.invoice_number} nolu fatura tahsilatı",
             onDismiss = { invoiceForIyzicoPayment = null },
-            onPaymentSuccess = { _: IyzicoPaymentResult, _: String ->
-                onPayWithIyzico(inv.id, inv.amount, "4355-****-****-0001", inv.student_name)
-                invoiceForIyzicoPayment = null
-            }
+            onPaymentSuccess = { _, _ -> } // Hosted checkout owns server verification; no second manual payment.
         )
     }
 
@@ -1199,6 +1197,7 @@ fun ExpenseCardItem(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    com.example.ui.components.expenseStatusLabel(expense.status)?.let { Text("Kaydın durumu: $it",fontSize=11.sp) }
                 }
             }
 

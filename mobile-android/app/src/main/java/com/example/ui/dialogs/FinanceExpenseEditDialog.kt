@@ -26,12 +26,12 @@ fun FinanceExpenseEditDialog(expenseId:String,state:Okul360UiState,onDismiss:()-
     val coroutine=rememberCoroutineScope(); var revision by remember { mutableIntStateOf(0) }
     var draft by remember { mutableStateOf<ExpenseEditDraft?>(null) }; var busy by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf(false) }; var acknowledged by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }; var status by remember { mutableStateOf<String?>(null) }
     val canWrite="finance.write" in state.currentUser.permissions || (state.currentUser.is_super_admin==true && !state.workspaceOrganizationId.isNullOrBlank())
     LaunchedEffect(session,revision) {
         busy=true; error=null; draft=null
         try {
-            draft=checkNotNull(session).load().draft(); pending=false; acknowledged=false
+            val loaded=checkNotNull(session).load(); draft=loaded.draft(); status=loaded.expense.status; pending=false; acknowledged=false
             if(revision>0) onRefresh()
         }
         catch(cancelled:CancellationException) { throw cancelled }
@@ -46,6 +46,7 @@ fun FinanceExpenseEditDialog(expenseId:String,state:Okul360UiState,onDismiss:()-
             LazyColumn(Modifier.padding(16.dp).testTag("expense_edit_list"),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 item { Text("Gideri düzenle",style=MaterialTheme.typography.titleLarge) }
                 item { Text("Kayıt kimliği: $expenseId") }
+                com.example.ui.components.expenseStatusLabel(status)?.let { value -> item { Text("Kaydın durumu: $value") } }
                 if(!canWrite) item { Text("Düzenleme yetkiniz yok; kayıt salt okunur.") }
                 if(busy) item { Text("Sunucu yanıtı bekleniyor…") }
                 if(pending) item { Text("Önceki değişikliğin sonucu bekleniyor. Aynı taslağı doğrulayın veya sunucudan yeniden okuyun.") }
@@ -65,7 +66,7 @@ fun FinanceExpenseEditDialog(expenseId:String,state:Okul360UiState,onDismiss:()-
                         if(busy || acknowledged || !canWrite || session==null) return@Button
                         val value=draft ?: return@Button; busy=true; error=null
                         coroutine.launch {
-                            try { draft=session.save(value).draft(); acknowledged=true }
+                            try { val saved=session.save(value); draft=saved.draft(); status=saved.expense.status; acknowledged=true }
                             catch(cancelled:CancellationException) { throw cancelled }
                             catch(_:Exception) { error="Değişiklik doğrulanamadı. Taslağınız korunuyor; geçerli bilgileri ve yetkinizi kontrol edin veya güncel kaydı yeniden okuyun." }
                             finally { pending=session.hasPending; busy=false }

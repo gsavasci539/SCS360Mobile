@@ -1,0 +1,33 @@
+{
+  "status": "WIP:7 targeted native contracts and actual Kotlin/FastAPI/tempSQLite notes bridge PASS; remaining115 regression running; new APK pending",
+  "targeted": {
+    "passed": 7,
+    "failed": 0,
+    "skipped": 0,
+    "duration": "5m31s"
+  },
+  "real_api": {
+    "passed": 1,
+    "deselected_postgresql": 1,
+    "duration_seconds": 110.55,
+    "create_notes_and_readonly_status_visible_to_web": true,
+    "create_and_edit_lost_ack_recovered": true,
+    "payment_rows": 0,
+    "notification_jobs": 0,
+    "room_unchanged": true
+  },
+  "compatibility": "Missing notes omit receipt_url, preserving exact old six-field pending bodies/UUIDs; receipt_url is a text-note wire alias, not an upload",
+  "source_files": {
+    "mobile-android/app/src/backendAcceptance/java/com/example/NativeExpenseNotesBackendAcceptance.kt": "02cf27ced7d37dfe306c813d09df09cf85ac22ac2cca2703f782ddd75a8acd3c",
+    "mobile-android/app/src/main/java/com/example/data/model/Models.kt": "bf93169ceb62c6c8a47b7420b7b252a2e7e2b59ea6e7fa357e18e6dda459a02b",
+    "mobile-android/app/src/main/java/com/example/data/remote/NativeExpenseClient.kt": "995015f19c15f56d27c95f567d66a97b0cf9c4e347c917bd9364b2114367931e",
+    "mobile-android/app/src/main/java/com/example/ui/components/ExpenseStatusLabel.kt": "afc8a3b28d70b21dec0289c803dbb0776077b5e9099385eb3736762af6900469",
+    "mobile-android/app/src/main/java/com/example/ui/dialogs/FinanceExpenseCreateDialog.kt": "7509724d4548ebf6e3bcf977835832176f217c430c79b0c78262b88405febd21",
+    "mobile-android/app/src/main/java/com/example/ui/dialogs/FinanceExpenseEditDialog.kt": "697e063c951ee8762cac3f448aebea35bef91774f1d03940da9ac81111e807db",
+    "mobile-android/app/src/main/java/com/example/ui/screens/FinancePortalScreen.kt": "5287256328df27b2a6796defd564fd80a9ce31c735fc4401ac718beeb44b4597",
+    "mobile-android/app/src/main/java/com/example/ui/screens/FinanceScreen.kt": "0e1c71b30d5b6c06424d0020aa7e422f9ed5b1ec2b10bd0caaad5469ab0db8ad",
+    "mobile-android/app/src/test/java/com/example/NativeExpenseClientTest.kt": "ce92c0875793b5f29725352b27f962008b463023dfc4728eedab4b7f81f42fe2",
+    "mobile-android/app/src/test/java/com/example/NativeExpenseUiTest.kt": "4588859376f3bd7ec947984818cceb4cabbfc401ea6d9f757c4eba5dae0dea29"
+  },
+  "physical_provider_store_acceptance": "OPEN"
+}

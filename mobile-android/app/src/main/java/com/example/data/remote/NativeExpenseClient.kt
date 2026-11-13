@@ -14,7 +14,7 @@ import java.time.LocalDate
 import java.util.UUID
 
 class ExpenseHttpException(val code: Int) : java.io.IOException("Gider işlemi HTTP $code")
-data class ExpenseDraft(val branchId: String?, val title: String, val category: String, val amount: String, val date: String)
+data class ExpenseDraft(val branchId: String?, val title: String, val category: String, val amount: String, val date: String, val notes: String? = null)
 
 class NativeExpenseClient {
     private val scope = NativeRequestScope.bound() ?: ApiClientProvider.interceptor.captureScope()
@@ -48,7 +48,8 @@ class NativeExpenseClient {
         check(title.isNotBlank() && category.isNotBlank())
         return Expense(id=uuid("id"), branch_id=selected, category=category, title=title, amount=amount.toDouble(),
             date=LocalDate.parse(row.getString("date")).toString(), receipt_url=null, created_by=text("created_by"),
-            notes=if(row.isNull("notes") || !row.has("notes")) null else row.getString("notes"))
+            notes=if(row.isNull("notes") || !row.has("notes")) null else row.getString("notes"),
+            status=if(row.isNull("status") || !row.has("status")) null else row.getString("status").takeIf { it.isNotBlank() })
     }
     suspend fun load(branchId: String?): List<Expense> {
         val selected = branchId?.takeUnless { it.isBlank() || it == "all" } ?: branch
@@ -88,7 +89,9 @@ class NativeExpenseCreateSession(context: Context, actorId: String) {
     val hasPending get() = body != null && acknowledged == null
     fun current() = api.current()
     fun pendingDraft(): ExpenseDraft? = body?.let { val row=JSONObject(it)
-        ExpenseDraft(if (row.isNull("branch_id")) null else row.getString("branch_id"), row.getString("title"), row.getString("category"), row.getString("amount"), row.getString("date")) }
+        ExpenseDraft(if (row.isNull("branch_id")) null else row.getString("branch_id"), row.getString("title"), row.getString("category"), row.getString("amount"), row.getString("date"), savedNotes(row)) }
+    // This established endpoint calls its text-note field receipt_url. It is not a file upload.
+    private fun savedNotes(row:JSONObject):String? = if(!row.has("receipt_url") || row.isNull("receipt_url")) null else row.getString("receipt_url")
     suspend fun load(): List<RegistryChoice> = mutex.withLock {
         api.ensureCurrent(); body=prefs.getString(key,null)
         body?.let { UUID.fromString(JSONObject(it).getString("request_id")) }
@@ -111,8 +114,10 @@ class NativeExpenseCreateSession(context: Context, actorId: String) {
         val branch=draft.branchId?.let { UUID.fromString(it).toString() }
         require(api.branch==null || api.branch==branch)
         val title=draft.title.trim(); val category=draft.category.trim(); val date=LocalDate.parse(draft.date).toString()
+        val notes=draft.notes?.trim()?.takeIf { it.isNotEmpty() }; require(notes==null || notes.length<=2000)
         require(title.isNotEmpty() && title.length<=500 && category.isNotEmpty() && category.length<=100)
         val canonical=JSONObject().put("branch_id",branch ?: JSONObject.NULL).put("title",title).put("category",category).put("amount",amount).put("date",date)
+        if(notes!=null) canonical.put("receipt_url",notes)
         if (body==null) body=prefs.getString(key,null)
         if (body==null) {
             check(if(branch==null) allowsOrganizationWide else branch in branches) { "Yetkili kapsamı seçin" }
@@ -121,9 +126,11 @@ class NativeExpenseCreateSession(context: Context, actorId: String) {
         } else {
             val saved=JSONObject(body!!)
             for (field in listOf("branch_id","title","category","amount","date")) check(saved.get(field).toString()==canonical.get(field).toString()) { "Bekleyen gider içeriği değiştirilemez" }
+            check(savedNotes(saved)==notes) { "Bekleyen gider notu değiştirilemez" }
         }
         val result=api.parse(api.request("expenses",body)); check(result.id==JSONObject(body!!).getString("request_id"))
         check(result.branch_id==branch.orEmpty() && result.title==title && result.category==category && result.amount.toBigDecimal().compareTo(amount.toBigDecimal())==0 && result.date==date)
+        check(result.notes==notes) { "Gider notu sunucuda doğrulanamadı" }
         acknowledged=result; result
     }
     fun finish() {
