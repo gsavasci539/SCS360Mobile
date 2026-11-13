@@ -1,6 +1,6 @@
 {
-  "status": "WIP:6 targeted native tests and actual Kotlin/FastAPI/tempSQLite bridge PASS; remaining113 regression running; APK pending",
-  "native_targeted": 6,
+  "status": "WIP:final7 native contracts PASS, actual API client unchanged/bridge retained; remaining113 regression running; APK pending",
+  "native_targeted": 7,
   "real_api": {
     "passed": 1,
     "deselected_postgresql": 1,
@@ -16,12 +16,13 @@
     "mobile-android/app/src/main/java/com/example/data/model/Models.kt": "b6195a7af95b5b00da91b3a0ee16e917907d0292c619bf1e66edad9961a19e08",
     "mobile-android/app/src/main/java/com/example/data/remote/NativeExpenseClient.kt": "f32fe82779ef9a08650b277847f641b397caaef67e73c4461778791bb52b8bd4",
     "mobile-android/app/src/main/java/com/example/data/remote/NativeExpenseEditSession.kt": "97ef00f0529378f5be60aea83943994123b46b0376bcb81d3a5fe15617666dc9",
-    "mobile-android/app/src/main/java/com/example/ui/dialogs/FinanceExpenseEditDialog.kt": "935dfc927bcb0da52948a170b60aadd96f173e60a9679dcefcca44215f18b8bb",
-    "mobile-android/app/src/main/java/com/example/ui/screens/FinancePortalScreen.kt": "05908b348e321b6e9dc0d9a0b212c7285c1075f7b44f69eca20bdebabcdab0a0",
-    "mobile-android/app/src/main/java/com/example/ui/screens/FinanceScreen.kt": "9bdba69f23238585568202a3a3ee8b9df9c9c4fd0f24d5578bbec2c82cd872d1",
+    "mobile-android/app/src/main/java/com/example/ui/dialogs/FinanceExpenseEditDialog.kt": "7e09df4dd184b04c7dadec14f0104129eb0639f867ea905475feb4aa612586e2",
+    "mobile-android/app/src/main/java/com/example/ui/screens/FinancePortalScreen.kt": "e4bce6406c9b81fbc39dfaca3026221e5b5307e5351dd358ffe2fa5a971b992b",
+    "mobile-android/app/src/main/java/com/example/ui/screens/FinanceScreen.kt": "b3df31cb9396ff8d050c39e9c1cfa45b5645e07c92092c4792392c4c0e3acf33",
     "mobile-android/app/src/test/java/com/example/NativeExpenseEditClientTest.kt": "228ae4132459ee51721d3f091e3ebab59c614b1d58c5c7fc2897cd52d0ef5f9b",
-    "mobile-android/app/src/test/java/com/example/NativeExpenseEditUiTest.kt": "95bc30c2e2da6fcaba30d8fc4a585c1ac8ed7e4b859e3ae4b7d7aa93fe5d2c74",
+    "mobile-android/app/src/test/java/com/example/NativeExpenseEditUiTest.kt": "aac074ffddec8a20048997e6d41b374c5189592950cf1909c745dbf7219ab3ac",
     "mobile-android/app/src/backendAcceptance/java/com/example/NativeExpenseEditBackendAcceptance.kt": "4b1cf34a575383dd63f5dcbda8e1ba13ffa0a55802d20382a6d655c7719072c2"
   },
-  "physical_provider_store_acceptance": "OPEN"
+  "physical_provider_store_acceptance": "OPEN",
+  "reread_refreshes_parent_without_second_put_or_false_success": true
 }

@@ -890,7 +890,7 @@ fun FinanceScreen(
     }
     expenseToEdit?.let { id ->
         com.example.ui.dialogs.FinanceExpenseEditDialog(id,state,
-            onDismiss={ expenseToEdit=null },onRecorded={ expenseToEdit=null; onRetry() })
+            onDismiss={ expenseToEdit=null },onRefresh={ expenseToEdit=null; onRetry() })
     }
 
     invoiceToEdit?.let { inv ->

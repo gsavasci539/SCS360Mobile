@@ -100,3 +100,7 @@ Current native113 unique PASS, no failures/skips:7 targeted plus remaining106 in
 ## Native expense edit targeted and real API WIP
 
 Six new client/UI contracts PASS. Actual Kotlin/FastAPI/tempSQLite bridge PASS:120.03 and notes visible through the canonical web API, identical delta replay after lost committed ACK,101 total expense rows,0 new payment/notification/Room writes. Remaining113 native regressions running with new target classes excluded. Previous113/debug APK belong to the prior source. Standard backend runtime and frontend remain unchanged. See docs/acceptance/native-expense-edit-wip-20261113.json.
+
+## Native expense edit reread refresh WIP
+
+Final7 native contracts PASS. Explicit canonical reread now closes the editor and refreshes the parent ledger after an uncertain edit; no second PUT or false acknowledgement. Actual API client/model/bridge source unchanged, so its temporary DB acceptance is retained. Previous partial113 regression stopped after finding this UI gap; current113 regression is running at the corrected source. No full/APK/device acceptance claimed yet.

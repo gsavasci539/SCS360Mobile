@@ -84,6 +84,19 @@ class NativeExpenseEditUiTest {
             scroll("expense_edit_close");compose.onNodeWithTag("expense_edit_close").assertIsDisplayed();assertEquals(0,puts.size)
         } finally { RuntimeEnvironment.setFontScale(old) }
     }
+    @Test fun rereadAfterCommittedMissingAckReturnsToFreshListWithoutASecondPutOrSuccessClaim() {
+        var reload=0
+        compose.setContent { Okul360Theme { FinancePortalScreen(state,{ _,_,_-> },{ _,_,_,_,_-> },{ _,_-> },onLogout={},onRetry={ reload++ }) } }
+        compose.onNodeWithText("Giderler").performClick();compose.onNodeWithTag("finance_expenses_list").performScrollToNode(hasTestTag("finance_edit_expense_${id(3)}"))
+        compose.onNodeWithTag("finance_edit_expense_${id(3)}").performClick();ready()
+        scroll("expense_edit_amount");compose.onNodeWithTag("expense_edit_amount").performTextReplacement("130.04")
+        scroll("expense_edit_save");compose.onNodeWithTag("expense_edit_save").performClick()
+        compose.waitUntil(10000) { puts.size==1 && compose.onAllNodesWithTag("expense_edit_error").fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(0,reload);compose.onNodeWithTag("expense_edit_ack").assertDoesNotExist()
+        scroll("expense_edit_reload");compose.onNodeWithTag("expense_edit_reload").performClick()
+        compose.waitUntil(10000) { reload==1 };assertEquals(1,puts.size);assertEquals("130.04",row.getString("amount"))
+        compose.onNodeWithTag("expense_edit_list").assertDoesNotExist();compose.onNodeWithTag("expense_edit_ack").assertDoesNotExist()
+    }
     @Test fun scopeChangeDiscardsLateReadAndNeverOpensAnEditableForeignRecord() {
         hold=CountDownLatch(1);var current by mutableStateOf(state);var closed=0
         compose.setContent { Okul360Theme { FinanceExpenseEditDialog(id(3),current,{ closed++ },{ fail("Stale") }) } }

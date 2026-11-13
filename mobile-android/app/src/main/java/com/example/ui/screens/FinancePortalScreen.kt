@@ -334,7 +334,7 @@ fun FinancePortalScreen(
             onCheck={ deletingExpense=null; onRetry() })
     }
     editingExpense?.let { id ->
-        com.example.ui.dialogs.FinanceExpenseEditDialog(id,state,onDismiss={ editingExpense=null },onRecorded={ editingExpense=null; onRetry() })
+        com.example.ui.dialogs.FinanceExpenseEditDialog(id,state,onDismiss={ editingExpense=null },onRefresh={ editingExpense=null; onRetry() })
     }
     if (showNewInvoiceDialog) {
         com.example.ui.dialogs.FinanceInvoiceDraftDialog(state,

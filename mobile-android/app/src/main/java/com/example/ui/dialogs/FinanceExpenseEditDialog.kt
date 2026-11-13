@@ -19,7 +19,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 @Composable
-fun FinanceExpenseEditDialog(expenseId:String,state:Okul360UiState,onDismiss:()->Unit,onRecorded:()->Unit) {
+fun FinanceExpenseEditDialog(expenseId:String,state:Okul360UiState,onDismiss:()->Unit,onRefresh:()->Unit) {
     val identity=financePresentationScope(state); val opening=remember { identity }; val openingId=remember { expenseId }
     if(identity!=opening || openingId!=expenseId) { LaunchedEffect(identity,expenseId) { onDismiss() }; return }
     val session=remember { runCatching { NativeExpenseEditSession(expenseId,checkNotNull(state.workspaceOrganizationId ?: state.currentUser.organization_id)) }.getOrNull() }
@@ -30,14 +30,17 @@ fun FinanceExpenseEditDialog(expenseId:String,state:Okul360UiState,onDismiss:()-
     val canWrite="finance.write" in state.currentUser.permissions || (state.currentUser.is_super_admin==true && !state.workspaceOrganizationId.isNullOrBlank())
     LaunchedEffect(session,revision) {
         busy=true; error=null; draft=null
-        try { draft=checkNotNull(session).load().draft(); pending=false; acknowledged=false }
+        try {
+            draft=checkNotNull(session).load().draft(); pending=false; acknowledged=false
+            if(revision>0) onRefresh()
+        }
         catch(cancelled:CancellationException) { throw cancelled }
         catch(_:Exception) { error="Güncel gider okunamadı. Kurum, yetki ve bağlantınızı kontrol edin." }
         finally { busy=false }
     }
     if(session!=null && !session.current()) { LaunchedEffect(session) { onDismiss() }; return }
     val readonly=!canWrite || busy || pending || acknowledged
-    val dismiss={ if(!busy) { if(acknowledged) onRecorded() else onDismiss() } }
+    val dismiss={ if(!busy) { if(acknowledged) onRefresh() else onDismiss() } }
     Dialog(onDismissRequest=dismiss,properties=DialogProperties(usePlatformDefaultWidth=false)) {
         Surface(Modifier.padding(12.dp).widthIn(max=600.dp).fillMaxWidth().heightIn(max=(LocalConfiguration.current.screenHeightDp*.9f).dp).imePadding(),shape=MaterialTheme.shapes.large) {
             LazyColumn(Modifier.padding(16.dp).testTag("expense_edit_list"),verticalArrangement=Arrangement.spacedBy(12.dp)) {
@@ -47,16 +50,16 @@ fun FinanceExpenseEditDialog(expenseId:String,state:Okul360UiState,onDismiss:()-
                 if(busy) item { Text("Sunucu yanıtı bekleniyor…") }
                 if(pending) item { Text("Önceki değişikliğin sonucu bekleniyor. Aynı taslağı doğrulayın veya sunucudan yeniden okuyun.") }
                 draft?.let { value ->
-                    item { OutlinedTextField(value.title,{ draft=value.copy(title=it) },readOnly=readonly,label={ Text("Açıklama") },modifier=Modifier.fillMaxWidth().testTag("expense_edit_title")) }
-                    item { OutlinedTextField(value.category,{ draft=value.copy(category=it) },readOnly=readonly,label={ Text("Kategori") },modifier=Modifier.fillMaxWidth().testTag("expense_edit_category")) }
-                    item { OutlinedTextField(value.amount,{ draft=value.copy(amount=it) },readOnly=readonly,label={ Text("Tutar (₺)") },keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),modifier=Modifier.fillMaxWidth().testTag("expense_edit_amount")) }
-                    item { OutlinedTextField(value.date,{ draft=value.copy(date=it) },readOnly=readonly,label={ Text("Tarih (YYYY-AA-GG)") },modifier=Modifier.fillMaxWidth().testTag("expense_edit_date")) }
-                    item { OutlinedTextField(value.notes.orEmpty(),{ draft=value.copy(notes=it) },readOnly=readonly,label={ Text("Not / belge referansı (metin)") },modifier=Modifier.fillMaxWidth().testTag("expense_edit_notes")) }
+                    item { OutlinedTextField(value.title,{ draft=draft?.copy(title=it) },readOnly=readonly,label={ Text("Açıklama") },modifier=Modifier.fillMaxWidth().testTag("expense_edit_title")) }
+                    item { OutlinedTextField(value.category,{ draft=draft?.copy(category=it) },readOnly=readonly,label={ Text("Kategori") },modifier=Modifier.fillMaxWidth().testTag("expense_edit_category")) }
+                    item { OutlinedTextField(value.amount,{ draft=draft?.copy(amount=it) },readOnly=readonly,label={ Text("Tutar (₺)") },keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Decimal),modifier=Modifier.fillMaxWidth().testTag("expense_edit_amount")) }
+                    item { OutlinedTextField(value.date,{ draft=draft?.copy(date=it) },readOnly=readonly,label={ Text("Tarih (YYYY-AA-GG)") },modifier=Modifier.fillMaxWidth().testTag("expense_edit_date")) }
+                    item { OutlinedTextField(value.notes.orEmpty(),{ draft=draft?.copy(notes=it) },readOnly=readonly,label={ Text("Not / belge referansı (metin)") },modifier=Modifier.fillMaxWidth().testTag("expense_edit_notes")) }
                 }
                 error?.let { message -> item { Text(message,color=MaterialTheme.colorScheme.error,modifier=Modifier.testTag("expense_edit_error")) } }
                 if(acknowledged) {
                     item { Text("Gider değişikliği sunucuda doğrulandı.",modifier=Modifier.testTag("expense_edit_ack")) }
-                    item { Button(onClick=onRecorded,modifier=Modifier.heightIn(min=48.dp).testTag("expense_edit_done")) { Text("Tamam") } }
+                    item { Button(onClick=onRefresh,modifier=Modifier.heightIn(min=48.dp).testTag("expense_edit_done")) { Text("Tamam") } }
                 } else {
                     item { Button(enabled=canWrite && draft!=null && !busy,onClick={
                         if(busy || acknowledged || !canWrite || session==null) return@Button
@@ -68,7 +71,7 @@ fun FinanceExpenseEditDialog(expenseId:String,state:Okul360UiState,onDismiss:()-
                             finally { pending=session.hasPending; busy=false }
                         }
                     },modifier=Modifier.heightIn(min=48.dp).testTag("expense_edit_save")) { Text(if(pending) "Aynı değişikliği doğrula" else "Değişiklikleri kaydet") } }
-                    item { TextButton(enabled=!busy,onClick={ revision++ },modifier=Modifier.heightIn(min=48.dp).testTag("expense_edit_reload")) { Text("Sunucudan yeniden oku") } }
+                    item { TextButton(enabled=!busy,onClick={ revision++ },modifier=Modifier.heightIn(min=48.dp).testTag("expense_edit_reload")) { Text("Sunucudan oku ve listeye dön") } }
                 }
                 item { TextButton(enabled=!busy,onClick=dismiss,modifier=Modifier.heightIn(min=48.dp).testTag("expense_edit_close")) { Text("Kapat") } }
             }
