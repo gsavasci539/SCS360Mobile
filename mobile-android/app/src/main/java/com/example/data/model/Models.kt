@@ -887,14 +887,18 @@ data class HomeworkSubmission(
 data class LibraryBook(
     val id: String = "",
     val isbn: String = "",
+    val barcode: String = "",
     val title: String = "",
     val author: String = "",
     val publisher: String = "",
     val category: String = "",
+    val publication_year: Int? = null,
+    val description: String = "",
     val page_count: Int = 0,
     val shelf_location: String = "",
     val total_copies: Int = 0,
     val available_copies: Int = 0,
+    val updated_at: String = "",
     val cover_color_hex: Long = 0xFF1E40AF
 )
 

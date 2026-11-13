@@ -44,6 +44,7 @@ fun LibraryScreen(
     state: Okul360UiState,
     onNavigateBack: () -> Unit,
     onBorrowBook: (LibraryBook) -> Unit,
+    onBookDetails: (LibraryBook) -> Unit,
     onReturnBook: (String) -> Unit,
     canWrite: Boolean,
     onCreateBook: () -> Unit
@@ -204,7 +205,8 @@ fun LibraryScreen(
                                                 }
                                                 Spacer(modifier = Modifier.width(8.dp))
                                                 Column(modifier = Modifier.weight(1f)) {
-                                                    Text(book.title, fontWeight = FontWeight.Bold, fontSize = 13.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                    Text(book.title, fontWeight = FontWeight.Bold, fontSize = 13.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                                        modifier = Modifier.clickable { onBookDetails(book) }.testTag("library_book_details_${book.id}"))
                                                     Text("${book.author} • ${book.category} • Raf: ${book.shelf_location}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                                 }
                                             }
@@ -240,7 +242,8 @@ fun LibraryScreen(
                                         modifier = Modifier.padding(horizontal = 12.dp)
                                     ) {
                                         Column(modifier = Modifier.weight(1.55f).padding(end = 6.dp)) {
-                                            Text(book.title, fontWeight = FontWeight.Bold, fontSize = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text(book.title, fontWeight = FontWeight.Bold, fontSize = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.clickable { onBookDetails(book) }.testTag("library_book_details_${book.id}"))
                                             Text(book.author, fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                                         }
                                         Column(modifier = Modifier.weight(1.1f).padding(end = 6.dp)) {

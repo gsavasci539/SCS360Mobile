@@ -19,7 +19,11 @@ class NativeLibraryClient {
     private fun id(value: String) = UUID.fromString(value).toString()
     private suspend fun call(path: String, method: String = "GET", body: JSONObject? = null): Any = scope.io {
         val request = Request.Builder().url(base + path).tag(NativeRequestScope::class.java, scope)
-        if (method != "GET") request.method(method, (body ?: JSONObject()).toString().toRequestBody("application/json".toMediaType()))
+        when (method) {
+            "GET" -> Unit
+            "DELETE" -> request.delete()
+            else -> request.method(method, (body ?: JSONObject()).toString().toRequestBody("application/json".toMediaType()))
+        }
         http.newCall(request.build()).execute().use { response ->
             if (!response.isSuccessful) throw RegistryHttpException(response.code)
             val result = JSONTokener(response.body?.string() ?: "null").nextValue()
@@ -33,14 +37,18 @@ class NativeLibraryClient {
         val total = row.getInt("total_copies"); val available = row.getInt("available_copies")
         check(total >= 0 && available in 0..total) { "Kitap stok bilgisi doğrulanamadı" }
         return LibraryBook(id = id(row.getString("id")), title = row.getString("title"), author = row.text("author"),
-            category = row.text("category"), isbn = row.text("isbn"), publisher = row.text("publisher"),
-            page_count = row.optInt("page_count", 0), shelf_location = row.text("shelf_location"), total_copies = total, available_copies = available)
+            category = row.text("category"), isbn = row.text("isbn"), barcode = row.text("barcode"), publisher = row.text("publisher"),
+            publication_year = if (row.isNull("publication_year")) null else row.optInt("publication_year"),
+            description = row.text("description"), page_count = row.optInt("page_count", 0),
+            shelf_location = row.text("location").ifBlank { row.text("shelf_location") }, total_copies = total,
+            available_copies = available, updated_at = row.text("updated_at"))
     }
     private fun <T> rows(value: Any, parse: (JSONObject) -> T): List<T> {
         val array = value as JSONArray; val seen = mutableSetOf<String>()
         return (0 until array.length()).map { index -> val row = array.getJSONObject(index); check(seen.add(id(row.getString("id")))); parse(row) }
     }
     suspend fun books() = rows(call("library/books"), ::book)
+    suspend fun book(bookId: String) = book(call("library/books/${id(bookId)}") as JSONObject)
     suspend fun createBook(input: JSONObject): LibraryBook {
         val allowed = setOf("title", "author", "category", "isbn", "barcode", "total_copies")
         require(input.keys().asSequence().all { it in allowed }) { "Desteklenmeyen kitap alanı" }
@@ -51,6 +59,25 @@ class NativeLibraryClient {
         for (key in listOf("title", "author", "category")) check(body.getString(key) == when (key) { "title" -> result.title; "author" -> result.author; else -> result.category })
         check(result.total_copies == body.getInt("total_copies") && result.available_copies == result.total_copies)
         return result
+    }
+    suspend fun updateBook(bookId: String, expectedUpdatedAt: String, input: JSONObject): LibraryBook {
+        val key = id(bookId)
+        require(expectedUpdatedAt.isNotBlank()) { "Güncel kitap sürümü yok; kaydı yeniden yükleyin" }
+        val allowed = setOf("title", "author", "isbn", "category", "publisher", "publication_year", "total_copies", "description", "location")
+        require(input.keys().asSequence().all { it in allowed }) { "Desteklenmeyen kitap alanı" }
+        val body = JSONObject().put("expected_updated_at", expectedUpdatedAt)
+        input.keys().forEach { body.put(it, input.get(it)) }
+        val result = book(call("library/books/$key", "PUT", body) as JSONObject)
+        check(result.id == key && result.updated_at.isNotBlank()) { "Sunucu güncel kitap sürümünü doğrulamadı" }
+        check(result.total_copies == input.optInt("total_copies", result.total_copies))
+        return result
+    }
+    suspend fun deleteBook(bookId: String) {
+        val key = id(bookId)
+        val reply = call("library/books/$key", "DELETE") as JSONObject
+        check(reply.getString("id") == key && reply.getString("message").isNotBlank()) {
+            "Sunucu kitap silme işlemini doğrulamadı"
+        }
     }
     suspend fun loans() = rows(call("library/loans")) { row ->
         val status = row.getString("status"); check(status in setOf("BORROWED", "OVERDUE", "RETURNED"))
