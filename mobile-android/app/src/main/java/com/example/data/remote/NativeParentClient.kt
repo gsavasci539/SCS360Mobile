@@ -8,6 +8,17 @@ import org.json.JSONObject
 import org.json.JSONTokener
 import java.net.URLEncoder
 import java.util.UUID
+import com.example.data.model.User
+
+object NativeParentCreationPolicy {
+    private val organizationRoles = setOf("admin", "administrator", "school_admin", "manager", "principal", "org_admin", "branch_manager", "owner")
+    fun requiresStudent(user: User, selectedBranchId: String): Boolean {
+        val roles = user.roles.filter { it.is_active }.map { it.slug.lowercase(java.util.Locale.ROOT) }.toSet()
+        val relationshipScope = roles.any { it == "parent" || it == "teacher" } && roles.none { it in organizationRoles }
+        return selectedBranchId.isNotBlank() && selectedBranchId != "all" ||
+            user.is_super_admin != true && (!user.branch_ids.isNullOrEmpty() || user.branch_id.isNotBlank() || relationshipScope)
+    }
+}
 
 data class NativeParent(val id: String, val organization: String, val fields: String) {
     fun value(key: String) = JSONObject(fields).let { if (it.isNull(key)) "" else it.optString(key) }
@@ -15,7 +26,7 @@ data class NativeParent(val id: String, val organization: String, val fields: St
 }
 
 /** Explicit contact/account/student links; no display model or inferred identity is written. */
-class NativeParentClient(private val organization: String) {
+class NativeParentClient(private val organization: String, private val requireStudentForCreate: Boolean = false) {
     private val scope = NativeRequestScope.bound() ?: ApiClientProvider.interceptor.captureScope()
     private val base = ApiClientProvider.activeBaseUrl
     private val http = ApiClientProvider.createOkHttpClient()
@@ -59,11 +70,20 @@ class NativeParentClient(private val organization: String) {
         if (result.has("relation_type")) require(result.getString("relation_type") in setOf("MOTHER", "FATHER", "GUARDIAN", "OTHER"))
         return result
     }
-    suspend fun save(input: JSONObject, original: NativeParent? = null): NativeParent {
+    suspend fun save(input: JSONObject, original: NativeParent? = null, createStudentId: String? = null): NativeParent {
         val body = write(input)
+        require(original == null || createStudentId == null) { "Öğrenci bağı yalnız yeni kayıt oluştururken seçilir" }
         val result = if (original == null) {
             require(body.has("first_name") && body.has("last_name"))
-            parent(call("parents", "POST", body.put("organization_id", organization)) as JSONObject)
+            require(!requireStudentForCreate || createStudentId != null) { "Yetkiniz kapsamında veli oluşturmak için öğrenci seçin" }
+            if (createStudentId == null) parent(call("parents", "POST", body.put("organization_id", organization)) as JSONObject)
+            else {
+                val student = id(createStudentId)
+                val ack = call("students/$student/parents", "POST", body) as JSONObject
+                val created = get(id(ack.getString("id")))
+                check(created.id in studentParents(student)) { "Öğrenci ilişkisi sunucuda doğrulanamadı; listeyi yenileyin" }
+                created
+            }
         } else {
             val fresh = get(original.id)
             val old = JSONObject(original.fields); val actual = JSONObject(fresh.fields)

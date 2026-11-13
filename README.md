@@ -74,3 +74,5 @@ Güncel native gider düzenleme/notlar checkpoint:120 benzersiz native test geç
 Güncel yeni gider notu/durum checkpoint:122 benzersiz native test geçti (14hedef+108regresyon,tekrar yok). Gerçek Kotlin/FastAPI/tempSQLite120.03 ve notlar/kayıp ACK delta tekrarı kabulü de geçti. Aynı kaynak debug APK doğrulandı. Kalan modüller/cihaz/sağlayıcı/mağaza/yayın kabulü açık; docs/acceptance/native-expense-notes-20261113.json.
 
 Current parent/custom-role/payment checkpoint:138 native tests plus actual native login/FastAPI/tempSQLite acceptance passed. Remaining operational modules and legacy role administration remain open. Latest evidence: docs/acceptance/native-parent-parity-20261113.json.
+
+Branch-limited parent creation accepted:21 affected/new native tests and actual native login/FastAPI/tempSQLite acceptance. Source evidence: docs/acceptance/native-parent-branch-20261113.json. Other operational modules remain open.

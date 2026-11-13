@@ -29,12 +29,15 @@ fun ParentManagementScreen(state: Okul360UiState) {
 @Composable
 private fun ParentManagementContent(state: Okul360UiState) {
     val organization = state.workspaceOrganizationId ?: state.currentUser.organization_id ?: state.currentUser.tenant_id.orEmpty()
-    val client = remember { runCatching { NativeParentClient(organization) } }
+    val requiresStudent = NativeParentCreationPolicy.requiresStudent(state.currentUser, state.selectedBranchId)
+    val client = remember { runCatching { NativeParentClient(organization, requiresStudent) } }
     val captured = remember { ApiClientProvider.interceptor.captureScope() }
     val coroutine = rememberCoroutineScope()
     val canWrite = NativeNavigationPolicy.has(state.currentUser, "parents.write")
     val canAccounts = canWrite && NativeNavigationPolicy.has(state.currentUser, "users.write")
     val canStudents = NativeNavigationPolicy.has(state.currentUser, "student.write", "students.write") && NativeNavigationPolicy.has(state.currentUser, "student.read", "students.read")
+    val canCreate = canWrite && (!requiresStudent || canStudents)
+    var createStudents by remember { mutableStateOf<List<Student>>(emptyList()) }
     var rows by remember { mutableStateOf<List<NativeParent>>(emptyList()) }
     var query by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
@@ -65,7 +68,14 @@ private fun ParentManagementContent(state: Okul360UiState) {
         item { Button(enabled = !busy, onClick = { uncertain = false; revision++ }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Ara / listeyi yenile") } }
         item { if (error.isNotBlank()) Text(error, Modifier.testTag("parents_error")) }
         item { if (uncertain) Text("Oluşturma sonucu belirsiz. Yeni kayıt açmadan önce listeyi yenileyip kaydı kontrol edin.") }
-        item { Button(enabled = canWrite && !busy && !uncertain, onClick = { editing = null; form = true }, modifier = Modifier.heightIn(min = 48.dp).testTag("parent_new")) { Text("Veli ekle") } }
+        item { if (requiresStudent && !canStudents) Text("Yetkiniz kapsamında yeni veli oluşturmak için öğrenci okuma ve yazma yetkisi gerekir.") }
+        item { Button(enabled = canCreate && !busy && !uncertain, onClick = {
+            editing = null
+            run {
+                createStudents = if (canStudents) NativeRegistryClient().students(state.selectedBranchId.takeUnless { branch -> branch.isBlank() || branch == "all" }, null, null) else emptyList()
+                form = true
+            }
+        }, modifier = Modifier.heightIn(min = 48.dp).testTag("parent_new")) { Text("Veli ekle") } }
         if (busy) item { CircularProgressIndicator() }
         if (!busy && shownRows.isEmpty() && error.isBlank()) item { Text("Veli kaydı bulunamadı.") }
         items(shownRows, key = { it.id }) { parent ->
@@ -79,9 +89,9 @@ private fun ParentManagementContent(state: Okul360UiState) {
             } }
         }
     }
-    if (form) ParentContactForm(editing, busy, error, onDismiss = { if (!busy) form = false }, onSave = { body ->
+    if (form) ParentContactForm(editing, busy, error, createStudents, requiresStudent, onDismiss = { if (!busy) form = false }, onSave = { body, student ->
         if (canWrite && !busy) run { api ->
-            try { api.save(body, editing); form = false; revision++ }
+            try { api.save(body, editing, student); form = false; revision++ }
             catch (failure: Exception) { if (editing == null && failure !is IllegalArgumentException && (failure as? RegistryHttpException)?.code != 422) uncertain = true; throw failure }
         }
     }, canSave = canWrite && !(editing == null && uncertain))
@@ -93,18 +103,30 @@ private fun ParentManagementContent(state: Okul360UiState) {
 }
 
 @Composable
-private fun ParentContactForm(original: NativeParent?, busy: Boolean, error: String, onDismiss: () -> Unit, onSave: (JSONObject) -> Unit, canSave: Boolean) {
+private fun ParentContactForm(original: NativeParent?, busy: Boolean, error: String, students: List<Student>, requiresStudent: Boolean, onDismiss: () -> Unit, onSave: (JSONObject, String?) -> Unit, canSave: Boolean) {
     val labels = linkedMapOf("first_name" to "Ad", "last_name" to "Soyad", "relation_type" to "Yakınlık (MOTHER/FATHER/GUARDIAN/OTHER)", "phone" to "Telefon", "sms_phone" to "SMS telefonu", "whatsapp_phone" to "WhatsApp telefonu", "email" to "E-posta", "address" to "Adres")
     val values = remember(original?.id) { mutableStateMapOf<String, String>().apply { labels.keys.forEach { put(it, original?.value(it) ?: if (it == "relation_type") "GUARDIAN" else "") } } }
     var notifications by remember(original?.id) { mutableStateOf(original?.let { JSONObject(it.fields).optBoolean("receive_notifications", true) } ?: true) }
+    var selectedStudent by remember(original?.id) { mutableStateOf<Student?>(null) }
+    var studentSearch by remember(original?.id) { mutableStateOf("") }
+    val shownStudents = students.filter { it.full_name.contains(studentSearch, ignoreCase = true) || it.student_number.contains(studentSearch, ignoreCase = true) }
+    val selected = selectedStudent
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.padding(12.dp).widthIn(max = 600.dp).fillMaxWidth().heightIn(max = (LocalConfiguration.current.screenHeightDp * .9f).dp).imePadding(), shape = MaterialTheme.shapes.large) {
             LazyColumn(Modifier.padding(16.dp).testTag("parent_form"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 item { Text(if (original == null) "Veli ekle" else "Veliyi düzenle", style = MaterialTheme.typography.titleLarge) }
+                if (original == null) {
+                    item { Text(if (requiresStudent) "Öğrenci seçimi zorunlu; veli aynı işlemde öğrenciye bağlanır." else "Öğrenci bağı (isteğe bağlı)") }
+                    item { OutlinedTextField(studentSearch, { studentSearch = it }, enabled = !busy, label = { Text("Öğrenci ara") }, modifier = Modifier.fillMaxWidth().testTag("parent_student_search")) }
+                    item { Text(selected?.let { "Seçilen: ${it.full_name}" } ?: "Öğrenci seçilmedi", Modifier.testTag("parent_selected_student")) }
+                    if (!requiresStudent) item { TextButton(enabled = !busy, onClick = { selectedStudent = null }) { Text("Öğrenci seçimini kaldır") } }
+                    items(shownStudents, key = { "create_${it.id}" }) { student -> TextButton(enabled = !busy, modifier = Modifier.testTag("parent_create_student_${student.id}"), onClick = { selectedStudent = student }) { Text(listOf(student.full_name, student.student_number).filter { it.isNotBlank() }.joinToString(" · ")) } }
+                    if (requiresStudent && students.isEmpty()) item { Text("Yetkiniz kapsamında öğrenci bulunamadı. Öğrenci olmadan bu kapsamda veli oluşturulamaz.") }
+                }
                 items(labels.keys.toList()) { key -> OutlinedTextField(values[key].orEmpty(), { values[key] = it }, enabled = !busy, label = { Text(labels.getValue(key)) }, modifier = Modifier.fillMaxWidth().testTag("parent_$key")) }
                 item { Row { Checkbox(notifications, { notifications = it }, enabled = !busy); Text("Bildirimleri al") } }
                 item { if (error.isNotBlank()) Text(error) }
-                item { Button(enabled = canSave && !busy, modifier = Modifier.heightIn(min = 48.dp).testTag("parent_save"), onClick = { onSave(JSONObject().apply { values.forEach { (key, value) -> put(key, value) }; put("receive_notifications", notifications) }) }) { Text("Kaydet") } }
+                item { Button(enabled = canSave && !busy && (original != null || !requiresStudent || selected != null), modifier = Modifier.heightIn(min = 48.dp).testTag("parent_save"), onClick = { onSave(JSONObject().apply { values.forEach { (key, value) -> put(key, value) }; put("receive_notifications", notifications) }, selected?.id) }) { Text("Kaydet") } }
                 item { TextButton(enabled = !busy, onClick = onDismiss) { Text("Kapat") } }
             }
         }
