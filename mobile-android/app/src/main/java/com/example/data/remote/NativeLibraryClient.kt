@@ -44,10 +44,26 @@ class NativeLibraryClient {
             available_copies = available, updated_at = row.text("updated_at"))
     }
     private fun <T> rows(value: Any, parse: (JSONObject) -> T): List<T> {
-        val array = value as JSONArray; val seen = mutableSetOf<String>()
+        val array = when (value) {
+            is JSONArray -> value
+            is JSONObject -> value.optJSONArray("items") ?: error("Katalog sayfası eksik")
+            else -> error("Katalog cevabı doğrulanamadı")
+        }
+        val seen = mutableSetOf<String>()
         return (0 until array.length()).map { index -> val row = array.getJSONObject(index); check(seen.add(id(row.getString("id")))); parse(row) }
     }
-    suspend fun books() = rows(call("library/books"), ::book)
+    suspend fun books(): List<LibraryBook> {
+        val result = mutableListOf<LibraryBook>(); var offset = 0
+        while (true) {
+            val page = call("library/books?limit=1000&offset=$offset")
+            val batch = rows(page, ::book); result += batch
+            if (batch.isEmpty()) break
+            val total = (page as? JSONObject)?.optInt("total", offset + batch.size) ?: (offset + batch.size)
+            if (offset + batch.size >= total) break
+            offset += batch.size
+        }
+        return result
+    }
     suspend fun book(bookId: String) = book(call("library/books/${id(bookId)}") as JSONObject)
     suspend fun createBook(input: JSONObject): LibraryBook {
         val allowed = setOf("title", "author", "category", "isbn", "barcode", "total_copies")

@@ -32,6 +32,7 @@ class NativeLibraryUiTest {
     @Volatile private var loseBookEdit = false
     @Volatile private var loseBookDelete = false
     @Volatile private var deleteConflict = false
+    @Volatile private var paginatedBooks = false
     @Volatile private var bookTitle = "Recorded book"
     @Volatile private var deleted = false
     private fun bookRow() = JSONObject().put("id",id(1)).put("title",bookTitle).put("author","Recorded author").put("category","Category")
@@ -70,6 +71,7 @@ class NativeLibraryUiTest {
                         else { deleted=true; JSONObject().put("id",id(1)).put("message","Kitap silindi") }
                     }
                     path.endsWith("/books") && deleted -> JSONArray()
+                    path.endsWith("/books") && paginatedBooks -> JSONObject().put("items",JSONArray().put(bookRow())).put("total",1).put("page",1).put("page_size",1000).put("total_pages",1)
                     path.endsWith("/books") -> JSONArray().put(bookRow())
                     path.endsWith("/borrow") -> {
                         posted=JSONObject(e.requestBody.readBytes().toString(Charsets.UTF_8));JSONObject().put("id",id(3)).put("status","BORROWED").put("due_date","2027-01-15")
@@ -116,6 +118,13 @@ class NativeLibraryUiTest {
         compose.onAllNodesWithTag("library_edit").assertCountEquals(0);compose.onAllNodesWithTag("library_delete").assertCountEquals(0)
         assertTrue(calls.any { it=="GET /api/library/books/${id(1)}" })
         assertTrue(calls.none { it.startsWith("PUT ")||it.startsWith("DELETE ") })
+    }
+    @Test fun nativeCatalogConsumesCanonicalPaginatedApiEnvelope() {
+        paginatedBooks=true
+        compose.setContent {Okul360Theme {NativeLibraryScreen(state(false),{})}}
+        compose.waitUntil(15000) {compose.onAllNodesWithTag("library_book_details_${id(1)}").fetchSemanticsNodes().isNotEmpty()}
+        assertTrue(calls.any {it=="GET /api/library/books?limit=1000&offset=0"})
+        compose.onNodeWithTag("library_book_details_${id(1)}").assertExists()
     }
     @Test fun editSendsFreshVersionedPayloadAndReloadsServerCatalogue() {
         compose.setContent {Okul360Theme {NativeLibraryScreen(state(true),{})}}
