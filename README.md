@@ -68,3 +68,5 @@ Gider oluşturma/listeleme/silme ve web değişikliklerinin native görünürlü
 Güncel finans portalı gider silme checkpoint:112 benzersiz native test geçti (6hedef+106regresyon,tekrar yok). Seçili kayıt/onay/hata/kapsam/büyük yazı kabulü ve aynı kaynak debug APK doğrulandı. Native düzenleme/notlar ve diğer modüller/gerçek cihaz/sağlayıcı/mağaza/yayın kabulü açık; docs/acceptance/native-expense-delete-20261112.json.
 
 Güncel belirsiz gider silme yeniden okuma checkpoint:113 benzersiz native test geçti (7hedef+106regresyon,tekrar yok). Seçili kayıt/onay/hata/kapsam/büyük yazı kabulü ve aynı kaynak debug APK doğrulandı. Native düzenleme/notlar ve diğer modüller/gerçek cihaz/sağlayıcı/mağaza/yayın kabulü açık; docs/acceptance/native-expense-recheck-20261112.json.
+
+Güncel native gider düzenleme/notlar checkpoint:120 benzersiz native test geçti (7hedef+113regresyon,tekrar yok). Gerçek Kotlin/FastAPI/tempSQLite120.03 ve notlar/kayıp ACK delta tekrarı kabulü de geçti. Aynı kaynak debug APK doğrulandı. Kalan oluşturma notları/durum ve diğer modüller/cihaz/sağlayıcı/mağaza/yayın kabulü açık; docs/acceptance/native-expense-edit-20261113.json.
