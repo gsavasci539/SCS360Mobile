@@ -28,7 +28,7 @@ data class AppointmentDraft(
 
 data class AppointmentDecision(val id: String, val status: String, val note: String?) {
     fun matches(row: ParentTeacherAppointment) = row.id == id && row.status == status &&
-        row.teacher_feedback_notes.orEmpty() == note.orEmpty()
+        (note == null || row.teacher_feedback_notes.orEmpty() == note)
 }
 
 class NativeAppointmentClient(private val branchId: String? = null) {
@@ -114,7 +114,8 @@ class NativeAppointmentClient(private val branchId: String? = null) {
 
     suspend fun decide(decision: AppointmentDecision) {
         val key = id(decision.id)
-        val body = JSONObject().put("status", decision.status).put("feedback_notes", decision.note ?: JSONObject.NULL)
+        val body = JSONObject().put("status", decision.status)
+        decision.note?.let { body.put("feedback_notes", it.takeIf(String::isNotEmpty) ?: JSONObject.NULL) }
         val ack = exchange("appointments/$key/status", "PATCH", body) as JSONObject
         check(id(ack.getString("id")) == key && ack.getString("status") == decision.status)
     }

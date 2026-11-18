@@ -27,6 +27,9 @@ class NativeAppointmentContractTest {
         val requests = CopyOnWriteArrayList<String>()
         val submitted = CopyOnWriteArrayList<JSONObject>()
         var status = "PENDING"
+        val storedNote = "Recorded teacher note"
+        var note: Any = storedNote
+        val edits = CopyOnWriteArrayList<JSONObject>()
         var availability = false
         var deleted = false
         val auth = ApiClientProvider.interceptor
@@ -66,7 +69,9 @@ class NativeAppointmentContractTest {
                     }
                     request.requestMethod == "PATCH" -> {
                         val body = JSONObject(request.requestBody.readBytes().toString(Charsets.UTF_8))
+                        edits += body
                         status = body.getString("status")
+                        if (body.has("feedback_notes")) note = body.get("feedback_notes")
                         JSONObject().put("id", requestId.toString()).put("status", status)
                     }
                     path.startsWith("/api/appointments/options") -> {
@@ -83,7 +88,7 @@ class NativeAppointmentContractTest {
                         .put("teacher_name", "Recorded teacher").put("parent_id", parent).put("student_id", student)
                         .put("student_name", "Recorded student").put("appointment_date", "2027-01-04")
                         .put("appointment_time", "14:00").put("status", status).put("notes", "Recorded note")
-                        .put("feedback_notes", JSONObject.NULL).put("duration_minutes", 30))
+                        .put("feedback_notes", note).put("duration_minutes", 30))
                 }
                 val bytes = JSONObject().put("success", true).put("data", data).toString().toByteArray()
                 request.sendResponseHeaders(200, bytes.size.toLong())
@@ -113,6 +118,13 @@ class NativeAppointmentContractTest {
             val decision = AppointmentDecision(row.id, "CANCELLED", null)
             api.decide(decision)
             assertTrue(decision.matches(api.records().single()))
+            assertFalse(edits.single().has("feedback_notes"))
+            assertEquals(storedNote, api.records().single().teacher_feedback_notes)
+            val clear = AppointmentDecision(row.id, "COMPLETED", "")
+            api.decide(clear)
+            assertTrue(edits.last().has("feedback_notes"))
+            assertTrue(edits.last().isNull("feedback_notes"))
+            assertTrue(clear.matches(api.records().single()))
             assertEquals("2027-01-04T14:00", submitted.single().getString("slot_datetime"))
             assertEquals(requestId.toString(), submitted.single().getString("request_id"))
             assertEquals(1, requests.count { it == "POST /api/appointments/request" })

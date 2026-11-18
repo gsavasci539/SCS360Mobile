@@ -209,10 +209,10 @@ fun AppointmentsScreen(
                             onCardClick = { selectedAppointmentForDetail = apt },
                             canManage = canManage && !busy && onCheckResult == null,
                             canCancel = canCancel && !busy && onCheckResult == null,
-                            onApprove = { onUpdateStatus(apt.id, "APPROVED", apt.teacher_feedback_notes) },
-                            onReject = { onUpdateStatus(apt.id, "REJECTED", apt.teacher_feedback_notes) },
-                            onComplete = { onUpdateStatus(apt.id, "COMPLETED", apt.teacher_feedback_notes) },
-                            onCancel = { onUpdateStatus(apt.id, "CANCELLED", apt.teacher_feedback_notes) },
+                            onApprove = { onUpdateStatus(apt.id, "APPROVED", null) },
+                            onReject = { onUpdateStatus(apt.id, "REJECTED", null) },
+                            onComplete = { onUpdateStatus(apt.id, "COMPLETED", null) },
+                            onCancel = { onUpdateStatus(apt.id, "CANCELLED", null) },
                             onAddFeedback = {
                                 showFeedbackDialog = apt
                                 feedbackText = apt.teacher_feedback_notes ?: ""
