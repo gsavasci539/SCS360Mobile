@@ -152,7 +152,6 @@ data class Okul360UiState(
 
     // 1. Appointments State (PTC)
     val appointments: List<ParentTeacherAppointment> = emptyList(),
-    val appointmentSlots: List<TeacherAppointmentSlot> = emptyList(),
 
     // 2. Transport & Bus Tracking State
     val busRoutes: List<BusRoute> = emptyList(),
@@ -2321,83 +2320,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             campusName = _uiState.value.currentUser.branch_name,
             gradeList = gradeList
         )
-    }
-
-    // ==========================================
-    // 1. Appointments (PTC) Management
-    // ==========================================
-    fun bookAppointment(
-        teacherId: String,
-        teacherName: String,
-        teacherSubject: String,
-        date: String,
-        timeSlot: String,
-        type: String = "FACE_TO_FACE",
-        notes: String,
-        studentId: String = "std-1",
-        studentName: String = "Ali Demir",
-        className: String = "8-A"
-    ) {
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
-        val newApt = ParentTeacherAppointment(
-            id = "apt-${System.currentTimeMillis()}",
-            teacher_id = teacherId,
-            teacher_name = teacherName,
-            teacher_subject = teacherSubject,
-            parent_id = _uiState.value.currentUser.id,
-            parent_name = _uiState.value.currentUser.full_name,
-            parent_phone = _uiState.value.currentUser.phone ?: "+90 532 555 1234",
-            student_id = studentId,
-            student_name = studentName,
-            class_name = className,
-            date = date,
-            time_slot = timeSlot,
-            appointment_type = type,
-            status = "PENDING",
-            parent_topic_notes = notes,
-            created_at = now
-        )
-
-        _uiState.update { current ->
-            val updatedSlots = current.appointmentSlots.map { slot ->
-                if (slot.teacher_id == teacherId && slot.date == date && slot.time_slot == timeSlot) {
-                    slot.copy(is_booked = true, booked_by_parent_name = current.currentUser.full_name)
-                } else slot
-            }
-            current.copy(
-                appointments = listOf(newApt) + current.appointments,
-                appointmentSlots = updatedSlots,
-                toastMessage = "$teacherName ile $date $timeSlot randevu talebiniz oluşturuldu."
-            )
-        }
-
-        NotificationHelper.showPushNotification(
-            context = getApplication(),
-            title = "📅 Randevu Talebi İletildi",
-            message = "$teacherName öğretmenine $date ($timeSlot) randevu talebiniz başarıyla iletildi.",
-            channelId = NotificationHelper.CHANNEL_MESSAGES
-        )
-    }
-
-    fun updateAppointmentStatus(appointmentId: String, newStatus: String, teacherFeedback: String? = null) {
-        _uiState.update { current ->
-            val updated = current.appointments.map { apt ->
-                if (apt.id == appointmentId) {
-                    apt.copy(status = newStatus, teacher_feedback_notes = teacherFeedback ?: apt.teacher_feedback_notes)
-                } else apt
-            }
-            val statusLabel = when (newStatus) {
-                "APPROVED" -> "onaylandı"
-                "REJECTED" -> "reddedildi"
-                "COMPLETED" -> "tamamlandı olarak işaretlendi"
-                "CANCELLED" -> "iptal edildi"
-                else -> "güncellendi"
-            }
-            current.copy(
-                appointments = updated,
-                toastMessage = "Randevu $statusLabel."
-            )
-        }
     }
 
     // ==========================================

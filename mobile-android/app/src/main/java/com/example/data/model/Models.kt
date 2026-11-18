@@ -740,25 +740,26 @@ data class TeacherAppointmentSlot(
 
 @JsonClass(generateAdapter = true)
 data class ParentTeacherAppointment(
-    val id: String = "apt-1",
-    val teacher_id: String = "t-1",
-    val teacher_name: String = "Ahmet Yılmaz",
-    val teacher_subject: String = "Matematik",
-    val parent_id: String = "p-1",
-    val parent_name: String = "Mehmet Demir",
-    val parent_phone: String = "+90 532 555 1234",
-    val student_id: String = "std-1",
-    val student_name: String = "Ali Demir",
-    val class_name: String = "8-A",
-    val date: String = "2026-08-28",
-    val time_slot: String = "15:30 - 16:00",
-    val appointment_type: String = "FACE_TO_FACE", // FACE_TO_FACE, ONLINE_MEET, PHONE_CALL
-    val meeting_link: String? = "https://meet.google.com/okul-360-ptc",
-    val location_room: String? = "2. Kat Görüşme Odası 204",
-    val status: String = "APPROVED", // PENDING, APPROVED, REJECTED, COMPLETED, CANCELLED
-    val parent_topic_notes: String = "Ali'nin 1. dönem LGS matematik soru çözüm stratejisi ve deneme netleri hakkında.",
+    val id: String = "",
+    val teacher_id: String = "",
+    val teacher_name: String = "",
+    val teacher_subject: String = "",
+    val parent_id: String = "",
+    val parent_name: String = "",
+    val parent_phone: String = "",
+    val student_id: String = "",
+    val student_name: String = "",
+    val class_name: String = "",
+    val date: String = "",
+    val time_slot: String = "",
+    val appointment_type: String = "", // FACE_TO_FACE, ONLINE_MEET, PHONE_CALL
+    val meeting_link: String? = null,
+    val location_room: String? = null,
+    val status: String = "", // PENDING, APPROVED, REJECTED, COMPLETED, CANCELLED
+    val parent_topic_notes: String = "",
     val teacher_feedback_notes: String? = null,
-    val created_at: String = "2026-08-25 10:15"
+    val created_at: String = "",
+    val duration_minutes: Int = 0
 )
 
 // ==========================================

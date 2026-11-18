@@ -304,16 +304,7 @@ fun Okul360NavHost(
 
         // 14. Appointments (PTC) Destination
         composable(Screen.Appointments.route) {
-            AppointmentsScreen(
-                state = state,
-                onNavigateBack = { navController.popBackStack() },
-                onBookAppointment = { teacherId, teacherName, subject, date, timeSlot, type, notes ->
-                    viewModel.bookAppointment(teacherId, teacherName, subject, date, timeSlot, type, notes)
-                },
-                onUpdateStatus = { aptId, newStatus, feedback ->
-                    viewModel.updateAppointmentStatus(aptId, newStatus, feedback)
-                }
-            )
+            NativeAppointmentScreen(state, onBack = { navController.popBackStack() })
         }
 
         // 15. Transport & Bus Tracking Destination

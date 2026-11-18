@@ -1174,16 +1174,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 state = state,
                                 onBack = { currentSubScreen = SubScreen.NONE }
                             )
-                            SubScreen.APPOINTMENTS -> AppointmentsScreen(
-                                state = state,
-                                onNavigateBack = { currentSubScreen = SubScreen.NONE },
-                                onBookAppointment = { teacherId, teacherName, subject, date, timeSlot, type, notes ->
-                                    viewModel.bookAppointment(teacherId, teacherName, subject, date, timeSlot, type, notes)
-                                },
-                                onUpdateStatus = { aptId, newStatus, feedback ->
-                                    viewModel.updateAppointmentStatus(aptId, newStatus, feedback)
-                                }
-                            )
+                            SubScreen.APPOINTMENTS -> NativeAppointmentScreen(state, onBack = { currentSubScreen = SubScreen.NONE })
                             SubScreen.TRANSPORT -> TransportScreen(
                                 state = state,
                                 onNavigateBack = { currentSubScreen = SubScreen.NONE },

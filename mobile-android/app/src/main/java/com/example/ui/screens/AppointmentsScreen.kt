@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -27,10 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.model.AppointmentType
 import com.example.data.model.ParentTeacherAppointment
-import com.example.data.model.TeacherAppointmentSlot
-import com.example.ui.components.RoleContextualAiCard
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.Okul360UiState
 
@@ -39,20 +38,29 @@ import com.example.ui.viewmodel.Okul360UiState
 fun AppointmentsScreen(
     state: Okul360UiState,
     onNavigateBack: () -> Unit,
-    onBookAppointment: (String, String, String, String, String, String, String) -> Unit,
-    onUpdateStatus: (String, String, String?) -> Unit
+    onBookAppointment: (() -> Unit)?,
+    onUpdateStatus: (String, String, String?) -> Unit,
+    canManage: Boolean,
+    canCancel: Boolean,
+    busy: Boolean,
+    loaded: Boolean,
+    failure: String,
+    onReload: () -> Unit,
+    onCheckResult: (() -> Unit)?,
+    onClearPending: () -> Unit,
+    savedRevision: Int,
 ) {
     val context = LocalContext.current
     var selectedFilter by remember { mutableStateOf("ALL") } // ALL, PENDING, APPROVED, COMPLETED
-    var showBookDialog by remember { mutableStateOf(false) }
     var selectedAppointmentForDetail by remember { mutableStateOf<ParentTeacherAppointment?>(null) }
     var showFeedbackDialog by remember { mutableStateOf<ParentTeacherAppointment?>(null) }
     var feedbackText by remember { mutableStateOf("") }
+    LaunchedEffect(savedRevision) { if (savedRevision > 0) showFeedbackDialog = null }
 
     val filteredAppointments = remember(state.appointments, selectedFilter) {
         when (selectedFilter) {
             "PENDING" -> state.appointments.filter { it.status == "PENDING" }
-            "APPROVED" -> state.appointments.filter { it.status == "APPROVED" }
+            "APPROVED" -> state.appointments.filter { it.status in setOf("APPROVED", "CONFIRMED") }
             "COMPLETED" -> state.appointments.filter { it.status == "COMPLETED" }
             else -> state.appointments
         }
@@ -77,7 +85,8 @@ fun AppointmentsScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showBookDialog = true }, modifier = Modifier.testTag("book_apt_top_btn")) {
+                    if (onBookAppointment != null) IconButton(enabled = loaded && !busy && onCheckResult == null,
+                        onClick = onBookAppointment, modifier = Modifier.testTag("book_apt_top_btn")) {
                         Icon(Icons.Default.AddCircle, contentDescription = "Randevu Al", tint = MaterialTheme.colorScheme.primary)
                     }
                 },
@@ -87,8 +96,8 @@ fun AppointmentsScreen(
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { showBookDialog = true },
+            if (onBookAppointment != null && loaded && !busy && onCheckResult == null) ExtendedFloatingActionButton(
+                onClick = onBookAppointment,
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
                 text = { Text("Randevu Talep Et") },
                 containerColor = MaterialTheme.colorScheme.primary,
@@ -102,6 +111,16 @@ fun AppointmentsScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (failure.isNotBlank()) Text(failure, modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error)
+            TextButton(enabled = !busy, onClick = onCheckResult ?: onReload, modifier = Modifier.padding(horizontal = 12.dp)) {
+                Text(if (onCheckResult == null) "Listeyi yenile" else "Sonucu kontrol et")
+            }
+            if (onCheckResult != null) {
+                TextButton(enabled = !busy, onClick = onClearPending, modifier = Modifier.padding(horizontal = 12.dp)) {
+                    Text("Kontrolü kapat")
+                }
+            }
             // Filter chips
             LazyRow(
                 modifier = Modifier
@@ -131,7 +150,7 @@ fun AppointmentsScreen(
                     FilterChip(
                         selected = selectedFilter == "APPROVED",
                         onClick = { selectedFilter = "APPROVED" },
-                        label = { Text("Onaylanan (${state.appointments.count { it.status == "APPROVED" }})") },
+                        label = { Text("Onaylanan (${state.appointments.count { it.status in setOf("APPROVED", "CONFIRMED") }})") },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = EmeraldPrimary.copy(alpha = 0.2f),
                             selectedLabelColor = EmeraldPrimary
@@ -147,7 +166,9 @@ fun AppointmentsScreen(
                 }
             }
 
-            if (filteredAppointments.isEmpty()) {
+            if (!loaded) {
+                if (busy) Text("Randevular yükleniyor", Modifier.padding(16.dp))
+            } else if (filteredAppointments.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -175,60 +196,16 @@ fun AppointmentsScreen(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 88.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // Available Slots Summary Banner inside scrollable feed
-                    item {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.EventAvailable, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Açık Öğretmen Randevu Slotları",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.5.sp,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Text(
-                                        "${state.appointmentSlots.count { !it.is_booked }} adet rezerve edilebilir müsait saat aralığı",
-                                        fontSize = 11.5.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    item {
-                        RoleContextualAiCard(
-                            screenName = "APPOINTMENTS",
-                            state = state
-                        )
-                    }
-
                     items(filteredAppointments, key = { it.id }) { apt ->
                         AppointmentCard(
                             appointment = apt,
                             onCardClick = { selectedAppointmentForDetail = apt },
-                            onApprove = { onUpdateStatus(apt.id, "APPROVED", null) },
-                            onReject = { onUpdateStatus(apt.id, "REJECTED", null) },
-                            onComplete = { onUpdateStatus(apt.id, "COMPLETED", null) },
+                            canManage = canManage && !busy && onCheckResult == null,
+                            canCancel = canCancel && !busy && onCheckResult == null,
+                            onApprove = { onUpdateStatus(apt.id, "APPROVED", apt.teacher_feedback_notes) },
+                            onReject = { onUpdateStatus(apt.id, "REJECTED", apt.teacher_feedback_notes) },
+                            onComplete = { onUpdateStatus(apt.id, "COMPLETED", apt.teacher_feedback_notes) },
+                            onCancel = { onUpdateStatus(apt.id, "CANCELLED", apt.teacher_feedback_notes) },
                             onAddFeedback = {
                                 showFeedbackDialog = apt
                                 feedbackText = apt.teacher_feedback_notes ?: ""
@@ -246,18 +223,6 @@ fun AppointmentsScreen(
         }
     }
 
-    // Book Appointment Dialog
-    if (showBookDialog) {
-        BookAppointmentDialog(
-            slots = state.appointmentSlots.filter { !it.is_booked },
-            onDismiss = { showBookDialog = false },
-            onConfirm = { teacherId, teacherName, subject, date, timeSlot, type, notes ->
-                onBookAppointment(teacherId, teacherName, subject, date, timeSlot, type, notes)
-                showBookDialog = false
-            }
-        )
-    }
-
     // Feedback Dialog
     showFeedbackDialog?.let { apt ->
         AlertDialog(
@@ -266,7 +231,7 @@ fun AppointmentsScreen(
             text = {
                 Column {
                     Text(
-                        "${apt.parent_name} • ${apt.student_name} (${apt.class_name})",
+                        apt.student_name,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -274,6 +239,7 @@ fun AppointmentsScreen(
                     OutlinedTextField(
                         value = feedbackText,
                         onValueChange = { feedbackText = it },
+                        enabled = !busy && onCheckResult == null,
                         label = { Text("Öğretmen Görüşme Özeti") },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -284,12 +250,12 @@ fun AppointmentsScreen(
             },
             confirmButton = {
                 Button(
+                    enabled = !busy,
                     onClick = {
-                        onUpdateStatus(apt.id, apt.status, feedbackText)
-                        showFeedbackDialog = null
+                        if (onCheckResult != null) onCheckResult() else onUpdateStatus(apt.id, apt.status, feedbackText)
                     }
                 ) {
-                    Text("Kaydet")
+                    Text(if (onCheckResult == null) "Kaydet" else "Sonucu kontrol et")
                 }
             },
             dismissButton = {
@@ -312,12 +278,10 @@ fun AppointmentsScreen(
                 }
             },
             text = {
-                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Öğretmen: ${apt.teacher_name} (${apt.teacher_subject})", fontWeight = FontWeight.Bold)
-                    Text("Veli: ${apt.parent_name} (${apt.parent_phone})")
-                    Text("Öğrenci: ${apt.student_name} - ${apt.class_name}")
-                    Text("Tarih & Saat: ${apt.date} • ${apt.time_slot}")
-                    Text("Görüşme Türü: ${apt.appointment_type}")
+                Column(modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Öğretmen: ${apt.teacher_name}", fontWeight = FontWeight.Bold)
+                    Text("Öğrenci: ${apt.student_name}")
+                    Text("Tarih ve saat: ${apt.date} • ${apt.time_slot}")
                     if (!apt.location_room.isNullOrBlank()) {
                         Text("Konum: ${apt.location_room}", color = MaterialTheme.colorScheme.primary)
                     }
@@ -343,18 +307,22 @@ fun AppointmentsScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AppointmentCard(
     appointment: ParentTeacherAppointment,
+    canManage: Boolean,
+    canCancel: Boolean,
     onCardClick: () -> Unit,
     onApprove: () -> Unit,
     onReject: () -> Unit,
     onComplete: () -> Unit,
+    onCancel: () -> Unit,
     onAddFeedback: () -> Unit,
     onOpenMeet: () -> Unit
 ) {
     val statusColor = when (appointment.status) {
-        "APPROVED" -> EmeraldPrimary
+        "APPROVED", "CONFIRMED" -> EmeraldPrimary
         "PENDING" -> AmberPrimary
         "REJECTED" -> CrimsonPrimary
         "COMPLETED" -> OceanPrimary
@@ -362,10 +330,11 @@ fun AppointmentCard(
     }
 
     val statusText = when (appointment.status) {
-        "APPROVED" -> "Onaylandı"
+        "APPROVED", "CONFIRMED" -> "Onaylandı"
         "PENDING" -> "Onay Bekliyor"
         "REJECTED" -> "Reddedildi"
         "COMPLETED" -> "Tamamlandı"
+        "CANCELLED" -> "İptal edildi"
         else -> appointment.status
     }
 
@@ -408,13 +377,7 @@ fun AppointmentCard(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Text(
-                            text = appointment.teacher_subject,
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+
                     }
                 }
 
@@ -444,9 +407,8 @@ fun AppointmentCard(
                 Icon(Icons.Default.AccessTime, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("${appointment.date} • ${appointment.time_slot}", fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                Spacer(modifier = Modifier.weight(1f))
-                Text("Öğrenci: ${appointment.student_name}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            Text("Öğrenci: ${appointment.student_name}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
             if (appointment.parent_topic_notes.isNotBlank()) {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -461,17 +423,17 @@ fun AppointmentCard(
 
             // Action Buttons
             Spacer(modifier = Modifier.height(12.dp))
-            Row(
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 if (appointment.appointment_type == "ONLINE_MEET" && !appointment.meeting_link.isNullOrBlank()) {
                     OutlinedButton(
                         onClick = onOpenMeet,
                         shape = RoundedCornerShape(10.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        modifier = Modifier.height(40.dp)
+                        modifier = Modifier.heightIn(min = 48.dp)
                     ) {
                         Icon(Icons.Default.VideoCall, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
@@ -480,13 +442,13 @@ fun AppointmentCard(
                     Spacer(modifier = Modifier.width(8.dp))
                 }
 
-                if (appointment.status == "PENDING") {
+                if (canManage && appointment.status == "PENDING") {
                     FilledTonalButton(
                         onClick = onApprove,
                         colors = ButtonDefaults.filledTonalButtonColors(containerColor = EmeraldPrimary.copy(alpha = 0.2f), contentColor = EmeraldPrimary),
                         shape = RoundedCornerShape(10.dp),
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                        modifier = Modifier.height(40.dp)
+                        modifier = Modifier.heightIn(min = 48.dp)
                     ) {
                         Text("Onayla", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
@@ -496,16 +458,16 @@ fun AppointmentCard(
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = CrimsonPrimary),
                         shape = RoundedCornerShape(10.dp),
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                        modifier = Modifier.height(40.dp)
+                        modifier = Modifier.heightIn(min = 48.dp)
                     ) {
                         Text("Reddet", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
-                } else if (appointment.status == "APPROVED") {
+                } else if (canManage && appointment.status in setOf("APPROVED", "CONFIRMED")) {
                     FilledTonalButton(
                         onClick = onComplete,
                         shape = RoundedCornerShape(10.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        modifier = Modifier.height(40.dp)
+                        modifier = Modifier.heightIn(min = 48.dp)
                     ) {
                         Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(4.dp))
@@ -515,121 +477,10 @@ fun AppointmentCard(
                     IconButton(onClick = onAddFeedback, modifier = Modifier.size(40.dp)) {
                         Icon(Icons.Outlined.EditNote, contentDescription = "Not Ekle", tint = MaterialTheme.colorScheme.primary)
                     }
+                } else if (canCancel && appointment.status in setOf("PENDING", "APPROVED", "CONFIRMED")) {
+                    OutlinedButton(onClick = onCancel, modifier = Modifier.heightIn(min = 48.dp)) { Text("İptal et") }
                 }
             }
         }
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun BookAppointmentDialog(
-    slots: List<TeacherAppointmentSlot>,
-    onDismiss: () -> Unit,
-    onConfirm: (String, String, String, String, String, String, String) -> Unit
-) {
-    var selectedSlot by remember { mutableStateOf(slots.firstOrNull()) }
-    var selectedType by remember { mutableStateOf("FACE_TO_FACE") } // FACE_TO_FACE, ONLINE_MEET, PHONE_CALL
-    var notes by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text("Yeni Görüşme Talebi", fontWeight = FontWeight.Bold)
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text("Müsait Öğretmen & Saat Seçimi:", fontWeight = FontWeight.Medium, fontSize = 13.sp)
-
-                if (slots.isEmpty()) {
-                    Text("Şu an açık bir randevu aralığı bulunmuyor.", color = CrimsonPrimary, fontSize = 12.sp)
-                } else {
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(slots) { slot ->
-                            val isSelected = selectedSlot?.id == slot.id
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                                border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
-                                modifier = Modifier.clickable { selectedSlot = slot }
-                            ) {
-                                Column(modifier = Modifier.padding(8.dp)) {
-                                    Text(slot.teacher_name, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                    Text(slot.subject, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text("${slot.date} • ${slot.time_slot}", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Text("Görüşme Türü:", fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AppointmentType.values().forEach { type ->
-                        val isSelected = selectedType == type.name
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { selectedType = type.name }
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(type.iconEmoji, fontSize = 18.sp)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(type.label.split(" ").first(), fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
-                            }
-                        }
-                    }
-                }
-
-                OutlinedTextField(
-                    value = notes,
-                    onValueChange = { notes = it },
-                    label = { Text("Görüşme Konusu & Veli Talebi") },
-                    placeholder = { Text("Örn: LGS deneme netleri ve çalışma programı...") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3,
-                    maxLines = 4
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    selectedSlot?.let { slot ->
-                        onConfirm(
-                            slot.teacher_id,
-                            slot.teacher_name,
-                            slot.subject,
-                            slot.date,
-                            slot.time_slot,
-                            selectedType,
-                            notes.ifBlank { "Genel durum değerlendirmesi" }
-                        )
-                    }
-                },
-                enabled = selectedSlot != null
-            ) {
-                Text("Talep Gönder")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("İptal")
-            }
-        }
-    )
 }
