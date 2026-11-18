@@ -8,8 +8,22 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
 import java.time.LocalDate
+import java.time.DayOfWeek
+import java.time.LocalTime
 import java.time.temporal.ChronoUnit
 import java.util.UUID
+
+data class DutyOption(val id: String, val name: String)
+
+data class DutyDraft(
+    val branch: DutyOption,
+    val teacher: DutyOption,
+    val day: DayOfWeek,
+    val location: DutyLocation,
+    val start: String,
+    val end: String,
+    val requestId: UUID = UUID.randomUUID(),
+)
 
 /** Canonical operational records, with no local-success writes or generated identities. */
 class NativeStaffClient {
@@ -31,12 +45,62 @@ class NativeStaffClient {
     }
     private fun JSONArray.rows() = (0 until length()).map { getJSONObject(it) }
     private fun JSONObject.text(key: String) = if (isNull(key)) "" else optString(key)
-    suspend fun duties(): List<TeacherDutyRoster> = (call("staff/duty-rosters") as JSONArray).rows().map { row ->
+    private suspend fun dutyRows(branchId: String?): List<JSONObject> {
+        val filter = branchId?.let { "?branch_id=${id(it)}" }.orEmpty()
+        return (call("staff/duty-rosters$filter") as JSONArray).rows()
+    }
+
+    private fun duty(row: JSONObject): TeacherDutyRoster =
         TeacherDutyRoster(id = id(row.getString("id")), day_name = row.getString("day_of_week"), date = "",
             duty_location = row.getString("duty_location"), teacher_id = id(row.getString("teacher_id")),
             teacher_name = row.getString("teacher_name"), teacher_branch = "",
             shift_hours = row.getString("start_time") + " - " + row.getString("end_time"),
             is_active_today = false, notes = row.text("notes"))
+
+    suspend fun duties(branchId: String? = null) = dutyRows(branchId).map(::duty)
+
+    suspend fun dutyOptions(branchId: String? = null): List<DutyOption> {
+        val filter = branchId?.let { "&branch_id=${id(it)}" }.orEmpty()
+        val options = linkedMapOf<String, DutyOption>()
+        var page = 1
+        do {
+            val response = call("staff/duty-rosters/options?page=$page&page_size=100$filter") as JSONObject
+            check(response.getInt("page") == page)
+            val totalPages = response.getInt("total_pages")
+            for (row in response.getJSONArray("items").rows()) {
+                val option = DutyOption(id(row.getString("id")), row.getString("name"))
+                options[option.id] = option
+            }
+            page++
+        } while (page <= totalPages)
+        return options.values.toList()
+    }
+
+    private fun dutyMatches(row: JSONObject, draft: DutyDraft): Boolean =
+        row.getString("id") == draft.requestId.toString() &&
+            row.getString("branch_id") == id(draft.branch.id) &&
+            row.getString("teacher_id") == id(draft.teacher.id) &&
+            row.getString("day_of_week") == draft.day.name &&
+            row.getString("duty_location") == draft.location.name &&
+            row.getString("start_time") == draft.start && row.getString("end_time") == draft.end &&
+            row.getString("status") == "ACTIVE"
+
+    suspend fun confirmDuty(draft: DutyDraft, visibleBranchId: String?): List<TeacherDutyRoster>? {
+        val rows = dutyRows(visibleBranchId)
+        val saved = rows.singleOrNull { it.getString("id") == draft.requestId.toString() } ?: return null
+        check(dutyMatches(saved, draft)) { "Nöbet kaydı sunucudan doğrulanamadı" }
+        return rows.map(::duty)
+    }
+
+    suspend fun createDuty(draft: DutyDraft, visibleBranchId: String?): List<TeacherDutyRoster> {
+        require(LocalTime.parse(draft.start) < LocalTime.parse(draft.end))
+        val body = JSONObject().put("branch_id", id(draft.branch.id)).put("teacher_id", id(draft.teacher.id))
+            .put("teacher_name", draft.teacher.name).put("day_of_week", draft.day.name)
+            .put("duty_location", draft.location.name).put("start_time", draft.start).put("end_time", draft.end)
+            .put("request_id", draft.requestId.toString())
+        val saved = call("staff/duty-rosters", "POST", body) as JSONObject
+        check(dutyMatches(saved, draft)) { "Sunucu nöbet kaydını doğrulamadı" }
+        return checkNotNull(confirmDuty(draft, visibleBranchId)) { "Nöbet listesi güncellenemedi" }
     }
     private fun leave(row: JSONObject) = TeacherLeaveRequest(id = id(row.getString("id")), teacher_id = id(row.getString("staff_id")),
         teacher_name = row.getString("staff_name"), branch = row.text("branch"), leave_type = row.getString("leave_type"),

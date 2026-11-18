@@ -28,11 +28,13 @@ private fun StaffContent(state: Okul360UiState, onNavigateBack: () -> Unit) {
     var loaded by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var saved by remember { mutableIntStateOf(0) }
+    var showDutyForm by remember { mutableStateOf(false) }
+    val selectedBranchId = state.selectedBranchId.takeUnless { it == "all" }
     val canRead = NativeNavigationPolicy.has(state.currentUser, "user.read")
     val canReview = NativeNavigationPolicy.has(state.currentUser, "user.write")
     suspend fun refresh() {
         val nextLeaves = api.leaves()
-        val nextDuties = api.duties()
+        val nextDuties = api.duties(selectedBranchId)
         if (api.current()) { leaves = nextLeaves; duties = nextDuties; loaded = true }
     }
     fun run(action: (suspend () -> Unit)? = null) {
@@ -60,12 +62,19 @@ private fun StaffContent(state: Okul360UiState, onNavigateBack: () -> Unit) {
             if (error.isNotBlank()) Text(error, Modifier.padding(12.dp))
             StaffManagementScreen(state.copy(leaveRequests = leaves, dutyRosters = duties), onNavigateBack,
                 actionsEnabled = loaded && !busy, canReview = canReview, savedRevision = saved, operationError = error,
+                onOpenDutyForm = if (canReview) ({ showDutyForm = true }) else null,
                 onSubmitLeaveRequest = { type, start, end, _, reason ->
                     run { api.requestLeave(state.currentUser, type, start, end, reason) }
                 },
                 onReviewLeaveRequest = { id, approved, comment ->
                     if (canReview) run { api.reviewLeave(id, approved, comment) }
                 })
+            if (showDutyForm && canReview) {
+                NativeDutyDialog(api, selectedBranchId, onDismiss = { showDutyForm = false }) { confirmed ->
+                    duties = confirmed
+                    showDutyForm = false
+                }
+            }
         }
     }
 }

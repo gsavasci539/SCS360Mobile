@@ -52,6 +52,7 @@ fun StaffManagementScreen(
     canReview: Boolean = false,
     savedRevision: Int = 0,
     operationError: String = "",
+    onOpenDutyForm: (() -> Unit)? = null,
     onSubmitLeaveRequest: (String, String, String, Int, String) -> Unit,
     onReviewLeaveRequest: (String, Boolean, String) -> Unit
 ) {
@@ -92,6 +93,14 @@ fun StaffManagementScreen(
             )
         },
         floatingActionButton = {
+            if (selectedTab == "DUTY" && actionsEnabled && onOpenDutyForm != null) {
+                ExtendedFloatingActionButton(
+                    onClick = onOpenDutyForm,
+                    modifier = Modifier.testTag("staff_duty_create"),
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text("Nöbet oluştur") }
+                )
+            }
             if (selectedTab == "LEAVES" && actionsEnabled) {
                 ExtendedFloatingActionButton(
                     onClick = { showNewLeaveDialog = true },
@@ -186,7 +195,9 @@ fun StaffManagementScreen(
                             }
     
                             itemsIndexed(state.dutyRosters, key = { _, it -> it.id }) { index, duty ->
-                                val locationEnum = try { DutyLocation.valueOf(duty.duty_location) } catch (e: Exception) { DutyLocation.GARDEN }
+                                val locationEnum = DutyLocation.entries.find { it.name == duty.duty_location }
+                                val locationLabel = locationEnum?.label ?: duty.duty_location
+                                val dayLabel = dutyDays.entries.find { it.key.name == duty.day_name }?.value ?: duty.day_name
     
                                 if (isCardMode) {
                                     CompactResponsiveCard(
@@ -205,13 +216,13 @@ fun StaffManagementScreen(
                                                         .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
                                                     contentAlignment = Alignment.Center
                                                 ) {
-                                                    Text(locationEnum.emoji, fontSize = 16.sp)
+                                                    Text(locationEnum?.emoji.orEmpty(), fontSize = 16.sp)
                                                 }
                                                 Spacer(modifier = Modifier.width(8.dp))
                                                 Column(modifier = Modifier.weight(1f)) {
                                                     Text(duty.teacher_name, fontWeight = FontWeight.Bold, fontSize = 13.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                                    Text("${duty.teacher_branch} • ${duty.day_name} (${duty.date})", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                                    Text("${locationEnum.label} • Saat: ${duty.shift_hours}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                    Text(dayLabel, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                    Text("$locationLabel • Saat: ${duty.shift_hours}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                                 }
                                             }
     
@@ -241,11 +252,11 @@ fun StaffManagementScreen(
                                             Text(duty.teacher_branch, fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                                         }
                                         Column(modifier = Modifier.weight(1.25f).padding(end = 6.dp)) {
-                                            Text("${locationEnum.emoji} ${locationEnum.label}", fontWeight = FontWeight.SemiBold, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.primary, maxLines = 1)
+                                            Text(locationLabel, fontWeight = FontWeight.SemiBold, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.primary, maxLines = 1)
                                             Text(duty.shift_hours, fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
                                         Column(modifier = Modifier.weight(1.0f), horizontalAlignment = Alignment.End) {
-                                            Text("${duty.day_name} (${duty.date})", fontSize = 11.sp, maxLines = 1)
+                                            Text(dayLabel, fontSize = 11.sp, maxLines = 1)
                                             if (duty.is_active_today) {
                                                 Text("Bugün Nöbetçi", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = EmeraldPrimary)
                                             }

@@ -11,6 +11,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.net.InetSocketAddress
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.util.UUID
 
@@ -19,6 +20,50 @@ import java.util.UUID
 class NativeStaffContractTest {
     private fun id(n: Int) = UUID(91, n.toLong()).toString()
     private data class Reply(val code: Int = 200, val value: Any = JSONObject.NULL)
+
+    @Test fun loadsPagedOptionsAndRecoversLostDutyResponseWithOnePost() = runBlocking {
+        val draft = DutyDraft(DutyOption(id(1), "Branch"), DutyOption(id(2), "Teacher"),
+            DayOfWeek.MONDAY, DutyLocation.GARDEN, "08:00", "16:00", UUID.fromString(id(3)))
+        var posted: JSONObject? = null
+        val requests = mutableListOf<String>()
+        server({ request ->
+            val path = request.requestURI.toString()
+            requests += "${request.requestMethod} $path"
+            when {
+                request.requestMethod == "POST" -> {
+                    posted = JSONObject(request.requestBody.readBytes().toString(Charsets.UTF_8))
+                    Reply(0)
+                }
+                path.contains("/options") -> {
+                    val page = if (path.contains("page=2")) 2 else 1
+                    Reply(value = JSONObject().put("page", page).put("total_pages", 2)
+                        .put("items", JSONArray().put(JSONObject().put("id", id(page + 1)).put("name", "Teacher $page"))))
+                }
+                else -> {
+                    val row = checkNotNull(posted).put("id", id(3)).put("status", "ACTIVE")
+                        .put("teacher_name", "Server Teacher")
+                    Reply(value = JSONArray().put(row))
+                }
+            }
+        }) {
+            val api = NativeStaffClient()
+            assertEquals(listOf(id(2), id(3)), api.dutyOptions(id(1)).map(DutyOption::id))
+            try {
+                api.createDuty(draft, id(1))
+                fail("Lost acknowledgement")
+            } catch (_: java.io.IOException) {
+            }
+            val saved = api.confirmDuty(draft, id(1))?.single()
+            assertEquals("Server Teacher", saved?.teacher_name)
+            assertEquals(id(3), posted?.getString("request_id"))
+            assertEquals(listOf(
+                "GET /api/staff/duty-rosters/options?page=1&page_size=100&branch_id=${id(1)}",
+                "GET /api/staff/duty-rosters/options?page=2&page_size=100&branch_id=${id(1)}",
+                "POST /api/staff/duty-rosters",
+                "GET /api/staff/duty-rosters?branch_id=${id(1)}",
+            ), requests)
+        }
+    }
     private fun leave(status: String = "PENDING", actor: String = id(1)) = JSONObject()
         .put("id", id(2)).put("staff_id", actor).put("staff_name", "Server Actor")
         .put("leave_type", "Annual").put("start_date", "2027-01-01").put("end_date", "2027-01-03")
