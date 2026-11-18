@@ -49,10 +49,13 @@ fun AppointmentsScreen(
     onCheckResult: (() -> Unit)?,
     onClearPending: () -> Unit,
     savedRevision: Int,
+    onManageSlots: (() -> Unit)? = null,
+    onDeleteAppointment: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     var selectedFilter by remember { mutableStateOf("ALL") } // ALL, PENDING, APPROVED, COMPLETED
     var selectedAppointmentForDetail by remember { mutableStateOf<ParentTeacherAppointment?>(null) }
+    var deleteCandidate by remember { mutableStateOf<ParentTeacherAppointment?>(null) }
     var showFeedbackDialog by remember { mutableStateOf<ParentTeacherAppointment?>(null) }
     var feedbackText by remember { mutableStateOf("") }
     LaunchedEffect(savedRevision) { if (savedRevision > 0) showFeedbackDialog = null }
@@ -85,6 +88,10 @@ fun AppointmentsScreen(
                     }
                 },
                 actions = {
+                    if (onManageSlots != null) IconButton(onClick = onManageSlots,
+                        enabled = !busy && onCheckResult == null) {
+                        Icon(Icons.Default.Schedule, contentDescription = "Uygunluk saatlerim")
+                    }
                     if (onBookAppointment != null) IconButton(enabled = loaded && !busy && onCheckResult == null,
                         onClick = onBookAppointment, modifier = Modifier.testTag("book_apt_top_btn")) {
                         Icon(Icons.Default.AddCircle, contentDescription = "Randevu Al", tint = MaterialTheme.colorScheme.primary)
@@ -302,7 +309,29 @@ fun AppointmentsScreen(
                 Button(onClick = { selectedAppointmentForDetail = null }) {
                     Text("Kapat")
                 }
+            },
+            dismissButton = {
+                if (onDeleteAppointment != null) {
+                    TextButton(enabled = !busy && onCheckResult == null, onClick = {
+                        selectedAppointmentForDetail = null
+                        deleteCandidate = apt
+                    }) { Text("Randevuyu sil") }
+                }
             }
+        )
+    }
+    deleteCandidate?.let { appointment ->
+        AlertDialog(
+            onDismissRequest = { deleteCandidate = null },
+            title = { Text("Randevu silinsin mi?") },
+            text = { Text("${appointment.student_name} • ${appointment.date} ${appointment.time_slot}") },
+            confirmButton = {
+                TextButton(enabled = onDeleteAppointment != null && !busy && onCheckResult == null, onClick = {
+                    deleteCandidate = null
+                    onDeleteAppointment?.invoke(appointment.id)
+                }) { Text("Sil") }
+            },
+            dismissButton = { TextButton(onClick = { deleteCandidate = null }) { Text("Vazgeç") } },
         )
     }
 }

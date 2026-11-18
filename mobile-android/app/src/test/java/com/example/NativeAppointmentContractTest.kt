@@ -23,9 +23,12 @@ class NativeAppointmentContractTest {
         val parent = UUID(92, 3).toString()
         val branch = UUID(92, 4).toString()
         val requestId = UUID(92, 5)
+        val availabilityId = UUID(92, 6).toString()
         val requests = CopyOnWriteArrayList<String>()
         val submitted = CopyOnWriteArrayList<JSONObject>()
         var status = "PENDING"
+        var availability = false
+        var deleted = false
         val auth = ApiClientProvider.interceptor
         val base = ApiClientProvider.activeBaseUrl
         val token = auth.authToken
@@ -38,6 +41,25 @@ class NativeAppointmentContractTest {
                 val path = request.requestURI.toString()
                 requests += "${request.requestMethod} $path"
                 val data = when {
+                    request.requestMethod == "POST" && path == "/api/appointments/slots" -> {
+                        submitted += JSONObject(request.requestBody.readBytes().toString(Charsets.UTF_8))
+                        availability = true
+                        JSONObject().put("id", availabilityId)
+                    }
+                    request.requestMethod == "DELETE" && path == "/api/appointments/slots/$availabilityId" -> {
+                        availability = false
+                        JSONObject()
+                    }
+                    request.requestMethod == "DELETE" && path == "/api/appointments/$requestId" -> {
+                        deleted = true
+                        JSONObject.NULL
+                    }
+                    path == "/api/appointments/slots?date=2027-01-04" ->
+                        JSONArray().also { rows ->
+                            if (availability) rows.put(JSONObject().put("id", availabilityId).put("teacher_id", teacher)
+                                .put("date", "2027-01-04").put("start_time", "15:00").put("end_time", "15:30")
+                                .put("is_available", true))
+                        }
                     request.requestMethod == "POST" -> {
                         submitted += JSONObject(request.requestBody.readBytes().toString(Charsets.UTF_8))
                         return@createContext
@@ -56,6 +78,7 @@ class NativeAppointmentContractTest {
                     path.contains("/teacher-slots/") -> JSONArray().put(JSONObject().put("teacher_id", teacher)
                         .put("date", "2027-01-04").put("start_time", "14:00").put("end_time", "14:30")
                         .put("duration_minutes", 30))
+                    deleted -> JSONArray()
                     else -> JSONArray().put(JSONObject().put("id", requestId.toString()).put("teacher_id", teacher)
                         .put("teacher_name", "Recorded teacher").put("parent_id", parent).put("student_id", student)
                         .put("student_name", "Recorded student").put("appointment_date", "2027-01-04")
@@ -95,6 +118,15 @@ class NativeAppointmentContractTest {
             assertEquals(1, requests.count { it == "POST /api/appointments/request" })
             assertTrue(requests.contains("PATCH /api/appointments/$requestId/status"))
             assertTrue(requests.contains("GET /api/appointments?page=1&page_size=100&branch_id=$branch"))
+            assertTrue(api.managedSlots(teacher, "2027-01-04").isEmpty())
+            api.createSlot(teacher, "2027-01-04", "15:00", "15:30")
+            assertEquals("15:30", submitted.last().getString("end_time"))
+            assertEquals(ManagedAppointmentSlot(availabilityId, "15:00", "15:30", true),
+                api.managedSlots(teacher, "2027-01-04").single())
+            api.deleteSlot(availabilityId)
+            assertTrue(api.managedSlots(teacher, "2027-01-04").isEmpty())
+            api.delete(requestId.toString())
+            assertTrue(api.records().isEmpty())
         } finally {
             server.stop(0)
             ApiClientProvider.createService(base)

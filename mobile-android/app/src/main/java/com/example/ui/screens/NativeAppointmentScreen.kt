@@ -22,7 +22,7 @@ import java.time.LocalTime
 
 private class AppointmentWrite(
     val submit: suspend () -> Unit,
-    val matches: (ParentTeacherAppointment) -> Boolean,
+    val confirmed: (List<ParentTeacherAppointment>) -> Boolean,
 )
 
 @Composable
@@ -49,6 +49,7 @@ private fun AppointmentContent(state: Okul360UiState, onBack: () -> Unit) {
     var failure by remember { mutableStateOf("") }
     var pending by remember { mutableStateOf<AppointmentWrite?>(null) }
     var booking by remember { mutableStateOf(false) }
+    var managingSlots by remember { mutableStateOf(false) }
     var revision by remember { mutableIntStateOf(0) }
 
     fun run(write: AppointmentWrite? = null, readBackOnly: Boolean = false) {
@@ -67,7 +68,7 @@ private fun AppointmentContent(state: Okul360UiState, onBack: () -> Unit) {
                 rows = confirmed
                 loaded = true
                 if (write != null) {
-                    if (confirmed.any(write.matches)) {
+                    if (write.confirmed(confirmed)) {
                         pending = null
                         booking = false
                         revision++
@@ -114,9 +115,13 @@ private fun AppointmentContent(state: Okul360UiState, onBack: () -> Unit) {
         onUpdateStatus = { id, status, note ->
             if (canWrite && (!parentOnly || status == "CANCELLED") && pending == null) {
                 val decision = AppointmentDecision(id, status, note)
-                run(AppointmentWrite({ api.decide(decision) }, decision::matches))
+                run(AppointmentWrite({ api.decide(decision) }, { it.any(decision::matches) }))
             }
         },
+        onDeleteAppointment = if (canWrite && !parentOnly) ({ id ->
+            if (pending == null) run(AppointmentWrite({ api.delete(id) }, { rows -> rows.none { it.id == id } }))
+        }) else null,
+        onManageSlots = if (canWrite && "teacher" in roleSlugs) ({ managingSlots = true }) else null,
         canManage = canWrite && !parentOnly, canCancel = canWrite && parentOnly, busy = busy,
         loaded = loaded, failure = failure, onReload = { run() }, onCheckResult = checkResult,
         onClearPending = { pending = null; run() }, savedRevision = revision,
@@ -125,8 +130,11 @@ private fun AppointmentContent(state: Okul360UiState, onBack: () -> Unit) {
         AppointmentBookingDialog(
             api = api, parent = parent, busy = busy, failure = failure, checkResult = checkResult,
             onDismiss = { booking = false },
-            onSubmit = { draft -> run(AppointmentWrite({ api.create(draft, parent) }, draft::matches)) },
+            onSubmit = { draft -> run(AppointmentWrite({ api.create(draft, parent) }, { it.any(draft::matches) })) },
         )
+    }
+    if (managingSlots && canWrite && "teacher" in roleSlugs) {
+        AppointmentSlotsDialog(api, user.id, onDismiss = { managingSlots = false })
     }
 }
 

@@ -11,6 +11,7 @@ import java.util.UUID
 
 data class AppointmentChoice(val id: String, val name: String)
 data class AppointmentSlot(val start: String, val end: String, val duration: Int)
+data class ManagedAppointmentSlot(val id: String, val start: String, val end: String, val available: Boolean)
 data class AppointmentDraft(
     val teacher: AppointmentChoice,
     val student: AppointmentChoice,
@@ -38,6 +39,7 @@ class NativeAppointmentClient(private val branchId: String? = null) {
 
     private suspend fun exchange(path: String, method: String = "GET", body: JSONObject? = null): Any = scope.io {
         val request = Request.Builder().url(base + path).tag(NativeRequestScope::class.java, scope)
+        if (method == "DELETE") request.delete()
         if (body != null) request.method(method, body.toString().toRequestBody("application/json".toMediaType()))
         http.newCall(request.build()).execute().use { response ->
             if (!response.isSuccessful) throw RegistryHttpException(response.code)
@@ -115,5 +117,26 @@ class NativeAppointmentClient(private val branchId: String? = null) {
         val body = JSONObject().put("status", decision.status).put("feedback_notes", decision.note ?: JSONObject.NULL)
         val ack = exchange("appointments/$key/status", "PATCH", body) as JSONObject
         check(id(ack.getString("id")) == key && ack.getString("status") == decision.status)
+    }
+
+    suspend fun delete(appointmentId: String) {
+        exchange("appointments/${id(appointmentId)}", "DELETE")
+    }
+
+    suspend fun managedSlots(teacherId: String, date: String): List<ManagedAppointmentSlot> =
+        (exchange("appointments/slots?date=$date") as JSONArray).rows().map { row ->
+            check(row.getString("date") == date && id(row.getString("teacher_id")) == id(teacherId))
+            ManagedAppointmentSlot(id(row.getString("id")), row.getString("start_time"),
+                row.getString("end_time"), row.getBoolean("is_available"))
+        }
+
+    suspend fun createSlot(teacherId: String, date: String, start: String, end: String) {
+        val payload = JSONObject().put("teacher_id", id(teacherId)).put("date", date)
+            .put("start_time", start).put("end_time", end).put("is_available", true)
+        exchange("appointments/slots", "POST", payload)
+    }
+
+    suspend fun deleteSlot(slotId: String) {
+        exchange("appointments/slots/${id(slotId)}", "DELETE")
     }
 }
