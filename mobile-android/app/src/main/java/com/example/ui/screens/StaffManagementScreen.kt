@@ -57,7 +57,17 @@ fun StaffManagementScreen(
 ) {
     var selectedTab by remember { mutableStateOf("DUTY") } // DUTY, LEAVES
     var showNewLeaveDialog by remember { mutableStateOf(false) }
-    LaunchedEffect(savedRevision) { if (savedRevision > 0) showNewLeaveDialog = false }
+    var reviewTarget by remember { mutableStateOf<TeacherLeaveRequest?>(null) }
+    var reviewApproved by remember { mutableStateOf(false) }
+    var reviewComment by remember { mutableStateOf("") }
+    LaunchedEffect(savedRevision) {
+        if (savedRevision > 0) { showNewLeaveDialog = false; reviewTarget = null }
+    }
+    fun openReview(request: TeacherLeaveRequest, approved: Boolean) {
+        reviewTarget = request
+        reviewApproved = approved
+        reviewComment = ""
+    }
     val tableModeState = rememberResolvedTableMode()
     val isCardMode = isCompactCardMode(tableModeState.value)
 
@@ -345,21 +355,21 @@ fun StaffManagementScreen(
                                         if (req.status == "PENDING" && actionsEnabled && canReview) {
                                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                                                 FilledTonalButton(
-                                                    onClick = { onReviewLeaveRequest(req.id, true, "") },
+                                                    onClick = { openReview(req, true) },
                                                     colors = ButtonDefaults.filledTonalButtonColors(containerColor = EmeraldPrimary.copy(alpha = 0.2f), contentColor = EmeraldPrimary),
                                                     shape = RoundedCornerShape(8.dp),
                                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                                                    modifier = Modifier.height(30.dp)
+                                                    modifier = Modifier.heightIn(min = 48.dp)
                                                 ) {
                                                     Text("Onayla", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                                 }
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 OutlinedButton(
-                                                    onClick = { onReviewLeaveRequest(req.id, false, "") },
+                                                    onClick = { openReview(req, false) },
                                                     colors = ButtonDefaults.outlinedButtonColors(contentColor = CrimsonPrimary),
                                                     shape = RoundedCornerShape(8.dp),
                                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                                                    modifier = Modifier.height(30.dp)
+                                                    modifier = Modifier.heightIn(min = 48.dp)
                                                 ) {
                                                     Text("Reddet", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                                 }
@@ -393,20 +403,50 @@ fun StaffManagementScreen(
                                                     contentDescription = "Onayla",
                                                     tint = EmeraldPrimary,
                                                     containerColor = EmeraldPrimary.copy(alpha = 0.15f),
-                                                    onClick = { onReviewLeaveRequest(req.id, true, "") }
+                                                    onClick = { openReview(req, true) }
                                                 )
                                                 CompactRowActionIcon(
                                                     icon = Icons.Default.Close,
                                                     contentDescription = "Reddet",
                                                     tint = CrimsonPrimary,
                                                     containerColor = CrimsonPrimary.copy(alpha = 0.15f),
-                                                    onClick = { onReviewLeaveRequest(req.id, false, "") }
+                                                    onClick = { openReview(req, false) }
                                                 )
                                             }
                                         }
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    reviewTarget?.let { request ->
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { reviewTarget = null },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(Modifier.fillMaxWidth().padding(12.dp).heightIn(max = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp * 0.9f), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.imePadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(if (reviewApproved) "İzin talebini onayla" else "İzin talebini reddet", style = MaterialTheme.typography.titleMedium)
+                    Column(Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(request.teacher_name)
+                        Text("${request.start_date} → ${request.end_date}")
+                        Text(request.reason)
+                        OutlinedTextField(value = reviewComment, onValueChange = { reviewComment = it },
+                            enabled = actionsEnabled && canReview, label = { Text("Değerlendirme notu (isteğe bağlı)") },
+                            modifier = Modifier.fillMaxWidth().testTag("staff_review_comment"), minLines = 2)
+                        if (operationError.isNotBlank()) Text(operationError, color = MaterialTheme.colorScheme.error)
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { reviewTarget = null }) { Text("İptal") }
+                        Button(enabled = actionsEnabled && canReview,
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("staff_review_confirm"),
+                            onClick = { onReviewLeaveRequest(request.id, reviewApproved, reviewComment) }) {
+                            Text("Değerlendirmeyi kaydet")
                         }
                     }
                 }

@@ -88,4 +88,17 @@ class NativeStaffContractTest {
             assertEquals("",row.date); assertEquals("",row.teacher_branch); assertFalse(row.is_active_today)
         }
     }
+    @Test fun reviewCommentIsPreservedAndMismatchedServerCommentFails() = runBlocking {
+        var comment = ""; var wrongReadback = false
+        server({ e ->
+            if (e.requestMethod == "PUT") comment = JSONObject(e.requestBody.readBytes().toString(Charsets.UTF_8)).getString("admin_comment")
+            val row = leave("REJECTED").put("admin_comment", if (wrongReadback && e.requestMethod == "GET") "Unexpected" else comment)
+            Reply(value = if (e.requestMethod == "GET") JSONArray().put(row) else row)
+        }) {
+            val api = NativeStaffClient()
+            assertEquals("Gerekçeli değerlendirme", api.reviewLeave(id(2), false, "Gerekçeli değerlendirme").admin_response)
+            wrongReadback = true
+            try { api.reviewLeave(id(2), false, "Gerekçeli değerlendirme"); fail("Wrong readback comment") } catch (_: IllegalStateException) {}
+        }
+    }
 }
