@@ -19,6 +19,8 @@ import java.util.UUID
 @Config(sdk = [36], manifest = Config.NONE)
 class NativeStaffContractTest {
     private fun id(n: Int) = UUID(91, n.toLong()).toString()
+    private fun leaveDraft(start: String = "2027-01-01", end: String = "2027-01-03") =
+        StaffLeaveDraft(User(id = id(1)), "Annual", start, end, "Recorded reason", UUID.fromString(id(2)))
     private data class Reply(val code: Int = 200, val value: Any = JSONObject.NULL)
 
     @Test fun loadsPagedOptionsAndRecoversLostDutyResponseWithOnePost() = runBlocking {
@@ -94,23 +96,40 @@ class NativeStaffContractTest {
             Reply(value=if(e.requestMethod == "GET") JSONArray().put(leave(status)) else leave(status))
         }) {
             val api=NativeStaffClient()
-            val saved=api.requestLeave(User(id=id(1)), "Annual", "2027-01-01", "2027-01-03", "Recorded reason")
+            val draft = leaveDraft()
+            api.requestLeave(draft)
+            val saved = checkNotNull(api.confirmLeave(draft::matches)).single()
             assertEquals("Server Actor", saved.teacher_name); assertEquals(3, saved.total_days)
-            assertEquals("APPROVED", api.reviewLeave(saved.id,true,"").status)
-            assertEquals(setOf("staff_id","staff_name","leave_type","start_date","end_date","days_count","reason"), writes[0].second.keys().asSequence().toSet())
+            val decision = StaffLeaveDecision(saved.id, true, "")
+            api.reviewLeave(decision)
+            assertEquals("APPROVED", api.confirmLeave(decision::matches)?.single()?.status)
+            assertEquals(setOf("staff_id","staff_name","leave_type","start_date","end_date","days_count","reason","request_id"), writes[0].second.keys().asSequence().toSet())
             assertEquals(3,writes[0].second.getInt("days_count"))
             assertEquals("PUT /api/staff/leave-requests/${id(2)}/review",writes[1].first)
         }
     }
     @Test fun wrongReadbackCannotAcknowledgeLeave() = runBlocking {
         server({ e -> Reply(value=if(e.requestMethod == "GET") JSONArray().put(leave(actor=id(9))) else leave()) }) {
-            try { NativeStaffClient().requestLeave(User(id=id(1)),"Annual","2027-01-01","2027-01-03","Recorded reason"); fail("Wrong actor") } catch (_: IllegalStateException) {}
+            val api = NativeStaffClient()
+            val draft = leaveDraft()
+            api.requestLeave(draft)
+            assertNull(api.confirmLeave(draft::matches))
         }
     }
     @Test fun lostAcknowledgementNeverRepeatsWrite() = runBlocking {
-        var posts=0
-        server({ e -> e.requestBody.readBytes(); posts++; Reply(0) }) {
-            try { NativeStaffClient().requestLeave(User(id=id(1)),"Annual","2027-01-01","2027-01-03","Recorded reason"); fail("Lost ACK") } catch (_: java.io.IOException) {}
+        var posts = 0
+        val draft = leaveDraft()
+        server({ e ->
+            if (e.requestMethod == "POST") {
+                val body = JSONObject(e.requestBody.readBytes().toString(Charsets.UTF_8))
+                assertEquals(draft.requestId.toString(), body.getString("request_id"))
+                posts++
+                Reply(0)
+            } else Reply(value = JSONArray().put(leave()))
+        }) {
+            val api = NativeStaffClient()
+            try { api.requestLeave(draft); fail("Lost ACK") } catch (_: java.io.IOException) {}
+            assertEquals(draft.requestId.toString(), api.confirmLeave(draft::matches)?.single()?.id)
             assertEquals(1,posts)
         }
     }
@@ -118,7 +137,7 @@ class NativeStaffContractTest {
         var calls=0
         server({ _ -> calls++; Reply(403) }) {
             val api=NativeStaffClient()
-            try { api.requestLeave(User(id=id(1)),"Annual","2027-01-03","2027-01-01","Reason"); fail("Dates") } catch (_: IllegalArgumentException) {}
+            try { api.requestLeave(leaveDraft(start = "2027-01-03", end = "2027-01-01")); fail("Dates") } catch (_: IllegalArgumentException) {}
             ApiClientProvider.interceptor.invalidateContext()
             try { api.leaves(); fail("Stale scope") } catch (_: kotlinx.coroutines.CancellationException) {}
             assertEquals(0,calls)
@@ -141,9 +160,11 @@ class NativeStaffContractTest {
             Reply(value = if (e.requestMethod == "GET") JSONArray().put(row) else row)
         }) {
             val api = NativeStaffClient()
-            assertEquals("Gerekçeli değerlendirme", api.reviewLeave(id(2), false, "Gerekçeli değerlendirme").admin_response)
+            val decision = StaffLeaveDecision(id(2), false, "Gerekçeli değerlendirme")
+            api.reviewLeave(decision)
+            assertEquals(decision.comment, api.confirmLeave(decision::matches)?.single()?.admin_response)
             wrongReadback = true
-            try { api.reviewLeave(id(2), false, "Gerekçeli değerlendirme"); fail("Wrong readback comment") } catch (_: IllegalStateException) {}
+            assertNull(api.confirmLeave(decision::matches))
         }
     }
 }

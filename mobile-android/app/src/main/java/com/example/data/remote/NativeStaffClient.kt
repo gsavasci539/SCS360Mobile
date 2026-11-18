@@ -25,6 +25,33 @@ data class DutyDraft(
     val requestId: UUID = UUID.randomUUID(),
 )
 
+data class StaffLeaveDraft(
+    val actor: User,
+    val type: String,
+    val start: String,
+    val end: String,
+    val reason: String,
+    val requestId: UUID = UUID.randomUUID(),
+) {
+    val days: Int
+        get() {
+            val value = ChronoUnit.DAYS.between(LocalDate.parse(start), LocalDate.parse(end)) + 1
+            require(value in 1..Int.MAX_VALUE.toLong())
+            return value.toInt()
+        }
+
+    fun matches(leave: TeacherLeaveRequest) =
+        leave.id == requestId.toString() && leave.teacher_id == actor.id &&
+            leave.start_date == start && leave.end_date == end && leave.total_days == days &&
+            leave.leave_type == type && leave.reason == reason
+}
+
+data class StaffLeaveDecision(val leaveId: String, val approved: Boolean, val comment: String) {
+    val status get() = if (approved) "APPROVED" else "REJECTED"
+    fun matches(leave: TeacherLeaveRequest) = leave.id == leaveId &&
+        leave.status == status && leave.admin_response.orEmpty() == comment
+}
+
 /** Canonical operational records, with no local-success writes or generated identities. */
 class NativeStaffClient {
     private val scope = NativeRequestScope.bound() ?: ApiClientProvider.interceptor.captureScope()
@@ -107,19 +134,22 @@ class NativeStaffClient {
         start_date = row.getString("start_date"), end_date = row.getString("end_date"), total_days = row.getInt("days_count"),
         reason = row.getString("reason"), status = row.getString("status"), admin_response = row.text("admin_comment").ifBlank { null }, created_at = row.text("created_at"))
     suspend fun leaves() = (call("staff/leave-requests") as JSONArray).rows().map(::leave)
-    suspend fun requestLeave(actor: User, type: String, start: String, end: String, reason: String): TeacherLeaveRequest {
-        val days = ChronoUnit.DAYS.between(LocalDate.parse(start), LocalDate.parse(end)) + 1
-        require(days > 0 && days <= Int.MAX_VALUE && type.isNotBlank() && reason.isNotBlank())
-        val body = JSONObject().put("staff_id", id(actor.id)).put("staff_name", actor.resolvedName).put("leave_type", type)
-            .put("start_date", start).put("end_date", end).put("days_count", days.toInt()).put("reason", reason)
+    suspend fun confirmLeave(matches: (TeacherLeaveRequest) -> Boolean): List<TeacherLeaveRequest>? =
+        leaves().takeIf { rows -> rows.any(matches) }
+
+    suspend fun requestLeave(draft: StaffLeaveDraft) {
+        require(draft.type.isNotBlank() && draft.reason.isNotBlank())
+        val body = JSONObject().put("staff_id", id(draft.actor.id)).put("staff_name", draft.actor.resolvedName)
+            .put("leave_type", draft.type).put("start_date", draft.start).put("end_date", draft.end)
+            .put("days_count", draft.days).put("reason", draft.reason).put("request_id", draft.requestId.toString())
         val record = leave(call("staff/leave-requests", "POST", body) as JSONObject)
-        check(record.teacher_id == actor.id && record.start_date == start && record.end_date == end && record.status == "PENDING" && record.leave_type == type && record.reason == reason && record.total_days == days.toInt())
-        return leaves().single { it.id == record.id }.also { check(it == record) { "İzin kaydı sunucudan doğrulanamadı" } }
+        check(draft.matches(record)) { "İzin kaydı sunucudan doğrulanamadı" }
     }
-    suspend fun reviewLeave(leaveId: String, approved: Boolean, comment: String): TeacherLeaveRequest {
-        val key = id(leaveId); val status = if (approved) "APPROVED" else "REJECTED"
-        val result = leave(call("staff/leave-requests/$key/review", "PUT", JSONObject().put("status", status).put("admin_comment", comment)) as JSONObject)
-        check(result.id == key && result.status == status && result.admin_response.orEmpty() == comment)
-        return leaves().single { it.id == key }.also { check(it == result) { "İzin değerlendirmesi doğrulanamadı" } }
+
+    suspend fun reviewLeave(decision: StaffLeaveDecision) {
+        val key = id(decision.leaveId)
+        val body = JSONObject().put("status", decision.status).put("admin_comment", decision.comment)
+        val result = leave(call("staff/leave-requests/$key/review", "PUT", body) as JSONObject)
+        check(decision.matches(result)) { "İzin değerlendirmesi doğrulanamadı" }
     }
 }

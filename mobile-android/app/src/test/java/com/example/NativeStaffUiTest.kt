@@ -51,12 +51,20 @@ class NativeStaffUiTest {
             var revision by mutableIntStateOf(0)
             var enabled by mutableStateOf(true)
             var failureText by mutableStateOf("")
+            var needsCheck by mutableStateOf(false)
+            var writes = 0
+            var checks = 0
             var sent: Triple<String, Boolean, String>? = null
             compose.setContent { Okul360Theme {
                 StaffManagementScreen(Okul360UiState(leaveRequests = listOf(request)), {},
                     actionsEnabled = enabled, canReview = true, savedRevision = revision, operationError = failureText,
+                    onCheckLeaveResult = if (needsCheck) ({ checks++; revision++ }) else null,
                     onSubmitLeaveRequest = { _, _, _, _, _ -> error("No creation") },
-                    onReviewLeaveRequest = { id, approved, comment -> sent = Triple(id, approved, comment); enabled = false })
+                    onReviewLeaveRequest = { id, approved, comment ->
+                        writes++
+                        sent = Triple(id, approved, comment)
+                        enabled = false
+                    })
             } }
             compose.onNodeWithText("İzin Talepleri (1)").performClick()
             compose.onNode(hasText("Reddet") or hasContentDescription("Reddet")).performClick()
@@ -67,7 +75,9 @@ class NativeStaffUiTest {
             compose.onNodeWithText("İzin talebini reddet").assertExists()
             compose.onNodeWithTag("staff_review_confirm").assertIsNotEnabled()
             compose.onNodeWithTag("staff_review_comment").assertTextContains("Yazılı değerlendirme")
-            compose.runOnIdle { revision++ }
+            compose.runOnIdle { needsCheck = true }
+            compose.onNodeWithText("Sonucu kontrol et").assertIsEnabled().performClick()
+            compose.runOnIdle { assertEquals(1, writes); assertEquals(1, checks) }
             compose.onNodeWithText("İzin talebini reddet").assertDoesNotExist()
         } finally { RuntimeEnvironment.setFontScale(font) }
     }

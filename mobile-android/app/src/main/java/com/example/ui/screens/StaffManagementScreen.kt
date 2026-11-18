@@ -50,8 +50,12 @@ fun StaffManagementScreen(
     onNavigateBack: () -> Unit,
     actionsEnabled: Boolean = false,
     canReview: Boolean = false,
+    canRequestLeave: Boolean = true,
     savedRevision: Int = 0,
     operationError: String = "",
+    leaveBusy: Boolean = false,
+    onCheckLeaveResult: (() -> Unit)? = null,
+    onDismissLeaveDialog: () -> Unit = {},
     onOpenDutyForm: (() -> Unit)? = null,
     onSubmitLeaveRequest: (String, String, String, Int, String) -> Unit,
     onReviewLeaveRequest: (String, Boolean, String) -> Unit
@@ -101,7 +105,7 @@ fun StaffManagementScreen(
                     text = { Text("Nöbet oluştur") }
                 )
             }
-            if (selectedTab == "LEAVES" && actionsEnabled) {
+            if (selectedTab == "LEAVES" && actionsEnabled && canRequestLeave) {
                 ExtendedFloatingActionButton(
                     onClick = { showNewLeaveDialog = true },
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
@@ -437,7 +441,7 @@ fun StaffManagementScreen(
 
     reviewTarget?.let { request ->
         androidx.compose.ui.window.Dialog(
-            onDismissRequest = { reviewTarget = null },
+            onDismissRequest = { if (!leaveBusy) { reviewTarget = null; onDismissLeaveDialog() } },
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
         ) {
             Surface(Modifier.fillMaxWidth().padding(12.dp).heightIn(max = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp * 0.9f), shape = RoundedCornerShape(20.dp)) {
@@ -453,11 +457,11 @@ fun StaffManagementScreen(
                         if (operationError.isNotBlank()) Text(operationError, color = MaterialTheme.colorScheme.error)
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = { reviewTarget = null }) { Text("İptal") }
-                        Button(enabled = actionsEnabled && canReview,
+                        TextButton(enabled = !leaveBusy, onClick = { reviewTarget = null; onDismissLeaveDialog() }) { Text("İptal") }
+                        Button(enabled = canReview && (actionsEnabled || (onCheckLeaveResult != null && !leaveBusy)),
                             modifier = Modifier.heightIn(min = 48.dp).testTag("staff_review_confirm"),
-                            onClick = { onReviewLeaveRequest(request.id, reviewApproved, reviewComment) }) {
-                            Text("Değerlendirmeyi kaydet")
+                            onClick = { onCheckLeaveResult?.invoke() ?: onReviewLeaveRequest(request.id, reviewApproved, reviewComment) }) {
+                            Text(if (onCheckLeaveResult == null) "Değerlendirmeyi kaydet" else "Sonucu kontrol et")
                         }
                     }
                 }
@@ -474,7 +478,7 @@ fun StaffManagementScreen(
         var reason by remember { mutableStateOf("") }
 
         androidx.compose.ui.window.Dialog(
-            onDismissRequest = { showNewLeaveDialog = false },
+            onDismissRequest = { if (!leaveBusy) { showNewLeaveDialog = false; onDismissLeaveDialog() } },
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
         ) {
             Surface(Modifier.fillMaxWidth().padding(12.dp).heightIn(max = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp * 0.9f), shape = RoundedCornerShape(20.dp)) {
@@ -488,6 +492,7 @@ fun StaffManagementScreen(
                             FilterChip(
                                 selected = leaveType == type,
                                 onClick = { leaveType = type },
+                                enabled = actionsEnabled,
                                 label = { Text(type, fontSize = 11.sp) }
                             )
                         }
@@ -497,12 +502,14 @@ fun StaffManagementScreen(
                         OutlinedTextField(
                             value = startDate,
                             onValueChange = { startDate = it },
+                            enabled = actionsEnabled,
                             label = { Text("Başlangıç") },
                             modifier = Modifier.weight(1f)
                         )
                         OutlinedTextField(
                             value = endDate,
                             onValueChange = { endDate = it },
+                            enabled = actionsEnabled,
                             label = { Text("Bitiş") },
                             modifier = Modifier.weight(1f)
                         )
@@ -519,6 +526,7 @@ fun StaffManagementScreen(
                     OutlinedTextField(
                         value = reason,
                         onValueChange = { reason = it },
+                        enabled = actionsEnabled,
                         label = { Text("İzin Gerekçesi & Detayı") },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2
@@ -526,15 +534,16 @@ fun StaffManagementScreen(
                 }
 
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = { showNewLeaveDialog = false }) { Text("İptal") }
+                        TextButton(enabled = !leaveBusy, onClick = { showNewLeaveDialog = false; onDismissLeaveDialog() }) { Text("İptal") }
                 Button(
-                    enabled = actionsEnabled && reason.isNotBlank() && startDate.isNotBlank() && endDate.isNotBlank() && totalDaysInput.isNotBlank(),
+                    enabled = if (onCheckLeaveResult != null) !leaveBusy
+                        else actionsEnabled && reason.isNotBlank() && totalDaysInput.toIntOrNull() != null,
                     onClick = {
-                        val days = totalDaysInput.toIntOrNull() ?: 1
-                        onSubmitLeaveRequest(leaveType, startDate, endDate, days, reason)
+                        if (onCheckLeaveResult != null) onCheckLeaveResult()
+                        else onSubmitLeaveRequest(leaveType, startDate, endDate, totalDaysInput.toInt(), reason)
                     }
                 ) {
-                    Text("Talebi İlet")
+                    Text(if (onCheckLeaveResult == null) "Talebi İlet" else "Sonucu kontrol et")
                 }
 
                     }
