@@ -29,11 +29,14 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.DailyReport
 import com.example.data.model.DailyReportDraft
+import com.example.data.remote.DailyReportPage
 import com.example.data.remote.DailyReportStudentOption
+import com.example.data.remote.NativeDailyReportClient
 import com.example.ui.navigation.NativeNavigationPolicy
-import com.example.ui.components.RoleContextualAiCard
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.Okul360UiState
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,32 +47,44 @@ fun DailyReportsScreen(
     onReload: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedClassFilter by remember { mutableStateOf("ALL") }
-    var showCreateDialog by remember(state.currentUser.id, state.currentUser.resolvedTenantId, state.workspaceOrganizationId,
-        state.selectedBranchId, state.serverBaseUrl) { mutableStateOf(false) }
-    var selectedReportId by remember(state.currentUser.id, state.currentUser.resolvedTenantId, state.workspaceOrganizationId,
-        state.selectedBranchId, state.serverBaseUrl) { mutableStateOf<String?>(null) }
+    val requestScope = listOf(state.currentUser.id, state.currentUser.resolvedTenantId, state.workspaceOrganizationId,
+        state.selectedBranchId, state.serverBaseUrl)
+    var searchQuery by remember(requestScope) { mutableStateOf("") }
+    var dateInput by remember(requestScope) { mutableStateOf("") }
+    var selectedClassId by remember(requestScope) { mutableStateOf<String?>(null) }
+    var page by remember(requestScope) { mutableIntStateOf(1) }
+    var revision by remember(requestScope) { mutableIntStateOf(0) }
+    var showCreateDialog by remember(requestScope) { mutableStateOf(false) }
+    var selectedReportId by remember(requestScope) { mutableStateOf<String?>(null) }
     val canCreate = onCreateReport != null && NativeNavigationPolicy.has(state.currentUser, "daily_reports.write", "academic.write")
     val canRead = NativeNavigationPolicy.has(state.currentUser, "daily_reports.read", "academic.read")
     val classNames = remember(state.classes) { state.classes.associate { it.id to it.name } }
-    LaunchedEffect(state.selectedBranchId, state.workspaceOrganizationId, state.currentUser.id, canRead) {
-        if (canRead && !state.dailyReportsLoading && !state.dailyReportsLoaded) onReload?.invoke()
-    }
-
-    val filteredReports = remember(state.dailyReports, classNames, searchQuery, selectedClassFilter) {
-        state.dailyReports.map { it.copy(class_name = classNames[it.class_id].orEmpty()) }.filter { report ->
-            val matchesSearch = searchQuery.isBlank() ||
-                    report.student_name.contains(searchQuery, ignoreCase = true) ||
-                    report.class_name.contains(searchQuery, ignoreCase = true) ||
-                    report.teacher_note.contains(searchQuery, ignoreCase = true)
-            val matchesClass = selectedClassFilter == "ALL" || report.class_name.equals(selectedClassFilter, ignoreCase = true)
-            matchesSearch && matchesClass
+    val branch = state.selectedBranchId?.takeUnless { it.isBlank() || it == "all" }
+    val classes = remember(state.classes, branch) { state.classes.filter { branch == null || it.branch_id == branch } }
+    val searchTerm = searchQuery.trim()
+    val date = parseDailyReportDate(dateInput)
+    val validDate = dateInput.isBlank() || date != null
+    val classroom = selectedClassId
+    val requestedPage = page
+    val result = if (canRead && validDate) {
+        key(requestScope, classroom, searchTerm, date, requestedPage, revision, state.dailyReportSavedRevision) {
+            produceState<Result<DailyReportPage>?>(null) {
+                try {
+                    val client = NativeDailyReportClient()
+                    if (searchTerm.isNotEmpty()) delay(220)
+                    value = Result.success(client.listPage(branch, classroom, searchTerm, date, requestedPage))
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    value = Result.failure(failure)
+                }
+            }.value
         }
-    }
-
-    val classList = remember(state.classes) {
-        listOf("ALL") + state.classes.map { it.name }.distinct()
+    } else null
+    val reportPage = result?.getOrNull()
+    val lastPage = (reportPage?.totalPages ?: 1).coerceAtLeast(1)
+    LaunchedEffect(reportPage, page) {
+        if (reportPage != null && page > lastPage) page = lastPage
     }
 
     Scaffold(
@@ -125,6 +140,7 @@ fun DailyReportsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .testTag("daily_report_list")
                 .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.background),
             contentPadding = PaddingValues(bottom = 100.dp, top = 8.dp)
@@ -176,20 +192,6 @@ fun DailyReportsScreen(
                 return@LazyColumn
             }
 
-            // AI Analiz & Pedagojik Öneri Kartı
-            item {
-                RoleContextualAiCard(
-                    screenName = "DAILY_REPORTS",
-                    state = state,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                    onQuickActionClick = { actionType ->
-                        if (actionType == "OPEN_AI_NARRATIVE") {
-                            showCreateDialog = true
-                        }
-                    }
-                )
-            }
-
             // Search and Class Filters
             item {
                 Column(
@@ -200,12 +202,12 @@ fun DailyReportsScreen(
                 ) {
                     OutlinedTextField(
                         value = searchQuery,
-                        onValueChange = { searchQuery = it },
+                        onValueChange = { searchQuery = it.take(150); page = 1 },
                         placeholder = { Text("Öğrenci adı veya notlarda ara...") },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                         trailingIcon = {
                             if (searchQuery.isNotBlank()) {
-                                IconButton(onClick = { searchQuery = "" }) {
+                                IconButton(onClick = { searchQuery = ""; page = 1 }) {
                                     Icon(Icons.Default.Clear, contentDescription = "Temizle")
                                 }
                             }
@@ -216,34 +218,40 @@ fun DailyReportsScreen(
                             .testTag("daily_report_search_input"),
                         singleLine = true
                     )
+                    DailyReportDateField(dateInput, valid = validDate, enabled = true, testTag = "daily_report_filter_date") {
+                        dateInput = it
+                        page = 1
+                    }
 
-                    // Class Filter Chips
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        items(classList) { cls ->
-                            val isSelected = selectedClassFilter == cls
+                        item {
+                            FilterChip(selected = selectedClassId == null,
+                                onClick = { selectedClassId = null; page = 1 },
+                                label = { Text("Tüm sınıflar", fontSize = 12.sp) })
+                        }
+                        items(classes, key = { it.id }) { classroom ->
                             FilterChip(
-                                selected = isSelected,
-                                onClick = { selectedClassFilter = cls },
-                                label = { Text(if (cls == "ALL") "Tüm Şubeler" else cls, fontSize = 12.sp) }
+                                selected = selectedClassId == classroom.id,
+                                onClick = { selectedClassId = classroom.id; page = 1 },
+                                label = { Text(classroom.name, fontSize = 12.sp) }
                             )
                         }
                     }
                 }
             }
 
-            if (state.dailyReportsLoading) {
-                item { CircularProgressIndicator(Modifier.padding(16.dp)) }
-            } else if (state.dailyReportsError != null) {
+            if (!validDate) return@LazyColumn
+            if (result == null || (reportPage != null && page > lastPage)) {
+                item { Text("Günlük karneler yükleniyor…", Modifier.padding(16.dp)) }
+            } else if (reportPage == null) {
                 item {
-                    Text(state.dailyReportsError, Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error)
-                    if (onReload != null) TextButton(onClick = onReload) { Text("Tekrar dene") }
+                    Text("Günlük karneler yüklenemedi.", Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = { revision++ }) { Text("Tekrar dene") }
                 }
-            } else if (!state.dailyReportsLoaded) {
-                item { Text("Karne listesi henüz yüklenmedi.", Modifier.padding(horizontal = 16.dp)) }
-            } else if (filteredReports.isEmpty()) {
+            } else if (reportPage.rows.isEmpty()) {
                 item {
                     Box(
                         modifier = Modifier
@@ -279,12 +287,21 @@ fun DailyReportsScreen(
                     }
                 }
             } else {
-                items(filteredReports, key = { it.id }) { report ->
+                items(reportPage.rows, key = { it.id }) { report ->
                     DailyReportCard(
-                        report = report,
+                        report = report.copy(class_name = classNames[report.class_id].orEmpty()),
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                         onOpen = { selectedReportId = report.id },
                     )
+                }
+                if (lastPage > 1) item {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Text("${reportPage.total} kayıt · Sayfa $page/$lastPage")
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            TextButton(onClick = { page-- }, enabled = page > 1) { Text("Önceki") }
+                            TextButton(onClick = { page++ }, enabled = page < lastPage) { Text("Sonraki") }
+                        }
+                    }
                 }
             }
         }
@@ -294,7 +311,7 @@ fun DailyReportsScreen(
         DailyReportDetailsDialog(id, state.currentUser.id,
             NativeNavigationPolicy.has(state.currentUser, "daily_reports.write", "academic.write"),
             onDismiss = { selectedReportId = null },
-            onChanged = { selectedReportId = null; onReload?.invoke() })
+            onChanged = { selectedReportId = null; revision++; onReload?.invoke() })
     }
 
     if (showCreateDialog && canCreate) {
@@ -508,43 +525,25 @@ fun DailyReportCard(
         tonalElevation = 1.dp
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = report.student_name,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
-                        )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = report.student_name,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
                     )
-                    Text(
-                        text = "${report.class_name} • ${report.date}",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                Surface(
+                )
+                Text(
+                    text = listOf(report.class_name, report.date).filter(String::isNotBlank).joinToString(" • "),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (report.mood_level.isNotBlank()) Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = Color(0xFFFEF3C7)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(text = "😊", fontSize = 13.sp)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = report.mood_level,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF92400E)
-                        )
-                    }
+                    Text(report.mood_level, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF92400E))
                 }
             }
 

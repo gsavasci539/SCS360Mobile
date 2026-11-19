@@ -19,11 +19,12 @@ internal fun parseDailyReportDate(value: String): LocalDate? = try {
 }
 
 @Composable
-internal fun DailyReportDateField(value: String, valid: Boolean, enabled: Boolean, onChange: (String) -> Unit) {
+internal fun DailyReportDateField(value: String, valid: Boolean, enabled: Boolean,
+    testTag: String = "daily_report_date", onChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = { if (it.length <= 10) onChange(it) },
-        modifier = Modifier.fillMaxWidth().testTag("daily_report_date"),
+        modifier = Modifier.fillMaxWidth().testTag(testTag),
         enabled = enabled,
         label = { Text("Karne tarihi (YYYY-AA-GG)") },
         isError = !valid,

@@ -22,6 +22,38 @@ import java.util.concurrent.atomic.AtomicReference
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], manifest = Config.NONE)
 class NativeDailyReportClientTest {
+    @Test fun dailyReportPageSendsFiltersAndUsesServerTotals() = runBlocking {
+        val branch = UUID(38, 1).toString()
+        val classroom = UUID(38, 2).toString()
+        val date = LocalDate.parse("2026-11-18")
+        val query = AtomicReference<String>()
+        val base = ApiClientProvider.activeBaseUrl
+        val interceptor = ApiClientProvider.interceptor
+        val previous = listOf(interceptor.authToken, interceptor.tenantId, interceptor.branchId, interceptor.workspaceOrganizationId)
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/api/daily-reports") { exchange ->
+            query.set(exchange.requestURI.rawQuery)
+            val body = """{"page":2,"total":45,"total_pages":3,"items":[{"id":"${UUID(38, 3)}","student_id":"${UUID(38, 4)}","class_id":"$classroom","date":"$date"}]}""".toByteArray()
+            exchange.responseHeaders.add("Content-Type", "application/json")
+            exchange.sendResponseHeaders(200, body.size.toLong())
+            exchange.responseBody.use { it.write(body) }
+        }
+        server.start()
+        ApiClientProvider.createService("http://127.0.0.1:${server.address.port}/api/")
+        interceptor.setSession("synthetic-report-reader")
+        try {
+            val page = NativeDailyReportClient().listPage(branch, classroom, "  Ada & 7  ", date, 2)
+            assertEquals("page=2&page_size=20&branch_id=$branch&class_id=$classroom&search=Ada+%26+7&date=$date", query.get())
+            assertEquals(45, page.total)
+            assertEquals(3, page.totalPages)
+            assertEquals(date.toString(), page.rows.single().date)
+        } finally {
+            server.stop(0)
+            ApiClientProvider.createService(base)
+            interceptor.setSession(previous[0], previous[1], previous[2], previous[3])
+        }
+    }
+
     @Test fun reportWriterUsesFilteredStudentOptionsAndCreatesWithTheReturnedClass() = runBlocking {
         val student = UUID(36, 1).toString()
         val classroom = UUID(36, 2).toString()

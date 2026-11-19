@@ -2,9 +2,13 @@ package com.example.data.remote
 
 import com.example.data.model.DailyReport
 import com.example.data.model.DailyReportDraft
+import kotlinx.coroutines.suspendCancellableCoroutine
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import org.json.JSONObject
 import org.json.JSONTokener
 import org.json.JSONArray
@@ -17,6 +21,7 @@ internal class DailyReportHttpException(val code: Int) : IOException("Günlük k
 
 internal data class DailyReportStudentOption(val id: String, val label: String, val studentName: String, val classId: String)
 internal data class DailyReportStudentPage(val rows: List<DailyReportStudentOption>, val totalPages: Int)
+internal data class DailyReportPage(val rows: List<DailyReport>, val total: Int, val totalPages: Int)
 
 internal data class DailyReportEdit(val meals: String, val sleep: String, val mood: String, val activities: List<String>, val note: String) {
     fun body() = JSONObject().put("meal_status", meals.takeUnless(String::isBlank) ?: JSONObject.NULL)
@@ -39,6 +44,28 @@ internal class NativeDailyReportClient {
     suspend fun list(branch: String?): List<DailyReport> = pages(
         branch?.takeUnless { it == "all" || it.isBlank() }?.let { "&branch_id=${UUID.fromString(it)}" }.orEmpty(),
     )
+
+    suspend fun listPage(branch: String?, classroom: String?, search: String, date: LocalDate?, page: Int): DailyReportPage {
+        require(page > 0)
+        val branchId = branch?.takeUnless { it.isBlank() || it == "all" }?.let { UUID.fromString(it).toString() }
+        val classId = classroom?.let { UUID.fromString(it).toString() }
+        val term = search.trim()
+        val path = buildString {
+            append("daily-reports?page=$page&page_size=20")
+            if (branchId != null) append("&branch_id=$branchId")
+            if (classId != null) append("&class_id=$classId")
+            if (term.isNotEmpty()) append("&search=${URLEncoder.encode(term, "UTF-8")}")
+            if (date != null) append("&date=$date")
+        }
+        val result = call(path)
+        check(result.getInt("page") == page) { "Karne sayfası doğrulanamadı." }
+        val items = result.getJSONArray("items")
+        val rows = (0 until items.length()).map { parse(items.getJSONObject(it)) }
+        check(rows.all { (classId == null || it.class_id == classId) && (date == null || it.date == date.toString()) }) {
+            "Karne sonuçları seçilen filtreyle eşleşmedi."
+        }
+        return DailyReportPage(rows, result.getInt("total"), result.getInt("total_pages"))
+    }
 
     suspend fun studentOptions(branch: String?, classroom: String?, search: String, page: Int): DailyReportStudentPage {
         require(page > 0)
@@ -178,13 +205,26 @@ internal class NativeDailyReportClient {
         val request = Request.Builder().url(base + path).tag(NativeRequestScope::class.java, scope)
         if (version != null) request.header("If-Match", "\"$version\"")
         request.method(method, body?.toString()?.toRequestBody("application/json".toMediaType()))
-        client.newCall(request.build()).execute().use { reply ->
-            if (!reply.isSuccessful) throw DailyReportHttpException(reply.code)
-            val data = JSONTokener(reply.body?.string().orEmpty()).nextValue() as JSONObject
-            if (data.has("success")) {
-                check(data.getBoolean("success")) { "Günlük karne işlemi doğrulanamadı." }
-                if (method == "DELETE" && data.isNull("data")) JSONObject() else data.getJSONObject("data")
-            } else data
+        suspendCancellableCoroutine { continuation ->
+            val call = client.newCall(request.build())
+            continuation.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    continuation.resumeWith(Result.failure(e))
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    continuation.resumeWith(runCatching {
+                        response.use { reply ->
+                            if (!reply.isSuccessful) throw DailyReportHttpException(reply.code)
+                            val data = JSONTokener(reply.body?.string().orEmpty()).nextValue() as JSONObject
+                            if (!data.has("success")) return@use data
+                            check(data.getBoolean("success")) { "Günlük karne işlemi doğrulanamadı." }
+                            if (method == "DELETE" && data.isNull("data")) JSONObject() else data.getJSONObject("data")
+                        }
+                    })
+                }
+            })
         }
     }
 

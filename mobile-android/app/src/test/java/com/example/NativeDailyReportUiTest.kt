@@ -1,16 +1,20 @@
 package com.example
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.Density
 import com.example.data.model.DailyReportDraft
@@ -34,11 +38,130 @@ import java.net.InetSocketAddress
 import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w360dp-h620dp-mdpi")
 class NativeDailyReportUiTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun filteredListRefreshesAfterChangesAndDiscardsAnOldBranch() {
+        val oldBranch = UUID(37, 1).toString()
+        val newBranch = UUID(37, 2).toString()
+        val report = UUID(37, 3).toString()
+        val version = "a".repeat(64)
+        val branch = mutableStateOf(oldBranch)
+        val saved = mutableLongStateOf(0L)
+        val removed = AtomicBoolean(false)
+        val deleteVersion = AtomicReference<String>()
+        val requests = ConcurrentLinkedQueue<String>()
+        val releaseOldBranch = CountDownLatch(1)
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        val workers = Executors.newCachedThreadPool()
+        server.executor = workers
+        val base = ApiClientProvider.activeBaseUrl
+        val interceptor = ApiClientProvider.interceptor
+        val previous = listOf(interceptor.authToken, interceptor.tenantId, interceptor.branchId, interceptor.workspaceOrganizationId)
+
+        fun row(name: String) = """{"id":"$report","student_id":"${UUID(37, 4)}","class_id":"${UUID(37, 5)}","date":"2026-11-18","version":"$version","student_name":"$name","teacher_notes":"Kayıtlı gözlem"}"""
+        server.createContext("/api/daily-reports") { exchange ->
+            val query = exchange.requestURI.rawQuery.orEmpty()
+            val payload = when {
+                exchange.requestMethod == "DELETE" -> {
+                    deleteVersion.set(exchange.requestHeaders.getFirst("If-Match"))
+                    removed.set(true)
+                    "null"
+                }
+                exchange.requestURI.path.endsWith("/$report") -> {
+                    if (removed.get()) {
+                        exchange.sendResponseHeaders(404, -1)
+                        exchange.close()
+                        return@createContext
+                    }
+                    row("Filtreli karne")
+                }
+                else -> {
+                    requests.add(query)
+                    val delayed = query.contains("search=Geciken")
+                    if (delayed) releaseOldBranch.await(10, TimeUnit.SECONDS)
+                    val name = when {
+                        query.contains(newBranch) -> "Yeni şube karnesi"
+                        delayed -> "Eski şubeden geciken karne"
+                        removed.get() -> null
+                        query.contains("search=Ada+%26+7") -> "Filtreli karne"
+                        else -> "İlk karne"
+                    }
+                    val total = if (name == null) 0 else 1
+                    """{"page":1,"total":$total,"total_pages":$total,"items":[${name?.let(::row).orEmpty()}]}"""
+                }
+            }
+            val body = """{"success":true,"data":$payload}""".toByteArray()
+            try {
+                exchange.responseHeaders.add("Content-Type", "application/json")
+                exchange.sendResponseHeaders(200, body.size.toLong())
+                exchange.responseBody.use { it.write(body) }
+            } catch (_: java.io.IOException) {
+                exchange.close()
+            }
+        }
+        server.start()
+        ApiClientProvider.createService("http://127.0.0.1:${server.address.port}/api/")
+        interceptor.setSession("synthetic-report-editor", branch = oldBranch)
+        try {
+            compose.setContent {
+                CompositionLocalProvider(LocalDensity provides Density(1f, 2f)) {
+                    Okul360Theme {
+                        DailyReportsScreen(Okul360UiState(isLoggedIn = true, selectedBranchId = branch.value,
+                            currentUser = User(id = UUID(37, 6).toString(), permissions = listOf("daily_reports.read", "daily_reports.write")),
+                            dailyReportSavedRevision = saved.longValue), onNavigateBack = {})
+                    }
+                }
+            }
+            val list = compose.onNodeWithTag("daily_report_list")
+            val search = compose.onNodeWithTag("daily_report_search_input")
+            list.performScrollToNode(hasTestTag("daily_report_search_input"))
+            search.performTextReplacement("Ada & 7")
+            list.performScrollToNode(hasTestTag("daily_report_filter_date"))
+            compose.onNodeWithTag("daily_report_filter_date").performTextReplacement("2026-11-18")
+            val filtered = "page=1&page_size=20&branch_id=$oldBranch&search=Ada+%26+7&date=2026-11-18"
+            compose.waitUntil(10_000) { filtered in requests }
+            compose.runOnIdle { saved.longValue++ }
+            compose.waitUntil(10_000) { requests.count { it == filtered } >= 2 }
+
+            compose.waitUntil(10_000) { compose.onAllNodesWithText("Filtreli karne").fetchSemanticsNodes().isNotEmpty() }
+            list.performScrollToNode(hasText("Karneyi aç"))
+            compose.onNodeWithText("Karneyi aç").performClick()
+            compose.waitUntil(10_000) { compose.onAllNodesWithText("Sil").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("Sil").performClick()
+            compose.onNodeWithText("Karneyi sil").performClick()
+            compose.waitUntil(10_000) { requests.count { it == filtered } >= 3 }
+            assertEquals("\"$version\"", deleteVersion.get())
+
+            list.performScrollToNode(hasTestTag("daily_report_search_input"))
+            search.performTextReplacement("Geciken")
+            compose.waitUntil(10_000) { requests.any { it.contains(oldBranch) && it.contains("search=Geciken") } }
+            compose.runOnIdle {
+                interceptor.branchId = newBranch
+                branch.value = newBranch
+            }
+            compose.waitUntil(10_000) { "page=1&page_size=20&branch_id=$newBranch" in requests }
+            releaseOldBranch.countDown()
+            compose.waitUntil(10_000) { compose.onAllNodesWithText("Yeni şube karnesi").fetchSemanticsNodes().isNotEmpty() }
+            list.performScrollToNode(hasText("Yeni şube karnesi"))
+            compose.onNodeWithText("Yeni şube karnesi").assertIsDisplayed()
+            compose.onNodeWithText("Eski şubeden geciken karne").assertDoesNotExist()
+        } finally {
+            releaseOldBranch.countDown()
+            server.stop(0)
+            workers.shutdownNow()
+            ApiClientProvider.createService(base)
+            interceptor.setSession(previous[0], previous[1], previous[2], previous[3])
+        }
+    }
 
     @Test fun writeOnlyActorUsesScopedChoicesAndCannotReadTheReportList() {
         val branch = UUID(32, 1).toString()
