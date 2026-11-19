@@ -1,5 +1,8 @@
 package com.example.ui.screens
 
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,6 +13,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AddComment
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -17,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -26,15 +32,21 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.ChatConversation
 import com.example.data.model.ChatMessage
+import com.example.data.remote.ChatFile
 import com.example.data.remote.DirectMessageDraft
 import com.example.data.remote.MessageRecipient
 import com.example.data.remote.NativeMessagingClient
 import com.example.data.remote.RegistryHttpException
+import com.example.data.remote.readChatFile
 import com.example.ui.components.financePresentationScope
 import com.example.ui.navigation.NativeNavigationPolicy
 import com.example.ui.viewmodel.Okul360UiState
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+private data class AttachmentSave(val partnerId: String, val file: ChatFile)
 
 @Composable
 fun DirectMessagingScreen(
@@ -62,15 +74,70 @@ private fun ScopedMessaging(state: Okul360UiState, select: (String?) -> Unit, mo
     var directoryOpen by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<ChatConversation?>(null) }
     val drafts = remember { mutableStateMapOf<String, String>() }
+    val attachments = remember { mutableStateMapOf<String, ChatFile>() }
     val pending = remember { mutableStateMapOf<String, DirectMessageDraft>() }
     val retryAvailable = remember { mutableStateMapOf<String, Boolean>() }
     var busy by remember { mutableStateOf(false) }
     val partner = selected?.takeIf { it.id == state.selectedConversationId }
+    val activePartnerId by rememberUpdatedState(partner?.id)
     var messages by remember(partner?.id) { mutableStateOf<List<ChatMessage>?>(null) }
     var olderAvailable by remember(partner?.id) { mutableStateOf(false) }
     var historyBusy by remember(partner?.id) { mutableStateOf(false) }
     var historyError by remember(partner?.id) { mutableStateOf(false) }
     var writeError by remember(partner?.id) { mutableStateOf("") }
+    var fileStatus by remember(partner?.id) { mutableStateOf("") }
+    var fileBusy by remember { mutableStateOf(false) }
+    var pickingFor by remember { mutableStateOf<String?>(null) }
+    var pendingSave by remember { mutableStateOf<AttachmentSave?>(null) }
+    val resolver = LocalContext.current.contentResolver
+
+    val pickDocument = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val target = pickingFor
+        pickingFor = null
+        if (uri != null && target != null && target == activePartnerId && api.current()) {
+            fileBusy = true
+            fileStatus = ""
+            scope.launch {
+                try {
+                    val file = withContext(Dispatchers.IO) {
+                        val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+                            if (it.moveToFirst()) it.getString(it.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME)) else null
+                        }
+                        ChatFile(requireNotNull(name), requireNotNull(resolver.openInputStream(uri)).use { it.readChatFile() })
+                    }
+                    if (api.current() && target == activePartnerId) attachments[target] = file
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    if (api.current()) fileStatus = "Dosya okunamadı. En fazla 10 MB PDF, PNG veya JPEG seçin."
+                } finally {
+                    fileBusy = false
+                }
+            }
+        }
+    }
+    val saveDocument = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val saved = pendingSave
+        pendingSave = null
+        if (uri != null && saved != null && saved.partnerId == activePartnerId && api.current()) {
+            fileBusy = true
+            scope.launch {
+                try {
+                    withContext(Dispatchers.IO) {
+                        if (!api.current()) throw CancellationException("Mesaj kapsamı değişti")
+                        requireNotNull(resolver.openOutputStream(uri, "wt")).use { it.write(saved.file.bytes) }
+                    }
+                    if (api.current()) fileStatus = "Dosya seçilen konuma kaydedildi."
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    if (api.current()) fileStatus = "Dosya seçilen konuma yazılamadı."
+                } finally {
+                    fileBusy = false
+                }
+            }
+        }
+    }
 
     fun open(conversation: ChatConversation) {
         selected = conversation
@@ -127,11 +194,12 @@ private fun ScopedMessaging(state: Okul360UiState, select: (String?) -> Unit, mo
     }
 
     fun submit(recheck: Boolean, retry: Boolean = false) {
-        if (!canSend || busy || historyBusy) return
+        if (!canSend || busy || historyBusy || fileBusy) return
         val unconfirmed = pending[partner.id]
         val text = drafts[partner.id].orEmpty().trim()
-        if (unconfirmed == null && (recheck || retry || text.isBlank() || text.length > 10000)) return
-        val draft = unconfirmed ?: DirectMessageDraft(partner.id, text)
+        val file = attachments[partner.id]
+        if (unconfirmed == null && (recheck || retry || (text.isBlank() && file == null) || text.length > 10000)) return
+        val draft = unconfirmed ?: DirectMessageDraft(partner.id, text, file = file)
         busy = true
         writeError = ""
         scope.launch {
@@ -145,6 +213,7 @@ private fun ScopedMessaging(state: Okul360UiState, select: (String?) -> Unit, mo
                 if (!api.current()) return@launch
                 messages = (messages.orEmpty() + stored).distinctBy { it.id }
                 drafts.remove(partner.id)
+                attachments.remove(partner.id)
                 pending.remove(partner.id)
                 retryAvailable.remove(partner.id)
                 listRevision++
@@ -179,6 +248,41 @@ private fun ScopedMessaging(state: Okul360UiState, select: (String?) -> Unit, mo
         onSend = { submit(recheck = false) },
         onVerify = { submit(recheck = true) },
         onRetry = { submit(recheck = false, retry = true) },
+        fileName = attachments[partner.id]?.name,
+        fileBusy = fileBusy,
+        fileStatus = fileStatus,
+        onChooseFile = {
+            try {
+                pickingFor = partner.id
+                pickDocument.launch(arrayOf("application/pdf", "image/png", "image/jpeg"))
+            } catch (_: android.content.ActivityNotFoundException) {
+                pickingFor = null
+                fileStatus = "Belge seçici açılamadı."
+            }
+        },
+        onRemoveFile = { attachments.remove(partner.id); fileStatus = "" },
+        onSaveFile = { message ->
+            if (!fileBusy && pendingSave == null) {
+                fileBusy = true
+                fileStatus = ""
+                scope.launch {
+                    try {
+                        val file = api.download(message)
+                        if (api.current() && activePartnerId == partner.id) {
+                            pendingSave = AttachmentSave(partner.id, file)
+                            saveDocument.launch(file.name)
+                        }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        pendingSave = null
+                        if (api.current()) fileStatus = "Ek indirilemedi veya doğrulanamadı."
+                    } finally {
+                        fileBusy = false
+                    }
+                }
+            }
+        },
     )
 }
 
@@ -249,9 +353,12 @@ internal fun DirectChatRoom(
     writeError: String, canSend: Boolean, busy: Boolean, pending: Boolean, retry: Boolean, olderAvailable: Boolean,
     onBack: () -> Unit, onRefresh: () -> Unit, onOlder: () -> Unit, onInput: (String) -> Unit, onSend: () -> Unit,
     onVerify: () -> Unit, onRetry: () -> Unit,
+    fileName: String? = null, fileBusy: Boolean = false, fileStatus: String = "",
+    onChooseFile: (() -> Unit)? = null, onRemoveFile: (() -> Unit)? = null,
+    onSaveFile: ((ChatMessage) -> Unit)? = null,
 ) {
-    val inputEnabled = canSend && !busy && !pending
-    val sendEnabled = inputEnabled && !historyBusy && text.isNotBlank()
+    val inputEnabled = canSend && !busy && !pending && !fileBusy
+    val sendEnabled = inputEnabled && !historyBusy && (text.isNotBlank() || fileName != null)
     Column(Modifier.fillMaxSize().imePadding()) {
         TopAppBar(
             title = { Text(partner.participant_name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -263,12 +370,17 @@ internal fun DirectChatRoom(
         LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 14.dp),
             reverseLayout = true, verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(vertical = 8.dp)) {
-            items(messages.orEmpty().asReversed(), key = { it.id }) { MessageBubble(it) }
+            items(messages.orEmpty().asReversed(), key = { it.id }) { message ->
+                MessageBubble(message, onSaveFile?.let { { it(message) } }, !fileBusy)
+            }
             if (historyBusy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             if (historyError) item { Text("Mesaj geçmişi yüklenemedi.", color = MaterialTheme.colorScheme.error) }
             if (olderAvailable) item { TextButton(enabled = !historyBusy && !busy, onClick = onOlder) { Text("Daha eski mesajlar") } }
             if (messages?.isEmpty() == true && !historyBusy && !historyError) item { Text("Bu sohbette henüz mesaj yok.") }
         }
+        if (fileBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (fileStatus.isNotEmpty()) Text(fileStatus, Modifier.padding(horizontal = 12.dp),
+            style = MaterialTheme.typography.bodySmall)
         if (canSend) {
             Surface(tonalElevation = 4.dp, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
@@ -280,7 +392,17 @@ internal fun DirectChatRoom(
                         TextButton(enabled = !busy && !historyBusy, onClick = onVerify) { Text("Sonucu kontrol et") }
                         if (retry) TextButton(enabled = !busy && !historyBusy, onClick = onRetry) { Text("Aynı isteği yeniden gönder") }
                     }
+                    if (fileName != null) Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(fileName, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelLarge)
+                        if (onRemoveFile != null) IconButton(enabled = inputEnabled, onClick = onRemoveFile) {
+                            Icon(Icons.Default.Close, "Eki kaldır")
+                        }
+                    }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        if (onChooseFile != null) IconButton(enabled = inputEnabled, onClick = onChooseFile) {
+                            Icon(Icons.Default.AttachFile, "Dosya seç")
+                        }
                         OutlinedTextField(text, { if (it.length <= 10000) onInput(it) },
                             Modifier.weight(1f).testTag("chat_message_input"),
                             enabled = inputEnabled, label = { Text("Mesaj") }, maxLines = if (narrow) 2 else 3,
@@ -298,7 +420,7 @@ internal fun DirectChatRoom(
 }
 
 @Composable
-private fun MessageBubble(message: ChatMessage) {
+private fun MessageBubble(message: ChatMessage, onSave: (() -> Unit)?, fileAvailable: Boolean) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (message.is_me) Alignment.End else Alignment.Start) {
         Surface(shape = MaterialTheme.shapes.medium,
             color = if (message.is_me) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
@@ -306,8 +428,13 @@ private fun MessageBubble(message: ChatMessage) {
             Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (!message.is_me) Text(message.sender_name, style = MaterialTheme.typography.labelMedium)
-                if (message.attachment_name != null) Text(message.attachment_name, style = MaterialTheme.typography.labelMedium)
-                Text(message.text)
+                if (message.attachment_name != null) {
+                    Text(message.attachment_name, style = MaterialTheme.typography.labelMedium)
+                    if (onSave != null && message.attachment_sha256 != null) {
+                        TextButton(enabled = fileAvailable, onClick = onSave) { Text("Dosyayı kaydet") }
+                    }
+                }
+                if (message.text.isNotEmpty()) Text(message.text)
                 val read = if (message.is_me && message.is_read) " · Okundu" else ""
                 Text(message.timestamp + read, Modifier.align(Alignment.End), style = MaterialTheme.typography.labelSmall)
             }

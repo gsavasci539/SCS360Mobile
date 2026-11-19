@@ -660,6 +660,7 @@ data class ChatMessage(
     val is_read: Boolean = false,
     val read_timestamp: String? = null,
     val attachment_name: String? = null,
+    val attachment_sha256: String? = null,
     val attachment_type: String? = null, // PDF, IMAGE, AUDIO
     val audio_duration_seconds: Int? = null
 )
