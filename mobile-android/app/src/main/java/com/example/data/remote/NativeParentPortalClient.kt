@@ -4,6 +4,8 @@ import com.example.data.model.Invoice
 import com.example.data.model.Student
 import okhttp3.Request
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
@@ -11,16 +13,42 @@ import org.json.JSONTokener
 import java.math.BigDecimal
 import java.util.UUID
 
+data class StudentChatDraft(val content: String, val file: ChatFile? = null, val id: UUID = UUID.randomUUID()) {
+    init {
+        require((content.isNotBlank() || file != null) && content.length <= 10000)
+    }
+}
+
+internal data class StudentChatAttachment(val name: String, val digest: String)
+
+internal fun JSONObject.studentChatAttachment(): StudentChatAttachment? {
+    if (isNull("attachment_name") || isNull("attachment_sha256")) return null
+    val name = runCatching { chatFileName(getString("attachment_name")) }.getOrNull() ?: return null
+    val digest = optString("attachment_sha256")
+    return if (digest.matches(Regex("[a-f0-9]{64}"))) StudentChatAttachment(name, digest) else null
+}
+
 /** Only explicit server-side parent/child relationships; never match names or phones. */
 class NativeParentPortalClient {
     private val scope = NativeRequestScope.bound() ?: ApiClientProvider.interceptor.captureScope()
     private val base = ApiClientProvider.activeBaseUrl
     private val client = ApiClientProvider.createOkHttpClient()
+    private val chatClient = client.newBuilder().retryOnConnectionFailure(false)
+        .followRedirects(false).followSslRedirects(false).build()
+
     private suspend fun get(path: String): Any = call(path)
-    private suspend fun call(path: String, body: JSONObject? = null): Any = scope.io {
-        val request = Request.Builder().url(base + path).tag(NativeRequestScope::class.java, scope)
-        if (body != null) request.post(body.toString().toRequestBody("application/json".toMediaType()))
-        client.newCall(request.build()).execute().use {
+
+    private fun request(path: String) =
+        Request.Builder().url(base + path).tag(NativeRequestScope::class.java, scope)
+
+    private suspend fun call(path: String, body: JSONObject? = null): Any =
+        exchange(path, body?.jsonBody())
+
+    private suspend fun exchange(path: String, body: RequestBody? = null, chat: Boolean = false): Any = scope.io {
+        val request = request(path)
+        if (body != null) request.post(body)
+        val http = if (chat) chatClient else client
+        http.newCall(request.build()).execute().use {
             if (!it.isSuccessful) throw RegistryHttpException(it.code)
             val value = JSONTokener(it.body?.string() ?: "null").nextValue()
             if (value is JSONObject && value.has("success")) {
@@ -46,15 +74,67 @@ class NativeParentPortalClient {
         if (section in setOf("today-status", "timeline")) check((value as JSONObject).getString("student_id") == id) { "Öğrenci yanıtı eşleşmiyor" }
         return value
     }
-    suspend fun chat(studentId: String, teacherId: String): JSONArray = get("parent/child/${UUID.fromString(studentId)}/chat/${UUID.fromString(teacherId)}") as JSONArray
+    private fun JSONObject.jsonBody() = toString().toRequestBody("application/json".toMediaType())
+
+    private fun chatPath(studentId: String, teacherId: String) =
+        "parent/child/${UUID.fromString(studentId)}/chat/${UUID.fromString(teacherId)}"
+
+    suspend fun chat(studentId: String, teacherId: String): JSONArray =
+        exchange(chatPath(studentId, teacherId), chat = true) as JSONArray
+
     suspend fun sendChat(studentId: String, teacherId: String, content: String, actorId: String): JSONObject {
-        require(content.isNotBlank() && content.length <= 10000) { "Mesaj 1–10000 karakter olmalı" }
-        val teacher = UUID.fromString(teacherId).toString()
-        val result = call("parent/child/${UUID.fromString(studentId)}/chat/$teacher", JSONObject().put("message", content)) as JSONObject
-        UUID.fromString(result.getString("id"))
-        check(result.getString("receiver_id") == teacher && result.getString("sender_id") == UUID.fromString(actorId).toString() && result.getString("content") == content) { "Mesaj yanıtı eşleşmiyor; geçmişi yenileyin" }
-        return result
+        val draft = StudentChatDraft(content)
+        sendStudentChat(studentId, teacherId, actorId, draft)
+        return studentChatReceipt(studentId, teacherId, actorId, draft)
     }
+
+    suspend fun sendStudentChat(studentId: String, teacherId: String, actorId: String, draft: StudentChatDraft) {
+        val path = chatPath(studentId, teacherId)
+        val file = draft.file
+        val response = if (file == null) {
+            val body = JSONObject().put("message", draft.content).put("request_id", draft.id.toString())
+            exchange(path, body.jsonBody(), chat = true)
+        } else {
+            val form = MultipartBody.Builder().setType(MultipartBody.FORM)
+                .addFormDataPart("request_id", draft.id.toString())
+                .addFormDataPart("message", draft.content)
+                .addFormDataPart("file", file.name, file.bytes.toRequestBody(file.type.toMediaType()))
+                .build()
+            exchange("$path/send-file", form, chat = true)
+        }
+        verifyChat(response as JSONObject, teacherId, actorId, draft)
+    }
+
+    suspend fun studentChatReceipt(studentId: String, teacherId: String, actorId: String, draft: StudentChatDraft): JSONObject {
+        val row = exchange("${chatPath(studentId, teacherId)}/sent/${draft.id}", chat = true) as JSONObject
+        verifyChat(row, teacherId, actorId, draft)
+        return row
+    }
+
+    private fun verifyChat(row: JSONObject, teacherId: String, actorId: String, draft: StudentChatDraft) {
+        check(row.getString("id") == draft.id.toString() && row.getBoolean("is_current_user") &&
+            row.getString("receiver_id") == UUID.fromString(teacherId).toString() &&
+            row.getString("sender_id") == UUID.fromString(actorId).toString() && row.getString("content") == draft.content)
+        val file = draft.file
+        if (file == null) {
+            check(row.isNull("attachment_name") && row.isNull("attachment_sha256"))
+        } else {
+            check(row.studentChatAttachment() == StudentChatAttachment(file.name, file.digest))
+        }
+    }
+
+    suspend fun downloadStudentChat(studentId: String, teacherId: String, message: JSONObject): ChatFile = scope.io {
+        val id = UUID.fromString(message.getString("id"))
+        val attachment = requireNotNull(message.studentChatAttachment())
+        val path = "${chatPath(studentId, teacherId)}/attachments/$id"
+        chatClient.newCall(request(path).build()).execute().use { response ->
+            if (!response.isSuccessful) throw RegistryHttpException(response.code)
+            val file = ChatFile(attachment.name, requireNotNull(response.body).byteStream().use { it.readChatFile() })
+            check(file.digest == attachment.digest) { "Dosya özeti sunucu kaydıyla eşleşmiyor" }
+            file
+        }
+    }
+
     suspend fun submit(studentId: String, kind: String, fields: JSONObject): JSONObject {
         val id = UUID.fromString(studentId).toString()
         val allowed = when (kind) {

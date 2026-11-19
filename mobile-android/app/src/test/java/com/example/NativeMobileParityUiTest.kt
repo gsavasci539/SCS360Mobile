@@ -34,7 +34,8 @@ class NativeMobileParityUiTest {
     private var oldFont = 1f
     private val calls = CopyOnWriteArrayList<String>()
     @Volatile private var paid = false
-    @Volatile private var sentMessage: String? = null
+    @Volatile private var sentMessage: JSONObject? = null
+    @Volatile private var dropMessageResponse = false
     @Before fun start() {
         oldFont = RuntimeEnvironment.getFontScale(); RuntimeEnvironment.setFontScale(2f)
         base = ApiClientProvider.activeBaseUrl; token = ApiClientProvider.interceptor.authToken
@@ -49,9 +50,16 @@ class NativeMobileParityUiTest {
                 e.requestURI.path.endsWith("/teachers") -> JSONArray().put(JSONObject().put("id", id(9)).put("name", "Synthetic Teacher"))
                 e.requestURI.path.contains("/chat/") -> {
                     if (e.requestMethod == "POST") {
-                        sentMessage = JSONObject(e.requestBody.readBytes().toString(Charsets.UTF_8)).getString("message")
-                        JSONObject().put("id", id(10)).put("sender_id", id(1)).put("receiver_id", id(9)).put("content", sentMessage)
-                    } else JSONArray().apply { if (sentMessage != null) put(JSONObject().put("id", id(10)).put("sender_name", "Synthetic Parent").put("content", sentMessage).put("sent_at", "2026-11-13T10:00:00Z")) }
+                        val draft = JSONObject(e.requestBody.readBytes().toString(Charsets.UTF_8))
+                        val row = JSONObject().put("id", draft.getString("request_id")).put("sender_id", id(1))
+                            .put("receiver_id", id(9)).put("content", draft.getString("message")).put("is_current_user", true)
+                            .put("sender_name", "Synthetic Parent").put("sent_at", "2026-11-13T10:00:00Z")
+                        sentMessage = row
+                        if (dropMessageResponse) { e.close(); return@createContext }
+                        row
+                    } else if (e.requestURI.path.contains("/sent/")) {
+                        requireNotNull(sentMessage).also { check(e.requestURI.path.endsWith(it.getString("id"))) }
+                    } else JSONArray().apply { sentMessage?.let { put(it) } }
                 }
                 else -> JSONArray()
             }
@@ -159,11 +167,39 @@ class NativeMobileParityUiTest {
         compose.onNodeWithTag("parent_message_text").performTextInput("Synthetic stored message")
         compose.onNodeWithTag("parent_messages").performScrollToNode(hasTestTag("parent_message_send"))
         compose.onNodeWithTag("parent_message_send").performClick()
-        compose.waitUntil(15000) { compose.onAllNodesWithTag("parent_message_${id(10)}").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("parent_messages").performScrollToNode(hasTestTag("parent_message_${id(10)}"))
+        compose.waitUntil(15000) { calls.any { it.startsWith("GET") && it.contains("/sent/") } }
+        val row = "parent_message_${requireNotNull(sentMessage).getString("id")}"
+        compose.onNodeWithTag("parent_messages").performScrollToNode(hasTestTag(row))
         compose.onNodeWithText("Synthetic stored message").assertExists()
         assertEquals(1, calls.count { it.startsWith("POST") })
         assertTrue(calls.count { it.startsWith("GET") && it.contains("/chat/") } >= 2)
+    }
+
+    @Test @Config(qualifiers = "w360dp-h780dp-mdpi")
+    fun parentMessagingChecksLostResponseWithoutAnotherPost() {
+        dropMessageResponse = true
+        val actor = User(id = id(1), permissions = listOf("parent.send_message"))
+        compose.setContent { Okul360Theme { ParentVerifiedMessagingPane(id(7), actor) } }
+        compose.waitUntil(15000) { compose.onAllNodesWithTag("parent_teacher_${id(9)}").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("parent_teacher_${id(9)}").performClick()
+        val list = compose.onNodeWithTag("parent_messages")
+        list.performScrollToNode(hasTestTag("parent_message_text"))
+        compose.onNodeWithTag("parent_message_text").performTextInput("Synthetic recoverable message")
+        list.performScrollToNode(hasTestTag("parent_message_choose_file"))
+        compose.onNodeWithTag("parent_message_choose_file").assertIsDisplayed()
+            .assertHeightIsAtLeast(androidx.compose.ui.unit.Dp(48f))
+        list.performScrollToNode(hasTestTag("parent_message_send"))
+        compose.onNodeWithTag("parent_message_send").performClick()
+        compose.waitUntil(15000) {
+            list.performScrollToIndex(4)
+            compose.onAllNodesWithTag("parent_message_check").fetchSemanticsNodes().isNotEmpty()
+        }
+        list.performScrollToNode(hasTestTag("parent_message_check"))
+        compose.onNodeWithTag("parent_message_check").performClick()
+        compose.waitUntil(15000) { calls.any { it.startsWith("GET") && it.contains("/sent/") } }
+        val row = "parent_message_${requireNotNull(sentMessage).getString("id")}"
+        list.performScrollToNode(hasTestTag(row))
+        assertEquals(1, calls.count { it.startsWith("POST") })
     }
 
     @Test fun parentChatbotShortcutOpensTheSelectedChildWithoutSending() {

@@ -135,14 +135,22 @@ class NativeMobileParityContractTest {
 
     @Test fun parentMessageAcknowledgementMustMatchActorRecipientAndContent() = runBlocking {
         var wrong = false
+        var stored = JSONObject()
         server({ e ->
-            val content = JSONObject(e.requestBody.readBytes().toString(Charsets.UTF_8)).getString("message")
-            JSONObject().put("id", id(900)).put("sender_id", id(if (wrong) 3 else 1)).put("receiver_id", id(2)).put("content", content)
+            if (e.requestMethod == "POST") {
+                val draft = JSONObject(e.requestBody.readBytes().toString(Charsets.UTF_8))
+                stored = JSONObject().put("id", draft.getString("request_id")).put("sender_id", id(1))
+                    .put("receiver_id", id(2)).put("content", draft.getString("message")).put("is_current_user", true)
+                stored
+            } else {
+                check(e.requestURI.path.endsWith("/sent/${stored.getString("id")}"))
+                JSONObject(stored.toString()).put("sender_id", id(if (wrong) 3 else 1))
+            }
         }) {
             val api = NativeParentPortalClient()
-            assertEquals(id(900), api.sendChat(id(7), id(2), "Synthetic message", id(1)).getString("id"))
+            assertEquals("Synthetic message", api.sendChat(id(7), id(2), "Synthetic message", id(1)).getString("content"))
             wrong = true
-            try { api.sendChat(id(7), id(2), "Synthetic message", id(1)); fail("Wrong sender ACK") } catch (_: IllegalStateException) { }
+            try { api.sendChat(id(7), id(2), "Synthetic message", id(1)); fail("Wrong sender receipt") } catch (_: IllegalStateException) { }
         }
     }
 
