@@ -34,8 +34,6 @@ import com.example.ui.navigation.NativeNavigationPolicy
 import com.example.ui.components.RoleContextualAiCard
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.Okul360UiState
-import java.time.LocalDate
-import java.time.ZoneId
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -323,6 +321,8 @@ fun AddDailyReportDialog(
     onConfirm: (DailyReportDraft) -> Unit
 ) {
     var student by remember(branchId) { mutableStateOf<DailyReportStudentOption?>(null) }
+    var dateInput by remember { mutableStateOf(currentDailyReportDate()) }
+    val reportDate = parseDailyReportDate(dateInput)
     val selectedStudentId = student?.id
     var attempted by remember(selectedStudentId) { mutableStateOf(false) }
 
@@ -338,8 +338,11 @@ fun AddDailyReportDialog(
         "Müzik & Ritim", "İngilizce Çemberi", "Satranç", "Drama & Masal"
     )
     var selectedActivities by remember(selectedStudentId) { mutableStateOf(emptySet<String>()) }
-    val draft = student?.let { DailyReportDraft(it.id, it.classId, LocalDate.now(ZoneId.of("Europe/Istanbul")),
-        breakfastStatus, lunchStatus, snackStatus, sleepMinutes, selectedMood, selectedActivities.toList(), teacherNote) }
+    val selected = student
+    val draft = if (selected != null && reportDate != null) {
+        DailyReportDraft(selected.id, selected.classId, reportDate, breakfastStatus, lunchStatus, snackStatus,
+            sleepMinutes, selectedMood, selectedActivities.toList(), teacherNote)
+    } else null
 
     val moodOptions = listOf(
         "Çok Neşeli & Uyumlu" to "🌟",
@@ -373,6 +376,10 @@ fun AddDailyReportDialog(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     DailyReportStudentPicker(branchId, null, student, enabled = !saving, onSelect = { student = it })
+                    DailyReportDateField(dateInput, valid = reportDate != null, enabled = !saving) {
+                        dateInput = it
+                        attempted = false
+                    }
 
                     // Mood Selection
                     Text("Günün Duygu Durumu (Mod)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)

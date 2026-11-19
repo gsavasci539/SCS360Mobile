@@ -429,6 +429,8 @@ private fun TeacherDiaryFillTab(
     onSaveReport: (DailyReportDraft) -> Unit
 ) {
     var currentStudent by remember { mutableStateOf<DailyReportStudentOption?>(null) }
+    var dateInput by remember { mutableStateOf(currentDailyReportDate()) }
+    val reportDate = parseDailyReportDate(dateInput)
     val selectedStudentId = currentStudent?.id
     val canWrite = com.example.ui.navigation.NativeNavigationPolicy.has(state.currentUser, "daily_reports.write", "academic.write")
     val attendanceClass = state.attendanceClassId.takeIf {
@@ -463,10 +465,11 @@ private fun TeacherDiaryFillTab(
         "Montessori Matematik Kavramları"
     )
     val selectedActivities = remember(selectedStudentId, state.dailyReportSavedRevision) { mutableStateListOf<String>() }
-    val draft = currentStudent?.let { student ->
-        DailyReportDraft(student.id, student.classId, java.time.LocalDate.now(java.time.ZoneId.of("Europe/Istanbul")),
+    val selected = currentStudent
+    val draft = if (selected != null && reportDate != null) {
+        DailyReportDraft(selected.id, selected.classId, reportDate,
             breakfast, lunch, snack, sleepMinutes, mood, selectedActivities.toList(), teacherNote)
-    }
+    } else null
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -499,6 +502,12 @@ private fun TeacherDiaryFillTab(
             if (canWrite) DailyReportStudentPicker(state.selectedBranchId, attendanceClass, currentStudent,
                 enabled = !state.dailyReportSaving, onSelect = { currentStudent = it })
             else Text("Günlük karne yazma yetkiniz yok.")
+        }
+        if (canWrite) item {
+            DailyReportDateField(dateInput, valid = reportDate != null, enabled = !state.dailyReportSaving) {
+                dateInput = it
+                attempted = false
+            }
         }
 
         // Meal Consumption Form

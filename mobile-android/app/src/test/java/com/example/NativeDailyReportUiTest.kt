@@ -10,7 +10,10 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.Density
+import com.example.data.model.DailyReportDraft
 import com.example.data.model.User
 import com.example.data.remote.ApiClientProvider
 import com.example.ui.screens.DailyReportsScreen
@@ -28,6 +31,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
+import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 
@@ -45,6 +49,7 @@ class NativeDailyReportUiTest {
         val interceptor = ApiClientProvider.interceptor
         val previous = listOf(interceptor.authToken, interceptor.tenantId, interceptor.branchId, interceptor.workspaceOrganizationId)
         val requests = ConcurrentLinkedQueue<String>()
+        val submitted = mutableListOf<DailyReportDraft>()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/") { exchange ->
             requests.add(exchange.requestURI.toString())
@@ -62,7 +67,7 @@ class NativeDailyReportUiTest {
                     Okul360Theme {
                         DailyReportsScreen(Okul360UiState(isLoggedIn = true, currentUser = actor,
                             selectedBranchId = branch, dailyReportSaving = saving.value),
-                            onCreateReport = { error("Boş karne gönderildi") }, onReload = { error("Okuma izni yok") })
+                            onCreateReport = { submitted.add(it); saving.value = true }, onReload = { error("Okuma izni yok") })
                     }
                 }
             }
@@ -72,7 +77,14 @@ class NativeDailyReportUiTest {
             compose.waitUntil(10_000) { compose.onAllNodesWithText("Ada Test · KARNE-11").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Ada Test · KARNE-11").performClick()
             compose.onNodeWithText("Kaydet").assertIsNotEnabled()
-            compose.runOnIdle { saving.value = true }
+            val dateField = compose.onNodeWithTag("daily_report_date")
+            dateField.performScrollTo().performTextReplacement("2026-02-30")
+            compose.onNodeWithText("Geçerli bir karne tarihi girin.").assertIsDisplayed()
+            compose.onNodeWithText("🌟 Çok Neşeli & Uyumlu").performScrollTo().performClick()
+            compose.onNodeWithText("Kaydet").assertIsNotEnabled()
+            dateField.performScrollTo().performTextReplacement("2026-11-15")
+            compose.onNodeWithText("Kaydet").performClick()
+            compose.runOnIdle { assertEquals(LocalDate.of(2026, 11, 15), submitted.single().date) }
             compose.onNodeWithText("Kaydediliyor…").assertIsDisplayed().assertIsNotEnabled()
             compose.onNodeWithText("İptal").assertIsNotEnabled()
             assertEquals(listOf("/api/daily-reports/student-options?page=1&page_size=25&branch_id=$branch"), requests.toList())
