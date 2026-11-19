@@ -145,8 +145,6 @@ data class Okul360UiState(
     val courseMaterials: List<CourseMaterial> = emptyList(),
 
     // Direct Messaging & Parent-Teacher Chat State
-    val chatConversations: List<ChatConversation> = emptyList(),
-    val chatMessages: Map<String, List<ChatMessage>> = emptyMap(),
     val selectedConversationId: String? = null,
     val showThemeConfigDialog: Boolean = false,
 
@@ -1762,19 +1760,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun sendMessageToTeacher(subject: String, message: String) {
-        NotificationHelper.sendTeacherMessagePush(
-            context = getApplication(),
-            senderName = _uiState.value.currentUser.full_name,
-            messageText = "$subject: $message"
-        )
-        _uiState.update {
-            it.copy(
-                toastMessage = "Mesajınız sınıf öğretmenine başarıyla iletildi."
-            )
-        }
-    }
-
     fun markMedicineGiven(noticeId: String) {
         val targetNotice = _uiState.value.medicineNotices.find { it.id == noticeId }
         if (targetNotice != null) {
@@ -2052,170 +2037,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     // ==========================================
     fun selectConversation(conversationId: String?) {
         _uiState.update { it.copy(selectedConversationId = conversationId) }
-        if (conversationId != null) {
-            markConversationAsRead(conversationId)
-        }
-    }
-
-    fun markConversationAsRead(conversationId: String) {
-        _uiState.update { current ->
-            val updatedConvs = current.chatConversations.map {
-                if (it.id == conversationId) it.copy(unread_count = 0) else it
-            }
-            val updatedMessages = current.chatMessages.toMutableMap()
-            val list = updatedMessages[conversationId]?.map { it.copy(is_read = true) } ?: emptyList()
-            updatedMessages[conversationId] = list
-            current.copy(chatConversations = updatedConvs, chatMessages = updatedMessages)
-        }
-    }
-
-    fun sendDirectMessage(
-        conversationId: String,
-        text: String,
-        attachmentName: String? = null,
-        attachmentType: String? = null
-    ) {
-        if (text.isBlank() && attachmentName == null) return
-
-        val isParent = _uiState.value.selectedRole == UserRole.PARENT
-        val senderRole = if (isParent) "PARENT" else "TEACHER"
-        val senderName = _uiState.value.currentUser.full_name
-
-        val newMsg = ChatMessage(
-            id = "msg-${System.currentTimeMillis()}",
-            conversation_id = conversationId,
-            sender_id = _uiState.value.currentUser.id,
-            sender_name = senderName,
-            sender_role = senderRole,
-            recipient_id = "rec-1",
-            recipient_name = "Alıcı",
-            text = text,
-            timestamp = "Şimdi",
-            date = "Bugün",
-            is_me = true,
-            is_read = true,
-            attachment_name = attachmentName,
-            attachment_type = attachmentType
-        )
-
-        _uiState.update { current ->
-            val updatedMessages = current.chatMessages.toMutableMap()
-            val convList = (updatedMessages[conversationId] ?: emptyList()) + newMsg
-            updatedMessages[conversationId] = convList
-
-            val updatedConvs = current.chatConversations.map {
-                if (it.id == conversationId) {
-                    it.copy(
-                        last_message = if (text.isNotBlank()) text else "Dosya: $attachmentName",
-                        last_message_time = "Şimdi"
-                    )
-                } else it
-            }
-
-            current.copy(
-                chatMessages = updatedMessages,
-                chatConversations = updatedConvs
-            )
-        }
-
-        // Auto-reply simulation after delay if sent during demo/testing
-        viewModelScope.launch(requestFailures) {
-            delay(2000)
-            val conv = _uiState.value.chatConversations.find { it.id == conversationId }
-            if (conv != null) {
-                val replyText = if (isParent) {
-                    "Mesajınız için teşekkürler ${senderName} Bey/Hanım. Konuyu takip edip en kısa sürede geri dönüş sağlayacağım."
-                } else {
-                    "Hocam bilgilendirmeniz için teşekkürler, evde kontrol edeceğiz."
-                }
-
-                val replyMsg = ChatMessage(
-                    id = "reply-${System.currentTimeMillis()}",
-                    conversation_id = conversationId,
-                    sender_id = conv.participant_id,
-                    sender_name = conv.participant_name,
-                    sender_role = if (isParent) "TEACHER" else "PARENT",
-                    recipient_id = _uiState.value.currentUser.id,
-                    recipient_name = senderName,
-                    text = replyText,
-                    timestamp = "Şimdi",
-                    date = "Bugün",
-                    is_me = false,
-                    is_read = true
-                )
-
-                _uiState.update { current ->
-                    val updatedMessages = current.chatMessages.toMutableMap()
-                    val convList = (updatedMessages[conversationId] ?: emptyList()) + replyMsg
-                    updatedMessages[conversationId] = convList
-
-                    val updatedConvs = current.chatConversations.map {
-                        if (it.id == conversationId) {
-                            it.copy(
-                                last_message = replyText,
-                                last_message_time = "Şimdi"
-                            )
-                        } else it
-                    }
-
-                    current.copy(
-                        chatMessages = updatedMessages,
-                        chatConversations = updatedConvs
-                    )
-                }
-
-                NotificationHelper.showPushNotification(
-                    context = getApplication(),
-                    title = "💬 ${conv.participant_name}",
-                    message = replyText,
-                    channelId = NotificationHelper.CHANNEL_MESSAGES
-                )
-            }
-        }
-    }
-
-    fun startNewConversation(participantName: String, participantRole: String, initialMessage: String) {
-        val newConvId = "conv-${System.currentTimeMillis()}"
-        val newConv = ChatConversation(
-            id = newConvId,
-            participant_id = "p-${System.currentTimeMillis()}",
-            participant_name = participantName,
-            participant_role = participantRole,
-            student_context = "Öğrenci Rehberlik Kanalı",
-            last_message = initialMessage,
-            last_message_time = "Şimdi",
-            unread_count = 0,
-            is_online = true,
-            office_hours = "08:30 - 17:30",
-            is_within_office_hours = true,
-            avatar_color_hex = 0xFF059669
-        )
-
-        val firstMsg = ChatMessage(
-            id = "msg-${System.currentTimeMillis()}",
-            conversation_id = newConvId,
-            sender_id = _uiState.value.currentUser.id,
-            sender_name = _uiState.value.currentUser.full_name,
-            sender_role = if (_uiState.value.selectedRole == UserRole.PARENT) "PARENT" else "TEACHER",
-            recipient_id = newConv.participant_id,
-            recipient_name = participantName,
-            text = initialMessage,
-            timestamp = "Şimdi",
-            date = "Bugün",
-            is_me = true,
-            is_read = true
-        )
-
-        _uiState.update { current ->
-            val updatedMessages = current.chatMessages.toMutableMap()
-            updatedMessages[newConvId] = listOf(firstMsg)
-            current.copy(
-                chatConversations = listOf(newConv) + current.chatConversations,
-                chatMessages = updatedMessages,
-                selectedConversationId = newConvId,
-                toastMessage = "$participantName ile sohbet başlatıldı."
-            )
-        }
     }
 
     // Announcement Drafts Management

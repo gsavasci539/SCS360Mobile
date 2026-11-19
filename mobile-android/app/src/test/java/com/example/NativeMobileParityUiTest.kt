@@ -104,7 +104,7 @@ class NativeMobileParityUiTest {
     @Test fun parentPortalDoesNotTreatLegacyNameOrPhoneMatchesAsChildren() {
         val user = User(id = id(1), full_name = "Synthetic Parent", roles = listOf(UserRoleInfo("parent")))
         val foreign = Student(id = id(7), first_name = "Foreign child", parent_name = user.full_name)
-        compose.setContent { Okul360Theme { ParentPortalScreen(Okul360UiState(isLoggedIn = true, currentUser = user, selectedRole = UserRole.PARENT, students = listOf(foreign)), {}, { _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _ -> }, { _, _ -> }, onLogout = {}) } }
+        compose.setContent { Okul360Theme { ParentPortalScreen(Okul360UiState(isLoggedIn = true, currentUser = user, selectedRole = UserRole.PARENT, students = listOf(foreign)), {}, { _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _ -> }, onLogout = {}) } }
         try { compose.onNodeWithText("Kayıtlı Öğrenci Bulunamadı").assertExists() }
         catch (failure: AssertionError) { println(compose.onRoot(useUnmergedTree = true).printToString()); throw failure }
         compose.onAllNodesWithText("Foreign child", substring = true).assertCountEquals(0)

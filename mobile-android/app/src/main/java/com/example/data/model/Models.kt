@@ -645,20 +645,20 @@ data class CourseMaterial(
 
 @JsonClass(generateAdapter = true)
 data class ChatMessage(
-    val id: String = "msg-1",
-    val conversation_id: String = "conv-1",
-    val sender_id: String = "parent-1",
-    val sender_name: String = "Mehmet Demir",
-    val sender_role: String = "PARENT", // PARENT, TEACHER, MANAGER
-    val recipient_id: String = "teacher-1",
-    val recipient_name: String = "Ahmet Yılmaz (Sınıf Öğretmeni)",
+    val id: String = "",
+    val conversation_id: String = "",
+    val sender_id: String = "",
+    val sender_name: String = "",
+    val sender_role: String = "",
+    val recipient_id: String = "",
+    val recipient_name: String = "",
     val text: String = "",
-    val timestamp: String = "14:25",
-    val date: String = "Bugün",
+    val timestamp: String = "",
+    val date: String = "",
     val is_me: Boolean = false,
-    val is_delivered: Boolean = true,
-    val is_read: Boolean = true,
-    val read_timestamp: String? = "14:26",
+    val is_delivered: Boolean = false,
+    val is_read: Boolean = false,
+    val read_timestamp: String? = null,
     val attachment_name: String? = null,
     val attachment_type: String? = null, // PDF, IMAGE, AUDIO
     val audio_duration_seconds: Int? = null
@@ -666,17 +666,17 @@ data class ChatMessage(
 
 @JsonClass(generateAdapter = true)
 data class ChatConversation(
-    val id: String = "conv-1",
-    val participant_id: String = "t-1",
-    val participant_name: String = "Ahmet Yılmaz",
-    val participant_role: String = "Matematik & 8-A Sınıf Öğretmeni",
-    val student_context: String = "Ali Demir (8-A)",
-    val last_message: String = "Ödev teslimi için teşekkürler, inceleyip notları sisteme gireceğim.",
-    val last_message_time: String = "14:25",
+    val id: String = "",
+    val participant_id: String = "",
+    val participant_name: String = "",
+    val participant_role: String = "",
+    val student_context: String = "",
+    val last_message: String = "",
+    val last_message_time: String = "",
     val unread_count: Int = 0,
-    val is_online: Boolean = true,
-    val office_hours: String = "08:30 - 17:30",
-    val is_within_office_hours: Boolean = true,
+    val is_online: Boolean = false,
+    val office_hours: String = "",
+    val is_within_office_hours: Boolean = false,
     val avatar_color_hex: Long = 0xFF2563EB
 )
 

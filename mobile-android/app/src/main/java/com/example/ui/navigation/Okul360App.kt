@@ -151,12 +151,6 @@ fun Okul360App(viewModel: Okul360ViewModel) {
 
     fun handleChatbotNavigation(actionTag: String) {
         if (actionTag.startsWith("CONNECT_TEACHER_")) {
-            val teacherName = actionTag.removePrefix("CONNECT_TEACHER_")
-            viewModel.startNewConversation(
-                participantName = teacherName,
-                participantRole = "Branş Öğretmeni",
-                initialMessage = "Merhaba $teacherName öğretmenim, Chatbot Asistanı üzerinden ulaşıyorum. Öğrencim hakkında bilgi alabilir miyim?"
-            )
             currentSubScreen = SubScreen.DIRECT_MESSAGING
         } else {
             when (actionTag) {
@@ -386,16 +380,12 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onSubmitMedicine = { stdId, med, dose, time, note -> viewModel.submitMedicineNotice(stdId, med, dose, time, note) },
                                 onSubmitLeave = { stdId, start, end, reason, note -> viewModel.submitLeaveNotice(stdId, start, end, reason, note) },
                                 onSubmitPickup = { stdId, person, rel, phone -> viewModel.submitPickupNotice(stdId, person, rel, phone) },
-                                onSendMessageToTeacher = { subject, msg -> viewModel.sendMessageToTeacher(subject, msg) },
                                 onUploadMaterial = { title, desc, subj, cls, type, ext, size, due, req, sum ->
                                     viewModel.createCourseMaterial(title, desc, subj, cls, type, ext, size, due, req, sum)
                                 },
                                 onDownloadMaterial = { mat -> viewModel.downloadCourseMaterial(mat) },
                                 onDeleteMaterial = { id -> viewModel.deleteCourseMaterial(id) },
                                 onAcknowledgeMaterial = { matId -> viewModel.acknowledgeCourseMaterial(matId) },
-                                onSelectConversation = { id -> viewModel.selectConversation(id) },
-                                onSendMessage = { convId, text, file, type -> viewModel.sendDirectMessage(convId, text, file, type) },
-                                onStartNewConversation = { participantId, name, role -> viewModel.startNewConversation(participantId, name, role) },
                                 onOpenThemeConfig = { viewModel.openThemeConfig(true) },
                                 onOpenAiWeeklyDigest = { std -> viewModel.generateAiParentWeeklyDigest(std) },
                                 onOpenChatbot = { showChatbotDialog = true },
@@ -427,8 +417,6 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onDeleteMaterial = { id -> viewModel.deleteCourseMaterial(id) },
                                 onSendParentReminder = { matId, title -> viewModel.sendCourseMaterialParentReminder(matId, title) },
                                 onSelectConversation = { id -> viewModel.selectConversation(id) },
-                                onSendMessage = { convId, text, file, type -> viewModel.sendDirectMessage(convId, text, file, type) },
-                                onStartNewConversation = { participantId, name, role -> viewModel.startNewConversation(participantId, name, role) },
                                 onOpenThemeConfig = { viewModel.openThemeConfig(true) },
                                 onRoleSelected = { role -> viewModel.switchRole(role) },
                                 onOpenAiHomeworkGenerator = { viewModel.openAiHomeworkModal(true) },
@@ -1321,9 +1309,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             )
                             SubScreen.DIRECT_MESSAGING -> DirectMessagingScreen(
                                 state = state,
-                                onSelectConversation = { id -> viewModel.selectConversation(id) },
-                                onSendMessage = { convId, text, file, type -> viewModel.sendDirectMessage(convId, text, file, type) },
-                                onStartNewConversation = { participantId, name, role -> viewModel.startNewConversation(participantId, name, role) }
+                                onSelectConversation = { id -> viewModel.selectConversation(id) }
                             )
                             SubScreen.ORGANIZATIONS -> OrganizationsBranchesScreen(
                                 state = state,

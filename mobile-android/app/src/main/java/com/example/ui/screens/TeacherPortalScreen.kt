@@ -71,8 +71,6 @@ fun TeacherPortalScreen(
     onDeleteMaterial: (String) -> Unit = {},
     onSendParentReminder: ((String, String) -> Unit)? = null,
     onSelectConversation: (String?) -> Unit = {},
-    onSendMessage: (String, String, String?, String?) -> Unit = { _, _, _, _ -> },
-    onStartNewConversation: (String, String, String) -> Unit = { _, _, _ -> },
     onOpenThemeConfig: () -> Unit = {},
     onRoleSelected: (UserRole) -> Unit = {},
     onOpenAiHomeworkGenerator: (() -> Unit)? = null,
@@ -350,9 +348,7 @@ fun TeacherPortalScreen(
                 )
                 TeacherNavTab.MESSAGING -> DirectMessagingScreen(
                     state = state,
-                    onSelectConversation = onSelectConversation,
-                    onSendMessage = onSendMessage,
-                    onStartNewConversation = onStartNewConversation
+                    onSelectConversation = onSelectConversation
                 )
                 TeacherNavTab.DIARY -> TeacherDiaryFillTab(
                     students = classStudents,
