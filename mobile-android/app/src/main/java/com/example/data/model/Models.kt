@@ -324,6 +324,7 @@ data class DailyReport(
     val meal_status: String? = null,
     val sleep_status: String? = null,
     val recorded_by: String? = null,
+    val version: String? = null,
 ) {
     val lunch_status: String get() = meal_status.orEmpty().split(" / ")
         .firstOrNull { it.startsWith("Öğle: ") }?.removePrefix("Öğle: ").orEmpty()

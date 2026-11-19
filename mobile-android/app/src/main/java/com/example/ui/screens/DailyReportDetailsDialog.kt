@@ -123,6 +123,7 @@ internal fun DailyReportDetailsDialog(id: String, actorId: String, canWrite: Boo
 private fun dailyReportFailure(failure: Exception): String = when ((failure as? DailyReportHttpException)?.code) {
     403 -> "Bu işlem için yetkiniz yok."
     404 -> "Karne bulunamadı veya erişim kapsamınız değişti."
+    412 -> "Karne değişti. Güncel kaydı açın."
     else -> failure.message?.takeIf { it.startsWith("Karne değişti.") } ?: "Karne işlemi doğrulanamadı. Tekrar deneyin."
 }
 

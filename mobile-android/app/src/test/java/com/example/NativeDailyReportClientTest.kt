@@ -72,22 +72,32 @@ class NativeDailyReportClientTest {
         val actor = UUID(24, 2).toString()
         val row = JSONObject().put("id", id).put("student_id", UUID(24, 3).toString())
             .put("class_id", UUID(24, 4).toString()).put("date", "2026-11-19").put("recorded_by", actor)
-            .put("teacher_notes", "İlk gözlem")
-        val existing = AtomicReference(row)
+            .put("teacher_notes", "İlk gözlem").put("version", "version-1")
+        val existing = AtomicReference<JSONObject?>(row)
         val updateBody = AtomicReference<JSONObject>()
+        val writes = mutableListOf<String>()
         val deletes = AtomicInteger()
         val interceptor = ApiClientProvider.interceptor
         val base = ApiClientProvider.activeBaseUrl
         val previous = listOf(interceptor.authToken, interceptor.tenantId, interceptor.branchId, interceptor.workspaceOrganizationId)
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/api/daily-reports/$id") { exchange ->
+            if (exchange.requestMethod in listOf("PUT", "DELETE")) {
+                val version = exchange.requestHeaders.getFirst("If-Match")
+                writes.add(version.orEmpty())
+                if (version != existing.get()?.let { "\"${it.getString("version")}\"" }) {
+                    exchange.sendResponseHeaders(412, -1)
+                    exchange.close()
+                    return@createContext
+                }
+            }
             when (exchange.requestMethod) {
                 "PUT" -> {
                     val body = JSONObject(exchange.requestBody.bufferedReader().readText())
                     updateBody.set(body)
                     val changed = JSONObject(row.toString())
                     for (key in body.keys()) changed.put(key, body.get(key))
-                    existing.set(changed)
+                    existing.set(changed.put("version", "version-2"))
                     exchange.close()
                 }
                 "DELETE" -> { deletes.incrementAndGet(); existing.set(null); exchange.close() }
@@ -121,6 +131,7 @@ class NativeDailyReportClientTest {
             client.delete(updated)
             client.delete(updated)
             assertEquals(1, deletes.get())
+            assertEquals(listOf("\"version-1\"", "\"version-2\""), writes)
         } finally {
             server.stop(0)
             ApiClientProvider.createService(base)

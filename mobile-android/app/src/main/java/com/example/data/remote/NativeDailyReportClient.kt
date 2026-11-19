@@ -51,7 +51,7 @@ internal class NativeDailyReportClient {
         if (matches(latest)) return latest
         requireCurrent(latest, original)
         try {
-            val response = parse(call("daily-reports/${latest.id}", edit.body(), "PUT"))
+            val response = parse(call("daily-reports/${latest.id}", edit.body(), "PUT", original.version))
             check(matches(response)) { "Güncelleme yanıtı karneyle eşleşmedi." }
         } catch (failure: IOException) {
             if (!uncertain(failure)) throw failure
@@ -63,7 +63,7 @@ internal class NativeDailyReportClient {
         val latest = detailOrMissing(original.id) ?: return
         requireCurrent(latest, original)
         try {
-            call("daily-reports/${latest.id}", method = "DELETE")
+            call("daily-reports/${latest.id}", method = "DELETE", version = original.version)
         } catch (failure: IOException) {
             if (!uncertain(failure) && (failure as? DailyReportHttpException)?.code != 404) throw failure
         }
@@ -80,7 +80,8 @@ internal class NativeDailyReportClient {
         left.student_id == right.student_id && left.class_id == right.class_id && left.date == right.date
 
     private fun requireCurrent(latest: DailyReport, original: DailyReport) {
-        check(sameRecord(latest, original) && latest.recorded_by == original.recorded_by &&
+        check(!original.version.isNullOrBlank()) { "Karne sürümü alınamadı. Güncel kaydı açın." }
+        check(sameRecord(latest, original) && latest.version == original.version && latest.recorded_by == original.recorded_by &&
             DailyReportEdit.from(latest) == DailyReportEdit.from(original)) { "Karne değişti. Güncel kaydı açın." }
     }
 
@@ -145,8 +146,10 @@ internal class NativeDailyReportClient {
         }
     }
 
-    private suspend fun call(path: String, body: JSONObject? = null, method: String = if (body == null) "GET" else "POST"): JSONObject = scope.io {
+    private suspend fun call(path: String, body: JSONObject? = null, method: String = if (body == null) "GET" else "POST",
+        version: String? = null): JSONObject = scope.io {
         val request = Request.Builder().url(base + path).tag(NativeRequestScope::class.java, scope)
+        if (version != null) request.header("If-Match", "\"$version\"")
         request.method(method, body?.toString()?.toRequestBody("application/json".toMediaType()))
         client.newCall(request.build()).execute().use { reply ->
             if (!reply.isSuccessful) throw DailyReportHttpException(reply.code)
@@ -169,7 +172,7 @@ internal class NativeDailyReportClient {
             date = LocalDate.parse(row.getString("date")).toString(),
             meal_status = text("meal_status"), sleep_status = text("sleep_status"), mood_level = text("mood").orEmpty(),
             activities_done = activities?.let { values -> (0 until values.length()).map(values::getString) }.orEmpty(),
-            teacher_note = text("teacher_notes").orEmpty(), recorded_by = text("recorded_by"),
+            teacher_note = text("teacher_notes").orEmpty(), recorded_by = text("recorded_by"), version = text("version"),
         )
     }
 }
