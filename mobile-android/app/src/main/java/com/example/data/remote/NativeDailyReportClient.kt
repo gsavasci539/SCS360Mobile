@@ -9,10 +9,14 @@ import org.json.JSONObject
 import org.json.JSONTokener
 import org.json.JSONArray
 import java.io.IOException
+import java.net.URLEncoder
 import java.time.LocalDate
 import java.util.UUID
 
 internal class DailyReportHttpException(val code: Int) : IOException("Günlük karne isteği başarısız (HTTP $code)")
+
+internal data class DailyReportStudentOption(val id: String, val label: String, val studentName: String, val classId: String)
+internal data class DailyReportStudentPage(val rows: List<DailyReportStudentOption>, val totalPages: Int)
 
 internal data class DailyReportEdit(val meals: String, val sleep: String, val mood: String, val activities: List<String>, val note: String) {
     fun body() = JSONObject().put("meal_status", meals.takeUnless(String::isBlank) ?: JSONObject.NULL)
@@ -35,6 +39,29 @@ internal class NativeDailyReportClient {
     suspend fun list(branch: String?): List<DailyReport> = pages(
         branch?.takeUnless { it == "all" || it.isBlank() }?.let { "&branch_id=${UUID.fromString(it)}" }.orEmpty(),
     )
+
+    suspend fun studentOptions(branch: String?, classroom: String?, search: String, page: Int): DailyReportStudentPage {
+        require(page > 0)
+        val branchId = branch?.takeUnless { it.isBlank() || it == "all" }?.let { UUID.fromString(it).toString() }
+        val classId = classroom?.takeUnless { it.isBlank() || it == "all" }?.let { UUID.fromString(it).toString() }
+        val path = buildString {
+            append("daily-reports/student-options?page=$page&page_size=25")
+            if (branchId != null) append("&branch_id=$branchId")
+            if (classId != null) append("&class_id=$classId")
+            if (search.isNotBlank()) append("&search=${URLEncoder.encode(search.trim(), "UTF-8")}")
+        }
+        val result = call(path)
+        check(result.getInt("page") == page) { "Öğrenci seçenekleri sayfası doğrulanamadı." }
+        val items = result.getJSONArray("items")
+        val rows = (0 until items.length()).map { index ->
+            val row = items.getJSONObject(index)
+            val assignedClass = UUID.fromString(row.getString("class_id")).toString()
+            check(classId == null || classId == assignedClass) { "Öğrenci sınıfı doğrulanamadı." }
+            DailyReportStudentOption(UUID.fromString(row.getString("id")).toString(), row.getString("name"),
+                row.getString("student_name"), assignedClass)
+        }
+        return DailyReportStudentPage(rows, result.getInt("total_pages"))
+    }
 
     suspend fun detail(id: String): DailyReport {
         val canonicalId = UUID.fromString(id).toString()

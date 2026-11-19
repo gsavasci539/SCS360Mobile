@@ -22,6 +22,61 @@ import java.util.concurrent.atomic.AtomicReference
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], manifest = Config.NONE)
 class NativeDailyReportClientTest {
+    @Test fun reportWriterUsesFilteredStudentOptionsAndCreatesWithTheReturnedClass() = runBlocking {
+        val student = UUID(36, 1).toString()
+        val classroom = UUID(36, 2).toString()
+        val branch = UUID(36, 3).toString()
+        val actor = UUID(36, 4).toString()
+        val report = UUID(36, 5).toString()
+        val base = ApiClientProvider.activeBaseUrl
+        val interceptor = ApiClientProvider.interceptor
+        val previous = listOf(interceptor.authToken, interceptor.tenantId, interceptor.branchId, interceptor.workspaceOrganizationId)
+        val reads = java.util.concurrent.ConcurrentLinkedQueue<String>()
+        val wrote = AtomicReference<JSONObject>()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/") { exchange ->
+            val path = exchange.requestURI.path
+            val body = when {
+                path == "/api/daily-reports/student-options" && exchange.requestMethod == "GET" -> {
+                    reads.add(exchange.requestURI.rawQuery)
+                    """{"page":2,"total_pages":3,"items":[{"id":"$student","name":"Ada Test · KARNE-11","student_name":"Ada Test","class_id":"$classroom"}]}"""
+                }
+                path == "/api/daily-reports" && exchange.requestMethod == "POST" -> {
+                    wrote.set(JSONObject(exchange.requestBody.bufferedReader().readText()))
+                    """{"id":"$report","student_id":"$student","class_id":"$classroom","date":"2026-11-19","recorded_by":"$actor","teacher_notes":"Gözlem"}"""
+                }
+                else -> {
+                    exchange.sendResponseHeaders(403, -1)
+                    exchange.close()
+                    return@createContext
+                }
+            }
+            val bytes = """{"success":true,"data":$body}""".toByteArray()
+            exchange.responseHeaders.add("Content-Type", "application/json")
+            exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+        server.start()
+        ApiClientProvider.createService("http://127.0.0.1:${server.address.port}/api/")
+        interceptor.setSession("synthetic-report-writer")
+        try {
+            val api = NativeDailyReportClient()
+            val page = api.studentOptions(branch, classroom, "Ada & 7", 2)
+            val option = page.rows.single()
+            assertEquals(3, page.totalPages)
+            assertEquals("Ada Test", option.studentName)
+            val saved = api.save(DailyReportDraft(option.id, option.classId, LocalDate.parse("2026-11-19"), note = "Gözlem"), actor, false)
+            assertEquals(report, saved.id)
+            assertEquals(student, wrote.get().getString("student_id"))
+            assertEquals(classroom, wrote.get().getString("class_id"))
+            assertEquals(listOf("page=2&page_size=25&branch_id=$branch&class_id=$classroom&search=Ada+%26+7"), reads.toList())
+        } finally {
+            server.stop(0)
+            ApiClientProvider.createService(base)
+            interceptor.setSession(previous[0], previous[1], previous[2], previous[3])
+        }
+    }
+
     @Test fun lostSaveResponseRecoversExactRecordAndDoesNotWriteAgain() = runBlocking {
         val student = UUID(22, 1).toString()
         val classroom = UUID(22, 2).toString()

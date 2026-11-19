@@ -283,6 +283,7 @@ fun Okul360NavHost(
         composable(Screen.DailyReports.route) {
             DailyReportsScreen(
                 state = state,
+                onCreateReport = viewModel::saveStudentDailyReport,
                 onReload = viewModel::loadDailyReports
             )
         }

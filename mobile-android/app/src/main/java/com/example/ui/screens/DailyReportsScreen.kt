@@ -29,6 +29,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.DailyReport
 import com.example.data.model.DailyReportDraft
+import com.example.data.remote.DailyReportStudentOption
 import com.example.ui.navigation.NativeNavigationPolicy
 import com.example.ui.components.RoleContextualAiCard
 import com.example.ui.theme.*
@@ -47,13 +48,15 @@ fun DailyReportsScreen(
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedClassFilter by remember { mutableStateOf("ALL") }
-    var showCreateDialog by remember(state.currentUser.id, state.workspaceOrganizationId, state.selectedBranchId) { mutableStateOf(false) }
+    var showCreateDialog by remember(state.currentUser.id, state.currentUser.resolvedTenantId, state.workspaceOrganizationId,
+        state.selectedBranchId, state.serverBaseUrl) { mutableStateOf(false) }
     var selectedReportId by remember(state.currentUser.id, state.currentUser.resolvedTenantId, state.workspaceOrganizationId,
         state.selectedBranchId, state.serverBaseUrl) { mutableStateOf<String?>(null) }
     val canCreate = onCreateReport != null && NativeNavigationPolicy.has(state.currentUser, "daily_reports.write", "academic.write")
+    val canRead = NativeNavigationPolicy.has(state.currentUser, "daily_reports.read", "academic.read")
     val classNames = remember(state.classes) { state.classes.associate { it.id to it.name } }
-    LaunchedEffect(state.selectedBranchId, state.workspaceOrganizationId, state.currentUser.id) {
-        if (!state.dailyReportsLoading && !state.dailyReportsLoaded) onReload?.invoke()
+    LaunchedEffect(state.selectedBranchId, state.workspaceOrganizationId, state.currentUser.id, canRead) {
+        if (canRead && !state.dailyReportsLoading && !state.dailyReportsLoaded) onReload?.invoke()
     }
 
     val filteredReports = remember(state.dailyReports, classNames, searchQuery, selectedClassFilter) {
@@ -156,7 +159,7 @@ fun DailyReportsScreen(
                                     )
                                 )
                             }
-                            IconButton(
+                            if (canCreate) IconButton(
                                 onClick = { showCreateDialog = true },
                                 modifier = Modifier
                                     .size(40.dp)
@@ -168,6 +171,11 @@ fun DailyReportsScreen(
                         }
                     }
                 }
+            }
+
+            if (!canRead) {
+                item { Text("Kayıtlı karneleri görüntüleme yetkiniz yok.", modifier = Modifier.padding(16.dp)) }
+                return@LazyColumn
             }
 
             // AI Analiz & Pedagojik Öneri Kartı
@@ -284,7 +292,7 @@ fun DailyReportsScreen(
         }
     }
 
-    selectedReportId?.let { id ->
+    selectedReportId?.takeIf { canRead }?.let { id ->
         DailyReportDetailsDialog(id, state.currentUser.id,
             NativeNavigationPolicy.has(state.currentUser, "daily_reports.write", "academic.write"),
             onDismiss = { selectedReportId = null },
@@ -297,7 +305,7 @@ fun DailyReportsScreen(
             if (state.dailyReportSavedRevision != startingRevision) showCreateDialog = false
         }
         AddDailyReportDialog(
-            students = state.students.filter { it.class_id.isNotBlank() },
+            branchId = state.selectedBranchId,
             saving = state.dailyReportSaving,
             error = state.dailyReportSaveError,
             onDismiss = { showCreateDialog = false },
@@ -308,16 +316,15 @@ fun DailyReportsScreen(
 
 @Composable
 fun AddDailyReportDialog(
-    students: List<com.example.data.model.Student>,
+    branchId: String?,
     saving: Boolean,
     error: String?,
     onDismiss: () -> Unit,
     onConfirm: (DailyReportDraft) -> Unit
 ) {
-    var selectedStudentId by remember { mutableStateOf("") }
-    val student = students.find { it.id == selectedStudentId }
-    var studentDropdownExpanded by remember { mutableStateOf(false) }
-    var attempted by remember { mutableStateOf(false) }
+    var student by remember(branchId) { mutableStateOf<DailyReportStudentOption?>(null) }
+    val selectedStudentId = student?.id
+    var attempted by remember(selectedStudentId) { mutableStateOf(false) }
 
     var selectedMood by remember(selectedStudentId) { mutableStateOf("") }
     var breakfastStatus by remember(selectedStudentId) { mutableStateOf("") }
@@ -331,7 +338,7 @@ fun AddDailyReportDialog(
         "Müzik & Ritim", "İngilizce Çemberi", "Satranç", "Drama & Masal"
     )
     var selectedActivities by remember(selectedStudentId) { mutableStateOf(emptySet<String>()) }
-    val draft = student?.let { DailyReportDraft(it.id, it.class_id, LocalDate.now(ZoneId.of("Europe/Istanbul")),
+    val draft = student?.let { DailyReportDraft(it.id, it.classId, LocalDate.now(ZoneId.of("Europe/Istanbul")),
         breakfastStatus, lunchStatus, snackStatus, sleepMinutes, selectedMood, selectedActivities.toList(), teacherNote) }
 
     val moodOptions = listOf(
@@ -365,31 +372,7 @@ fun AddDailyReportDialog(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Student Picker
-                    Text("Öğrenci Seçimi", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        OutlinedButton(
-                            onClick = { studentDropdownExpanded = true },
-                            enabled = !saving,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(student?.full_name ?: "Öğrenci Seçin")
-                        }
-                        DropdownMenu(
-                            expanded = studentDropdownExpanded,
-                            onDismissRequest = { studentDropdownExpanded = false }
-                        ) {
-                            students.forEach { std ->
-                                DropdownMenuItem(
-                                    text = { Text("${std.full_name} (${std.class_name})") },
-                                    onClick = {
-                                        selectedStudentId = std.id
-                                        studentDropdownExpanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
+                    DailyReportStudentPicker(branchId, null, student, enabled = !saving, onSelect = { student = it })
 
                     // Mood Selection
                     Text("Günün Duygu Durumu (Mod)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)

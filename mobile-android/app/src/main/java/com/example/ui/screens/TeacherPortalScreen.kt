@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.*
+import com.example.data.remote.DailyReportStudentOption
 import com.example.ui.components.RoleContextualAiCard
 import com.example.ui.components.RoleSpeedDialFab
 import com.example.ui.components.RoleSwitchBadge
@@ -126,10 +127,6 @@ fun TeacherPortalScreen(
                 }
             )
         )
-    }
-
-    val classStudents = remember(state.students, state.attendanceClassId) {
-        state.students.filter { it.class_id == state.attendanceClassId }
     }
 
     val isChatRoomActive = selectedTab == TeacherNavTab.MESSAGING && state.selectedConversationId != null
@@ -346,9 +343,8 @@ fun TeacherPortalScreen(
                     state = state,
                     onSelectConversation = onSelectConversation
                 )
-                TeacherNavTab.DIARY -> key(state.currentUser.id, state.workspaceOrganizationId, state.selectedBranchId,
-                    state.attendanceClassId) { TeacherDiaryFillTab(
-                    students = classStudents,
+                TeacherNavTab.DIARY -> key(state.currentUser.id, state.currentUser.resolvedTenantId, state.workspaceOrganizationId,
+                    state.selectedBranchId, state.attendanceClassId, state.serverBaseUrl) { TeacherDiaryFillTab(
                     state = state,
                     onOpenAiNarrativeGenerator = { studentName, m, sl, mo, act ->
                         onOpenAiNarrativeGenerator?.invoke(studentName, m, sl, mo, act)
@@ -428,14 +424,16 @@ private fun AttendanceChoiceChip(
 // -------------------------------------------------------------
 @Composable
 private fun TeacherDiaryFillTab(
-    students: List<Student>,
     state: Okul360UiState,
     onOpenAiNarrativeGenerator: (studentName: String, meal: String, sleep: String, mood: String, activities: String) -> Unit,
     onSaveReport: (DailyReportDraft) -> Unit
 ) {
-    var selectedStudentId by remember { mutableStateOf("") }
-    val currentStudent = students.find { it.id == selectedStudentId }
+    var currentStudent by remember { mutableStateOf<DailyReportStudentOption?>(null) }
+    val selectedStudentId = currentStudent?.id
     val canWrite = com.example.ui.navigation.NativeNavigationPolicy.has(state.currentUser, "daily_reports.write", "academic.write")
+    val attendanceClass = state.attendanceClassId.takeIf {
+        com.example.ui.navigation.NativeNavigationPolicy.has(state.currentUser, "attendance.read")
+    }
     val editable = canWrite && currentStudent != null && !state.dailyReportSaving
     var attempted by remember(selectedStudentId) { mutableStateOf(false) }
     var breakfast by remember(selectedStudentId, state.dailyReportSavedRevision) { mutableStateOf("") }
@@ -448,7 +446,8 @@ private fun TeacherDiaryFillTab(
 
     LaunchedEffect(state.activeDailyNarrative) {
         state.activeDailyNarrative?.let { narr ->
-            if (currentStudent != null && narrativeStudent == currentStudent.id && narr.student_name == currentStudent.full_name) {
+            val student = currentStudent
+            if (student != null && narrativeStudent == student.id && narr.student_name == student.studentName) {
                 teacherNote = narr.narrative_text
                 narrativeStudent = null
             }
@@ -465,7 +464,7 @@ private fun TeacherDiaryFillTab(
     )
     val selectedActivities = remember(selectedStudentId, state.dailyReportSavedRevision) { mutableStateListOf<String>() }
     val draft = currentStudent?.let { student ->
-        DailyReportDraft(student.id, student.class_id, java.time.LocalDate.now(java.time.ZoneId.of("Europe/Istanbul")),
+        DailyReportDraft(student.id, student.classId, java.time.LocalDate.now(java.time.ZoneId.of("Europe/Istanbul")),
             breakfast, lunch, snack, sleepMinutes, mood, selectedActivities.toList(), teacherNote)
     }
 
@@ -496,27 +495,10 @@ private fun TeacherDiaryFillTab(
             )
         }
 
-        // Student Selector Chips
         item {
-            Text("Öğrenci Seçin:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = BrandNavy)
-            Spacer(modifier = Modifier.height(6.dp))
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(students) { std ->
-                    val isSelected = std.id == selectedStudentId
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { selectedStudentId = std.id },
-                        enabled = !state.dailyReportSaving,
-                        label = { Text(std.full_name, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
-                        leadingIcon = if (isSelected) {
-                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                        } else null
-                    )
-                }
-            }
+            if (canWrite) DailyReportStudentPicker(state.selectedBranchId, attendanceClass, currentStudent,
+                enabled = !state.dailyReportSaving, onSelect = { currentStudent = it })
+            else Text("Günlük karne yazma yetkiniz yok.")
         }
 
         // Meal Consumption Form
@@ -630,7 +612,7 @@ private fun TeacherDiaryFillTab(
                                 val student = currentStudent ?: return@FilledTonalButton
                                 narrativeStudent = student.id
                                 val actStr = selectedActivities.joinToString(", ")
-                                onOpenAiNarrativeGenerator(student.full_name, breakfast, sleepMinutes?.let { "$it Dakika" }.orEmpty(), mood, actStr)
+                                onOpenAiNarrativeGenerator(student.studentName, breakfast, sleepMinutes?.let { "$it Dakika" }.orEmpty(), mood, actStr)
                             },
                             enabled = canWrite && currentStudent != null && !state.dailyReportSaving,
                             colors = ButtonDefaults.filledTonalButtonColors(
