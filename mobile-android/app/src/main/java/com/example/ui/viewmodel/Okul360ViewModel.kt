@@ -131,6 +131,12 @@ data class Okul360UiState(
 
     // Daily Reports
     val dailyReports: List<DailyReport> = emptyList(),
+    val dailyReportsLoading: Boolean = false,
+    val dailyReportsLoaded: Boolean = false,
+    val dailyReportsError: String? = null,
+    val dailyReportSaving: Boolean = false,
+    val dailyReportSaveError: String? = null,
+    val dailyReportSavedRevision: Long = 0,
 
     // Parent Portal Notices
     val medicineNotices: List<MedicineNotice> = emptyList(),
@@ -654,7 +660,7 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             if (allowed("finance.read")) loadFinance()
             if (allowed("announcement.read")) loadAnnouncements()
             if (allowed("notification.read")) { loadTemplates(); loadOutboxLogs(); loadBroadcastData() }
-            if (allowed("daily_reports.read")) loadDailyReports()
+            if (allowed("daily_reports.read", "academic.read")) loadDailyReports()
             if (allowed("report.read")) loadReports()
             if (allowed("inventory.read")) loadResources()
             if (allowed("users.read")) { loadRoles(); loadUsers() }
@@ -1602,10 +1608,26 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    private var dailyReportsJob: kotlinx.coroutines.Job? = null
+
     fun loadDailyReports() {
-        viewModelScope.launch(requestFailures) {
-            val reps = repository.getDailyReports(null, null)
-            _uiState.update { it.copy(dailyReports = reps) }
+        val state = _uiState.value
+        if (!state.isLoggedIn || !com.example.ui.navigation.NativeNavigationPolicy.has(state.currentUser,
+                "daily_reports.read", "academic.read")) return
+        dailyReportsJob?.cancel()
+        val scope = com.example.data.remote.ApiClientProvider.interceptor.captureScope()
+        _uiState.update { it.copy(dailyReportsLoading = true, dailyReportsError = null) }
+        dailyReportsJob = viewModelScope.launch {
+            try {
+                val rows = com.example.data.remote.NativeDailyReportClient().list(state.selectedBranchId)
+                scope.ensureCurrent()
+                _uiState.update { it.copy(dailyReports = rows, dailyReportsLoading = false, dailyReportsLoaded = true) }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                if (scope.current()) _uiState.update { it.copy(dailyReportsLoading = false, dailyReportsLoaded = false,
+                    dailyReportsError = "Günlük karneler yüklenemedi. Yeniden deneyin.") }
+            }
         }
     }
 
@@ -1793,19 +1815,34 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun saveStudentDailyReport(report: DailyReport) {
-        viewModelScope.launch(requestFailures) {
-            val existing = _uiState.value.dailyReports.filter { it.student_id != report.student_id }
-            NotificationHelper.sendDailyReportPush(
-                context = getApplication(),
-                studentName = report.student_name,
-                summary = "${report.student_name} için günlük bülten, beslenme ve etkinlik raporu yayınlandı."
-            )
-            _uiState.update {
-                it.copy(
-                    dailyReports = existing + report,
-                    toastMessage = "${report.student_name} için günlük karne kaydedildi ve veliye push bildirimi iletildi."
-                )
+    fun saveStudentDailyReport(draft: DailyReportDraft) {
+        val state = _uiState.value
+        if (!state.isLoggedIn || state.dailyReportSaving || !com.example.ui.navigation.NativeNavigationPolicy.has(
+                state.currentUser, "daily_reports.write", "academic.write")) return
+        val scope = com.example.data.remote.ApiClientProvider.interceptor.captureScope()
+        val canRead = com.example.ui.navigation.NativeNavigationPolicy.has(state.currentUser, "daily_reports.read", "academic.read")
+        _uiState.update { it.copy(dailyReportSaving = true, dailyReportSaveError = null) }
+        viewModelScope.launch {
+            try {
+                com.example.data.remote.NativeDailyReportClient().save(draft, state.currentUser.id, canRead)
+                scope.ensureCurrent()
+                _uiState.update { it.copy(dailyReportSavedRevision = it.dailyReportSavedRevision + 1,
+                    toastMessage = "Günlük karne kaydedildi.") }
+                if (canRead) loadDailyReports()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                if (scope.current()) {
+                    val message = when ((failure as? com.example.data.remote.DailyReportHttpException)?.code) {
+                        403 -> "Bu günlük karneyi kaydetme yetkiniz yok."
+                        409 -> "Bu öğrenci ve tarihte bir karne var. Güncel kaydı kontrol edin."
+                        else -> failure.message?.takeIf { failure is IllegalStateException && it.startsWith("Bu öğrenci ve tarih") }
+                            ?: "Karne kaydı doğrulanamadı. Taslak açık, yeniden deneyebilirsiniz."
+                    }
+                    _uiState.update { it.copy(dailyReportSaveError = message) }
+                }
+            } finally {
+                if (scope.current()) _uiState.update { it.copy(dailyReportSaving = false) }
             }
         }
     }

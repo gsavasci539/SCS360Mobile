@@ -63,7 +63,7 @@ fun TeacherPortalScreen(
     onSaveAttendance: () -> Unit,
     onUpdateAttendanceStatus: (String, String) -> Unit,
     onMarkAllPresent: () -> Unit,
-    onSaveDailyReport: (DailyReport) -> Unit,
+    onSaveDailyReport: (DailyReportDraft) -> Unit,
     onMarkMedicineGiven: (String) -> Unit,
     onApproveLeave: (String) -> Unit,
     onUploadMaterial: (title: String, desc: String, subject: String, className: String, type: String, ext: String, size: String, dueDate: String?, isRequired: Boolean, summary: String) -> Unit = { _, _, _, _, _, _, _, _, _, _ -> },
@@ -346,14 +346,15 @@ fun TeacherPortalScreen(
                     state = state,
                     onSelectConversation = onSelectConversation
                 )
-                TeacherNavTab.DIARY -> TeacherDiaryFillTab(
+                TeacherNavTab.DIARY -> key(state.currentUser.id, state.workspaceOrganizationId, state.selectedBranchId,
+                    state.attendanceClassId) { TeacherDiaryFillTab(
                     students = classStudents,
                     state = state,
                     onOpenAiNarrativeGenerator = { studentName, m, sl, mo, act ->
                         onOpenAiNarrativeGenerator?.invoke(studentName, m, sl, mo, act)
                     },
                     onSaveReport = onSaveDailyReport
-                )
+                ) }
                 TeacherNavTab.SCHEDULE -> TeacherDayPane(state)
                 TeacherNavTab.AI_CHATBOT -> {}
             }
@@ -430,22 +431,26 @@ private fun TeacherDiaryFillTab(
     students: List<Student>,
     state: Okul360UiState,
     onOpenAiNarrativeGenerator: (studentName: String, meal: String, sleep: String, mood: String, activities: String) -> Unit,
-    onSaveReport: (DailyReport) -> Unit
+    onSaveReport: (DailyReportDraft) -> Unit
 ) {
-    var selectedStudentId by remember { mutableStateOf(students.firstOrNull()?.id ?: "") }
-    val currentStudent = students.find { it.id == selectedStudentId } ?: students.firstOrNull()
-
-    var breakfast by remember { mutableStateOf("Tümünü Yedi") }
-    var lunch by remember { mutableStateOf("Tümünü Yedi") }
-    var snack by remember { mutableStateOf("Tümünü Yedi") }
-    var sleepMinutes by remember { mutableFloatStateOf(90f) }
-    var mood by remember { mutableStateOf("Çok Neşeli & Uyumlu") }
-    var teacherNote by remember { mutableStateOf("Bugün grup çalışmalarına çok istekli katıldı, etkinliklerde arkadaşlarına yardım etti.") }
+    var selectedStudentId by remember { mutableStateOf("") }
+    val currentStudent = students.find { it.id == selectedStudentId }
+    val canWrite = com.example.ui.navigation.NativeNavigationPolicy.has(state.currentUser, "daily_reports.write", "academic.write")
+    val editable = canWrite && currentStudent != null && !state.dailyReportSaving
+    var attempted by remember(selectedStudentId) { mutableStateOf(false) }
+    var breakfast by remember(selectedStudentId, state.dailyReportSavedRevision) { mutableStateOf("") }
+    var lunch by remember(selectedStudentId, state.dailyReportSavedRevision) { mutableStateOf("") }
+    var snack by remember(selectedStudentId, state.dailyReportSavedRevision) { mutableStateOf("") }
+    var sleepMinutes by remember(selectedStudentId, state.dailyReportSavedRevision) { mutableStateOf<Int?>(null) }
+    var mood by remember(selectedStudentId, state.dailyReportSavedRevision) { mutableStateOf("") }
+    var teacherNote by remember(selectedStudentId, state.dailyReportSavedRevision) { mutableStateOf("") }
+    var narrativeStudent by remember(selectedStudentId) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(state.activeDailyNarrative) {
         state.activeDailyNarrative?.let { narr ->
-            if (currentStudent != null && narr.student_name.contains(currentStudent.first_name, ignoreCase = true)) {
+            if (currentStudent != null && narrativeStudent == currentStudent.id && narr.student_name == currentStudent.full_name) {
                 teacherNote = narr.narrative_text
+                narrativeStudent = null
             }
         }
     }
@@ -458,7 +463,11 @@ private fun TeacherDiaryFillTab(
         "Müzik & Orff Ritim Atölyesi",
         "Montessori Matematik Kavramları"
     )
-    val selectedActivities = remember { mutableStateListOf("Robotik Kodlama & Algoritma", "Suluboya & El Sanatları", "İngilizce Drama & Şarkı") }
+    val selectedActivities = remember(selectedStudentId, state.dailyReportSavedRevision) { mutableStateListOf<String>() }
+    val draft = currentStudent?.let { student ->
+        DailyReportDraft(student.id, student.class_id, java.time.LocalDate.now(java.time.ZoneId.of("Europe/Istanbul")),
+            breakfast, lunch, snack, sleepMinutes, mood, selectedActivities.toList(), teacherNote)
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -500,6 +509,7 @@ private fun TeacherDiaryFillTab(
                     FilterChip(
                         selected = isSelected,
                         onClick = { selectedStudentId = std.id },
+                        enabled = !state.dailyReportSaving,
                         label = { Text(std.full_name, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
                         leadingIcon = if (isSelected) {
                             { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
@@ -519,9 +529,9 @@ private fun TeacherDiaryFillTab(
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("🥣 Öğün Tüketimleri", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = BrandNavy)
                     
-                    MealOptionRow("Kahvaltı", breakfast) { breakfast = it }
-                    MealOptionRow("Öğle Yemeği", lunch) { lunch = it }
-                    MealOptionRow("İkindi Beslenmesi", snack) { snack = it }
+                    MealOptionRow("Kahvaltı", breakfast, editable) { breakfast = it }
+                    MealOptionRow("Öğle Yemeği", lunch, editable) { lunch = it }
+                    MealOptionRow("İkindi Beslenmesi", snack, editable) { snack = it }
                 }
             }
         }
@@ -540,25 +550,23 @@ private fun TeacherDiaryFillTab(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Slider(
-                            value = sleepMinutes,
-                            onValueChange = { sleepMinutes = it },
-                            valueRange = 0f..150f,
-                            steps = 5,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text("${sleepMinutes.toInt()} dk", fontWeight = FontWeight.Bold, color = PrimaryBlue, fontSize = 13.sp)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(listOf(0, 25, 50, 75, 100, 125, 150)) { minutes ->
+                                FilterChip(selected = sleepMinutes == minutes, enabled = editable, onClick = { sleepMinutes = minutes },
+                                    label = { Text(if (minutes == 0) "Uyumadı" else "$minutes dk") })
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(6.dp))
                     Text("😊 Gün İçi Duygu Durumu / Mod", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = BrandNavy)
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("Çok Neşeli & Uyumlu", "Sakin", "Yorgun").forEach { m ->
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(listOf("Çok Neşeli & Uyumlu", "Sakin", "Yorgun")) { m ->
                             val isSel = mood == m
                             FilterChip(
                                 selected = isSel,
                                 onClick = { mood = m },
+                                enabled = editable,
                                 label = { Text(m, fontSize = 11.sp) }
                             )
                         }
@@ -581,7 +589,7 @@ private fun TeacherDiaryFillTab(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
+                                .clickable(enabled = editable) {
                                     if (isChecked) selectedActivities.remove(act) else selectedActivities.add(act)
                                 }
                                 .padding(vertical = 4.dp),
@@ -589,6 +597,7 @@ private fun TeacherDiaryFillTab(
                         ) {
                             Checkbox(
                                 checked = isChecked,
+                                enabled = editable,
                                 onCheckedChange = {
                                     if (it) selectedActivities.add(act) else selectedActivities.remove(act)
                                 }
@@ -614,14 +623,16 @@ private fun TeacherDiaryFillTab(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("✍️ Öğretmen Özel Değerlendirme Notu", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = BrandNavy)
+                        Text("✍️ Öğretmen Özel Değerlendirme Notu", Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = BrandNavy)
                         
                         FilledTonalButton(
                             onClick = {
-                                val stdName = currentStudent?.full_name ?: "Öğrenci"
+                                val student = currentStudent ?: return@FilledTonalButton
+                                narrativeStudent = student.id
                                 val actStr = selectedActivities.joinToString(", ")
-                                onOpenAiNarrativeGenerator(stdName, breakfast, "${sleepMinutes.toInt()} Dakika", mood, actStr)
+                                onOpenAiNarrativeGenerator(student.full_name, breakfast, sleepMinutes?.let { "$it Dakika" }.orEmpty(), mood, actStr)
                             },
+                            enabled = canWrite && currentStudent != null && !state.dailyReportSaving,
                             colors = ButtonDefaults.filledTonalButtonColors(
                                 containerColor = Color(0xFFEDE9FE),
                                 contentColor = Color(0xFF6D28D9)
@@ -638,39 +649,23 @@ private fun TeacherDiaryFillTab(
                     OutlinedTextField(
                         value = teacherNote,
                         onValueChange = { teacherNote = it },
+                        enabled = editable,
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 3,
                         label = { Text("Günün özeti ve veliye iletilecek not") }
                     )
 
+                    if (attempted) state.dailyReportSaveError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     Button(
-                        onClick = {
-                            currentStudent?.let { std ->
-                                val newReport = DailyReport(
-                                    id = "rep-${UUID.randomUUID()}",
-                                    student_id = std.id,
-                                    student_name = std.full_name,
-                                    class_name = std.class_name,
-                                    date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()),
-                                    breakfast_status = breakfast,
-                                    lunch_status = lunch,
-                                    snack_status = snack,
-                                    sleep_duration_minutes = sleepMinutes.toInt(),
-                                    mood_level = mood,
-                                    activities_done = selectedActivities.toList(),
-                                    teacher_note = teacherNote,
-                                    teacher_name = state.currentUser.resolvedName
-                                )
-                                onSaveReport(newReport)
-                            }
-                        },
+                        enabled = editable && draft?.hasObservation == true,
+                        onClick = { draft?.let { attempted = true; onSaveReport(it) } },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = SecondaryEmerald)
                     ) {
                         Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Karneyi Kaydet & Veliye İlet", fontWeight = FontWeight.Bold)
+                        Text(if (state.dailyReportSaving) "Kaydediliyor…" else "Karneyi Kaydet", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -679,16 +674,14 @@ private fun TeacherDiaryFillTab(
 }
 
 @Composable
-private fun MealOptionRow(mealTitle: String, currentVal: String, onSelect: (String) -> Unit) {
+private fun MealOptionRow(mealTitle: String, currentVal: String, enabled: Boolean, onSelect: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(mealTitle, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("Tümünü Yedi", "Yarısını Yedi", "Az Yedi", "Yemedi").forEach { opt ->
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            items(listOf("Tümünü Yedi", "Yarısını Yedi", "Az Yedi", "Yemedi")) { opt ->
                 val isSel = currentVal == opt
                 Surface(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { onSelect(opt) },
+                    modifier = Modifier.clickable(enabled = enabled) { onSelect(opt) },
                     color = if (isSel) SecondaryEmerald else Color(0xFFF1F5F9),
                     shape = RoundedCornerShape(6.dp)
                 ) {
@@ -698,7 +691,7 @@ private fun MealOptionRow(mealTitle: String, currentVal: String, onSelect: (Stri
                         fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
                         color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(vertical = 5.dp)
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp)
                     )
                 }
             }

@@ -20,33 +20,42 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.DailyReport
+import com.example.data.model.DailyReportDraft
+import com.example.ui.navigation.NativeNavigationPolicy
 import com.example.ui.components.RoleContextualAiCard
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.Okul360UiState
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.UUID
+import java.time.LocalDate
+import java.time.ZoneId
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DailyReportsScreen(
     state: Okul360UiState,
     onNavigateBack: (() -> Unit)? = null,
-    onCreateReport: ((DailyReport) -> Unit)? = null,
+    onCreateReport: ((DailyReportDraft) -> Unit)? = null,
+    onReload: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedClassFilter by remember { mutableStateOf("ALL") }
-    var showCreateDialog by remember { mutableStateOf(false) }
+    var showCreateDialog by remember(state.currentUser.id, state.workspaceOrganizationId, state.selectedBranchId) { mutableStateOf(false) }
+    val canCreate = onCreateReport != null && NativeNavigationPolicy.has(state.currentUser, "daily_reports.write", "academic.write")
+    val classNames = remember(state.classes) { state.classes.associate { it.id to it.name } }
+    LaunchedEffect(state.selectedBranchId, state.workspaceOrganizationId, state.currentUser.id) {
+        if (!state.dailyReportsLoading && !state.dailyReportsLoaded) onReload?.invoke()
+    }
 
-    val filteredReports = remember(state.dailyReports, searchQuery, selectedClassFilter) {
-        state.dailyReports.filter { report ->
+    val filteredReports = remember(state.dailyReports, classNames, searchQuery, selectedClassFilter) {
+        state.dailyReports.map { it.copy(class_name = classNames[it.class_id].orEmpty()) }.filter { report ->
             val matchesSearch = searchQuery.isBlank() ||
                     report.student_name.contains(searchQuery, ignoreCase = true) ||
                     report.class_name.contains(searchQuery, ignoreCase = true) ||
@@ -85,7 +94,7 @@ fun DailyReportsScreen(
                         }
                     },
                     actions = {
-                        IconButton(
+                        if (canCreate) IconButton(
                             onClick = { showCreateDialog = true },
                             modifier = Modifier.testTag("daily_reports_add_btn")
                         ) {
@@ -97,7 +106,7 @@ fun DailyReportsScreen(
             }
         },
         floatingActionButton = {
-            if (onCreateReport != null) {
+            if (canCreate) {
                 ExtendedFloatingActionButton(
                     onClick = { showCreateDialog = true },
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
@@ -217,7 +226,16 @@ fun DailyReportsScreen(
                 }
             }
 
-            if (filteredReports.isEmpty()) {
+            if (state.dailyReportsLoading) {
+                item { CircularProgressIndicator(Modifier.padding(16.dp)) }
+            } else if (state.dailyReportsError != null) {
+                item {
+                    Text(state.dailyReportsError, Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error)
+                    if (onReload != null) TextButton(onClick = onReload) { Text("Tekrar dene") }
+                }
+            } else if (!state.dailyReportsLoaded) {
+                item { Text("Karne listesi henüz yüklenmedi.", Modifier.padding(horizontal = 16.dp)) }
+            } else if (filteredReports.isEmpty()) {
                 item {
                     Box(
                         modifier = Modifier
@@ -240,13 +258,8 @@ fun DailyReportsScreen(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "Yeni bir bülten oluşturmak için aşağıdaki butona dokunun.",
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
                             Spacer(modifier = Modifier.height(16.dp))
-                            Button(
+                            if (canCreate) Button(
                                 onClick = { showCreateDialog = true },
                                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                             ) {
@@ -268,15 +281,17 @@ fun DailyReportsScreen(
         }
     }
 
-    if (showCreateDialog) {
+    if (showCreateDialog && canCreate) {
+        val startingRevision = remember { state.dailyReportSavedRevision }
+        LaunchedEffect(state.dailyReportSavedRevision) {
+            if (state.dailyReportSavedRevision != startingRevision) showCreateDialog = false
+        }
         AddDailyReportDialog(
-            students = state.students,
-            currentTeacherName = state.currentUser.full_name.ifBlank { "Sınıf Öğretmeni" },
+            students = state.students.filter { it.class_id.isNotBlank() },
+            saving = state.dailyReportSaving,
+            error = state.dailyReportSaveError,
             onDismiss = { showCreateDialog = false },
-            onConfirm = { newReport ->
-                onCreateReport?.invoke(newReport)
-                showCreateDialog = false
-            }
+            onConfirm = { onCreateReport?.invoke(it) }
         )
     }
 }
@@ -284,27 +299,30 @@ fun DailyReportsScreen(
 @Composable
 fun AddDailyReportDialog(
     students: List<com.example.data.model.Student>,
-    currentTeacherName: String,
+    saving: Boolean,
+    error: String?,
     onDismiss: () -> Unit,
-    onConfirm: (DailyReport) -> Unit
+    onConfirm: (DailyReportDraft) -> Unit
 ) {
-    var selectedStudentId by remember { mutableStateOf(students.firstOrNull()?.id ?: "") }
-    var selectedStudentName by remember { mutableStateOf(students.firstOrNull()?.full_name ?: "") }
-    var selectedClassName by remember { mutableStateOf(students.firstOrNull()?.class_name ?: "Anaokulu") }
+    var selectedStudentId by remember { mutableStateOf("") }
+    val student = students.find { it.id == selectedStudentId }
     var studentDropdownExpanded by remember { mutableStateOf(false) }
+    var attempted by remember { mutableStateOf(false) }
 
-    var selectedMood by remember { mutableStateOf("Çok Neşeli & Uyumlu") }
-    var breakfastStatus by remember { mutableStateOf("Tümünü Yedi") }
-    var lunchStatus by remember { mutableStateOf("Tümünü Yedi") }
-    var snackStatus by remember { mutableStateOf("Tümünü Yedi") }
-    var sleepMinutes by remember { mutableIntStateOf(90) }
-    var teacherNote by remember { mutableStateOf("Bugün grup etkinliklerine çok istekli katıldı, arkadaşlarıyla uyumlu ve neşeliydi.") }
+    var selectedMood by remember(selectedStudentId) { mutableStateOf("") }
+    var breakfastStatus by remember(selectedStudentId) { mutableStateOf("") }
+    var lunchStatus by remember(selectedStudentId) { mutableStateOf("") }
+    var snackStatus by remember(selectedStudentId) { mutableStateOf("") }
+    var sleepMinutes by remember(selectedStudentId) { mutableStateOf<Int?>(null) }
+    var teacherNote by remember(selectedStudentId) { mutableStateOf("") }
 
     val allActivities = listOf(
         "Robotik Kodlama", "Resim & El Becerisi", "Bahçe Oyunları",
         "Müzik & Ritim", "İngilizce Çemberi", "Satranç", "Drama & Masal"
     )
-    var selectedActivities by remember { mutableStateOf(setOf("Robotik Kodlama", "Resim & El Becerisi", "Bahçe Oyunları")) }
+    var selectedActivities by remember(selectedStudentId) { mutableStateOf(emptySet<String>()) }
+    val draft = student?.let { DailyReportDraft(it.id, it.class_id, LocalDate.now(ZoneId.of("Europe/Istanbul")),
+        breakfastStatus, lunchStatus, snackStatus, sleepMinutes, selectedMood, selectedActivities.toList(), teacherNote) }
 
     val moodOptions = listOf(
         "Çok Neşeli & Uyumlu" to "🌟",
@@ -317,191 +335,162 @@ fun AddDailyReportDialog(
     val mealOptions = listOf("Tümünü Yedi", "Yarısını Yedi", "Az Yedi", "Yemedi")
     val sleepOptions = listOf(0, 30, 60, 90, 120)
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.AutoStories, contentDescription = null, tint = PrimaryBlue)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Yeni Günlük Karne & Bülten", fontWeight = FontWeight.Bold, fontSize = 17.sp)
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Student Picker
-                Text("Öğrenci Seçimi", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedButton(
-                        onClick = { studentDropdownExpanded = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(if (selectedStudentName.isNotBlank()) "$selectedStudentName ($selectedClassName)" else "Öğrenci Seçin")
-                    }
-                    DropdownMenu(
-                        expanded = studentDropdownExpanded,
-                        onDismissRequest = { studentDropdownExpanded = false }
-                    ) {
-                        students.forEach { std ->
-                            DropdownMenuItem(
-                                text = { Text("${std.full_name} (${std.class_name})") },
-                                onClick = {
-                                    selectedStudentId = std.id
-                                    selectedStudentName = std.full_name
-                                    selectedClassName = std.class_name
-                                    studentDropdownExpanded = false
-                                }
-                            )
+    Dialog(
+        onDismissRequest = { if (!saving) onDismiss() },
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(12.dp)
+            .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.9f),
+            shape = MaterialTheme.shapes.large) {
+            Column(Modifier.imePadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.AutoStories, contentDescription = null, tint = PrimaryBlue)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Yeni Günlük Karne & Bülten", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Student Picker
+                    Text("Öğrenci Seçimi", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = { studentDropdownExpanded = true },
+                            enabled = !saving,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(student?.full_name ?: "Öğrenci Seçin")
                         }
-                    }
-                }
-
-                // Mood Selection
-                Text("Günün Duygu Durumu (Mod)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(moodOptions) { (mood, emoji) ->
-                        FilterChip(
-                            selected = selectedMood == mood,
-                            onClick = { selectedMood = mood },
-                            label = { Text("$emoji $mood", fontSize = 11.5.sp) }
-                        )
-                    }
-                }
-
-                // Meals Selection
-                Text("Beslenme Durumu", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Text("Kahvaltı:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    mealOptions.forEach { opt ->
-                        FilterChip(
-                            selected = breakfastStatus == opt,
-                            onClick = { breakfastStatus = opt },
-                            label = { Text(opt.replace(" Yedi", ""), fontSize = 10.sp) }
-                        )
-                    }
-                }
-
-                Text("Öğle Yemeği:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    mealOptions.forEach { opt ->
-                        FilterChip(
-                            selected = lunchStatus == opt,
-                            onClick = { lunchStatus = opt },
-                            label = { Text(opt.replace(" Yedi", ""), fontSize = 10.sp) }
-                        )
-                    }
-                }
-
-                Text("İkindi Beslenmesi:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    mealOptions.forEach { opt ->
-                        FilterChip(
-                            selected = snackStatus == opt,
-                            onClick = { snackStatus = opt },
-                            label = { Text(opt.replace(" Yedi", ""), fontSize = 10.sp) }
-                        )
-                    }
-                }
-
-                // Sleep Selection
-                Text("Öğle Uykusu", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    sleepOptions.forEach { minutes ->
-                        FilterChip(
-                            selected = sleepMinutes == minutes,
-                            onClick = { sleepMinutes = minutes },
-                            label = { Text(if (minutes == 0) "Uyumadı" else "$minutes dk", fontSize = 11.sp) }
-                        )
-                    }
-                }
-
-                // Activities
-                Text("Günün Etkinlikleri", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    allActivities.chunked(2).forEach { rowActs ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            rowActs.forEach { act ->
-                                val isSelected = act in selectedActivities
-                                FilterChip(
-                                    selected = isSelected,
+                        DropdownMenu(
+                            expanded = studentDropdownExpanded,
+                            onDismissRequest = { studentDropdownExpanded = false }
+                        ) {
+                            students.forEach { std ->
+                                DropdownMenuItem(
+                                    text = { Text("${std.full_name} (${std.class_name})") },
                                     onClick = {
-                                        selectedActivities = if (isSelected) selectedActivities - act else selectedActivities + act
-                                    },
-                                    label = { Text(act, fontSize = 11.sp) }
+                                        selectedStudentId = std.id
+                                        studentDropdownExpanded = false
+                                    }
                                 )
                             }
                         }
                     }
+
+                    // Mood Selection
+                    Text("Günün Duygu Durumu (Mod)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(moodOptions) { (mood, emoji) ->
+                            FilterChip(
+                                selected = selectedMood == mood,
+                                enabled = !saving,
+                                onClick = { selectedMood = mood },
+                                label = { Text("$emoji $mood", fontSize = 11.5.sp) }
+                            )
+                        }
+                    }
+
+                    // Meals Selection
+                    Text("Beslenme Durumu", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Kahvaltı:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        items(mealOptions) { opt ->
+                            FilterChip(
+                                selected = breakfastStatus == opt,
+                                enabled = !saving,
+                                onClick = { breakfastStatus = opt },
+                                label = { Text(opt.replace(" Yedi", ""), fontSize = 10.sp) }
+                            )
+                        }
+                    }
+
+                    Text("Öğle Yemeği:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        items(mealOptions) { opt ->
+                            FilterChip(
+                                selected = lunchStatus == opt,
+                                enabled = !saving,
+                                onClick = { lunchStatus = opt },
+                                label = { Text(opt.replace(" Yedi", ""), fontSize = 10.sp) }
+                            )
+                        }
+                    }
+
+                    Text("İkindi Beslenmesi:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        items(mealOptions) { opt ->
+                            FilterChip(
+                                selected = snackStatus == opt,
+                                enabled = !saving,
+                                onClick = { snackStatus = opt },
+                                label = { Text(opt.replace(" Yedi", ""), fontSize = 10.sp) }
+                            )
+                        }
+                    }
+
+                    // Sleep Selection
+                    Text("Öğle Uykusu", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(sleepOptions) { minutes ->
+                            FilterChip(
+                                selected = sleepMinutes == minutes,
+                                enabled = !saving,
+                                onClick = { sleepMinutes = minutes },
+                                label = { Text(if (minutes == 0) "Uyumadı" else "$minutes dk", fontSize = 11.sp) }
+                            )
+                        }
+                    }
+
+                    // Activities
+                    Text("Günün Etkinlikleri", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        allActivities.chunked(2).forEach { rowActs ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                rowActs.forEach { act ->
+                                    val isSelected = act in selectedActivities
+                                    FilterChip(
+                                        selected = isSelected,
+                                        enabled = !saving,
+                                        onClick = {
+                                            selectedActivities = if (isSelected) selectedActivities - act else selectedActivities + act
+                                        },
+                                        label = { Text(act, fontSize = 11.sp) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Teacher Note
+                    OutlinedTextField(
+                        value = teacherNote,
+                        onValueChange = { teacherNote = it },
+                        enabled = !saving,
+                        label = { Text("Öğretmen Gözlemi ve Veli Notu") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 5
+                    )
+
                 }
-
-                // Teacher Note
-                OutlinedTextField(
-                    value = teacherNote,
-                    onValueChange = { teacherNote = it },
-                    label = { Text("Öğretmen Gözlemi ve Veli Notu") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3,
-                    maxLines = 5
-                )
-
-                Surface(
-                    color = Color(0xFFDCFCE7),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                if (attempted) error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss, enabled = !saving) { Text("İptal") }
+                    Button(
+                        enabled = !saving && draft?.hasObservation == true,
+                        onClick = { draft?.let { attempted = true; onConfirm(it) } },
+                        colors = ButtonDefaults.buttonColors(containerColor = SecondaryEmerald),
                     ) {
-                        Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = Color(0xFF15803D), modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Rapor kaydedildiğinde öğrenci velisine anında Push Bildirim ve Günlük Bülten iletilecektir.",
-                            fontSize = 11.sp,
-                            color = Color(0xFF15803D)
-                        )
+                        Text(if (saving) "Kaydediliyor…" else "Kaydet")
                     }
                 }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (selectedStudentId.isNotBlank()) {
-                        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-                        val report = DailyReport(
-                            id = "dr-${UUID.randomUUID().toString().take(8)}",
-                            student_id = selectedStudentId,
-                            student_name = selectedStudentName,
-                            class_name = selectedClassName,
-                            date = today,
-                            breakfast_status = breakfastStatus,
-                            lunch_status = lunchStatus,
-                            snack_status = snackStatus,
-                            sleep_duration_minutes = sleepMinutes,
-                            mood_level = selectedMood,
-                            activities_done = selectedActivities.toList(),
-                            teacher_note = teacherNote,
-                            teacher_name = currentTeacherName
-                        )
-                        onConfirm(report)
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = SecondaryEmerald)
-            ) {
-                Text("Kaydet & Veliye Gönder")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("İptal")
             }
         }
-    )
+    }
 }
 
 @Composable
@@ -561,15 +550,8 @@ fun DailyReportCard(
             Spacer(modifier = Modifier.height(12.dp))
 
             // Meals & Sleep Breakdown
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                MealPill(title = "Kahvaltı", status = report.breakfast_status, icon = Icons.Default.FreeBreakfast, modifier = Modifier.weight(1f))
-                MealPill(title = "Öğle", status = report.lunch_status, icon = Icons.Default.Restaurant, modifier = Modifier.weight(1f))
-                MealPill(title = "İkindi", status = report.snack_status, icon = Icons.Default.BakeryDining, modifier = Modifier.weight(1f))
-                MealPill(title = "Uyku", status = if (report.sleep_duration_minutes == 0) "Yok" else "${report.sleep_duration_minutes} dk", icon = Icons.Default.Bedtime, modifier = Modifier.weight(1f))
-            }
+            report.meal_status?.let { Text("Beslenme · $it") }
+            report.sleep_status?.let { Text("Uyku · $it") }
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -611,7 +593,7 @@ fun DailyReportCard(
             ) {
                 Column(modifier = Modifier.padding(10.dp)) {
                     Text(
-                        text = "Öğretmen Notu (${report.teacher_name}):",
+                        text = "Öğretmen notu",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -624,35 +606,6 @@ fun DailyReportCard(
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun MealPill(
-    title: String,
-    status: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-    ) {
-        Column(
-            modifier = Modifier.padding(8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(icon, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(text = title, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(
-                text = status.split("(").first().trim(),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
         }
     }
 }

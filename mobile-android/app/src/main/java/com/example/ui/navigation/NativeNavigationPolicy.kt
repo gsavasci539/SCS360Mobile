@@ -29,7 +29,7 @@ object NativeNavigationPolicy {
         SubScreen.REPORTS -> has(user, "report.read")
         SubScreen.RESOURCES -> has(user, "inventory.read")
         SubScreen.ROLES, SubScreen.USERS, SubScreen.STAFF -> has(user, "users.read")
-        SubScreen.DAILY_REPORTS -> has(user, "daily_reports.read")
+        SubScreen.DAILY_REPORTS -> has(user, "daily_reports.read", "academic.read")
         SubScreen.DIGITAL_ID_CARD -> has(user, "security.read")
         SubScreen.APPOINTMENTS -> has(user, "appointments.read")
         SubScreen.TRANSPORT -> has(user, "bus.read")

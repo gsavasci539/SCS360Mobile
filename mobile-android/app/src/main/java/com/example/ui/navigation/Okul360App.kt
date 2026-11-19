@@ -1043,7 +1043,8 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             SubScreen.DAILY_REPORTS -> DailyReportsScreen(
                                 state = state,
                                 onNavigateBack = { currentSubScreen = SubScreen.NONE },
-                                onCreateReport = { report -> viewModel.saveStudentDailyReport(report) }
+                                onCreateReport = viewModel::saveStudentDailyReport,
+                                onReload = viewModel::loadDailyReports
                             )
                             SubScreen.DIGITAL_ID_CARD -> DigitalIdCardScreen(
                                 state = state,

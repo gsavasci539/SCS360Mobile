@@ -312,20 +312,38 @@ data class CreateAnnouncementRequest(
 
 @JsonClass(generateAdapter = true)
 data class DailyReport(
-    val id: String = "dr-1",
+    val id: String = "",
     val student_id: String = "",
     val student_name: String = "",
     val class_name: String = "",
-    val date: String = "2026-08-20",
-    val breakfast_status: String = "Tümünü Yedi",
-    val lunch_status: String = "Tümünü Yedi",
-    val snack_status: String = "Tümünü Yedi",
-    val sleep_duration_minutes: Int = 90,
-    val mood_level: String = "Çok Neşeli & Uyumlu",
-    val activities_done: List<String> = listOf("Robotik Kodlama", "Resim & El Becerisi", "Bahçe Oyunları"),
-    val teacher_note: String = "Bugün etkinliklere çok hevesli katıldı, arkadaşlarıyla paylaşımları harikaydı.",
-    val teacher_name: String = "Ayşe Öğretmen"
-)
+    val date: String = "",
+    val mood_level: String = "",
+    val activities_done: List<String> = emptyList(),
+    val teacher_note: String = "",
+    val class_id: String = "",
+    val meal_status: String? = null,
+    val sleep_status: String? = null,
+    val recorded_by: String? = null,
+) {
+    val lunch_status: String get() = meal_status.orEmpty().split(" / ")
+        .firstOrNull { it.startsWith("Öğle: ") }?.removePrefix("Öğle: ").orEmpty()
+}
+
+data class DailyReportDraft(
+    val studentId: String,
+    val classId: String,
+    val date: java.time.LocalDate,
+    val breakfast: String = "",
+    val lunch: String = "",
+    val snack: String = "",
+    val sleepMinutes: Int? = null,
+    val mood: String = "",
+    val activities: List<String> = emptyList(),
+    val note: String = "",
+) {
+    val hasObservation: Boolean get() = breakfast.isNotBlank() || lunch.isNotBlank() || snack.isNotBlank() ||
+        sleepMinutes != null || mood.isNotBlank() || activities.isNotEmpty() || note.isNotBlank()
+}
 
 @JsonClass(generateAdapter = true)
 data class DashboardSummary(
