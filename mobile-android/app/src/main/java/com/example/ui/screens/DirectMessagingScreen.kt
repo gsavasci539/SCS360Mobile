@@ -32,11 +32,13 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.ChatConversation
 import com.example.data.model.ChatMessage
+import com.example.data.model.UserRole
 import com.example.data.remote.ChatFile
 import com.example.data.remote.DirectMessageDraft
 import com.example.data.remote.MessageRecipient
 import com.example.data.remote.NativeMessagingClient
 import com.example.data.remote.RegistryHttpException
+import com.example.data.remote.StaffChatArea
 import com.example.data.remote.readChatFile
 import com.example.ui.components.financePresentationScope
 import com.example.ui.navigation.NativeNavigationPolicy
@@ -72,6 +74,10 @@ private fun ScopedMessaging(state: Okul360UiState, select: (String?) -> Unit, mo
     var listError by remember { mutableStateOf(false) }
     var listRevision by remember { mutableIntStateOf(0) }
     var directoryOpen by remember { mutableStateOf(false) }
+    var studentChatOpen by remember { mutableStateOf(false) }
+    val canOpenStudentChat = state.selectedRole != UserRole.PARENT &&
+        (state.currentUser.is_super_admin != true || !state.workspaceOrganizationId.isNullOrBlank()) &&
+        NativeNavigationPolicy.has(state.currentUser, "students.read", "student.read")
     var selected by remember { mutableStateOf<ChatConversation?>(null) }
     val drafts = remember { mutableStateMapOf<String, String>() }
     val attachments = remember { mutableStateMapOf<String, ChatFile>() }
@@ -181,7 +187,15 @@ private fun ScopedMessaging(state: Okul360UiState, select: (String?) -> Unit, mo
     if (!api.current()) return
     if (partner == null) {
         DirectConversationsList(conversations, listError, canSend && !busy, modifier,
-            onRefresh = { listRevision++ }, onNew = { directoryOpen = true }, onOpen = ::open)
+            onRefresh = { listRevision++ }, onNew = { directoryOpen = true }, onOpen = ::open,
+            onStudentChat = if (canOpenStudentChat) ({ studentChatOpen = true }) else null)
+        if (studentChatOpen && canOpenStudentChat) {
+            val area = if (state.selectedRole == UserRole.TEACHER) StaffChatArea.TEACHER else StaffChatArea.ADMIN
+            StaffStudentChatDirectory(state.currentUser, area, state.selectedBranchId.takeUnless { it == "all" }) {
+                studentChatOpen = false
+                listRevision++
+            }
+        }
         if (directoryOpen && canSend) {
             MessageDirectory(api, onClose = { directoryOpen = false }) { recipient ->
                 open(conversations.orEmpty().find { it.id == recipient.id } ?: ChatConversation(
@@ -290,6 +304,7 @@ private fun ScopedMessaging(state: Okul360UiState, select: (String?) -> Unit, mo
 private fun DirectConversationsList(
     rows: List<ChatConversation>?, failed: Boolean, canNew: Boolean, modifier: Modifier,
     onRefresh: () -> Unit, onNew: () -> Unit, onOpen: (ChatConversation) -> Unit,
+    onStudentChat: (() -> Unit)?,
 ) {
     var search by remember { mutableStateOf("") }
     val visible = rows.orEmpty().filter {
@@ -314,6 +329,10 @@ private fun DirectConversationsList(
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) })
                     IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, contentDescription = "Sohbetleri yenile") }
                 }
+            }
+            if (onStudentChat != null) item {
+                OutlinedButton(onClick = onStudentChat, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    .testTag("open_staff_student_chat")) { Text("Öğrenciye özel sohbet") }
             }
             if (failed) item { Text("Sohbetler yüklenemedi.", color = MaterialTheme.colorScheme.error) }
             else if (rows == null) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }

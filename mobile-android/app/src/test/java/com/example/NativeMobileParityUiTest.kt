@@ -48,7 +48,19 @@ class NativeMobileParityUiTest {
                 e.requestURI.path.endsWith("/medicine-requests") -> JSONObject().put("id", id(8)).put("student_id", id(7)).put("status", "PENDING")
                 e.requestURI.path.endsWith("/today-status") -> JSONObject().put("student_id", id(7)).put("date", "2026-11-13").put("attendance", JSONObject.NULL).put("daily_report", JSONObject.NULL).put("today_schedule", JSONArray())
                 e.requestURI.path.endsWith("/teachers") -> JSONArray().put(JSONObject().put("id", id(9)).put("name", "Synthetic Teacher"))
+                e.requestURI.path.endsWith("/chat-contacts") -> {
+                    check(e.requestURI.path.startsWith("/api/teacher/"))
+                    check(e.requestURI.query.contains("branch_id=${id(8)}"))
+                    val contact = JSONObject().put("student_id", id(7)).put("student_name", "Fixture learner")
+                        .put("parent_id", id(9)).put("parent_name", "Fixture guardian")
+                        .put("class_name", "Fixture class").put("branch_id", id(8))
+                    JSONObject().put("items", JSONArray().put(contact)).put("page", 1).put("total_pages", 1)
+                }
                 e.requestURI.path.contains("/chat/") -> {
+                    if (e.requestURI.path.startsWith("/api/teacher/")) {
+                        check(e.requestURI.query.contains("parent_id=${id(9)}"))
+                        check(e.requestURI.query.contains("branch_id=${id(8)}"))
+                    }
                     if (e.requestMethod == "POST") {
                         val draft = JSONObject(e.requestBody.readBytes().toString(Charsets.UTF_8))
                         val row = JSONObject().put("id", draft.getString("request_id")).put("sender_id", id(1))
@@ -169,6 +181,7 @@ class NativeMobileParityUiTest {
         compose.onNodeWithTag("parent_message_send").performClick()
         compose.waitUntil(15000) { calls.any { it.startsWith("GET") && it.contains("/sent/") } }
         val row = "parent_message_${requireNotNull(sentMessage).getString("id")}"
+        compose.waitUntil(15000) { compose.onAllNodesWithTag(row).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("parent_messages").performScrollToNode(hasTestTag(row))
         compose.onNodeWithText("Synthetic stored message").assertExists()
         assertEquals(1, calls.count { it.startsWith("POST") })
@@ -198,8 +211,27 @@ class NativeMobileParityUiTest {
         compose.onNodeWithTag("parent_message_check").performClick()
         compose.waitUntil(15000) { calls.any { it.startsWith("GET") && it.contains("/sent/") } }
         val row = "parent_message_${requireNotNull(sentMessage).getString("id")}"
+        compose.waitUntil(15000) { compose.onAllNodesWithTag(row).fetchSemanticsNodes().isNotEmpty() }
         list.performScrollToNode(hasTestTag(row))
         assertEquals(1, calls.count { it.startsWith("POST") })
+    }
+
+    @Test @Config(qualifiers = "w640dp-h360dp-land-mdpi")
+    fun teacherMessagingOpensScopedContactAndHidesComposerWithoutWritePermission() {
+        val actor = User(id = id(1), organization_id = id(40), permissions = listOf("students.read", "messaging.read"))
+        val state = Okul360UiState(isLoggedIn = true, currentUser = actor, selectedRole = UserRole.TEACHER,
+            selectedBranchId = id(8))
+        compose.setContent { Okul360Theme { DirectMessagingScreen(state, {}) } }
+        compose.onNodeWithTag("open_staff_student_chat").assertIsDisplayed().performClick()
+        val contact = "staff_chat_contact_${id(7)}_${id(9)}"
+        compose.waitUntil(15000) { compose.onAllNodesWithTag(contact).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(contact).performClick()
+        val history = "GET /api/teacher/chat/${id(7)}"
+        compose.waitUntil(15000) { calls.contains(history) }
+        compose.onNodeWithTag("parent_messages").performScrollToNode(hasText("Bu hesapla gönderim yapılamaz."))
+        compose.onNodeWithTag("parent_message_send").assertDoesNotExist()
+        compose.onNodeWithTag("parent_message_choose_file").assertDoesNotExist()
+        assertFalse(calls.any { it.startsWith("POST ") })
     }
 
     @Test fun parentChatbotShortcutOpensTheSelectedChildWithoutSending() {

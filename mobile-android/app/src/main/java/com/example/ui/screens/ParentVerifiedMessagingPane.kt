@@ -17,10 +17,14 @@ import com.example.data.model.User
 import com.example.data.remote.ApiClientProvider
 import com.example.data.remote.ChatFile
 import com.example.data.remote.NativeParentPortalClient
+import com.example.data.remote.NativeStudentChatClient
 import com.example.data.remote.RegistryHttpException
+import com.example.data.remote.StaffChatArea
+import com.example.data.remote.StaffChatContact
 import com.example.data.remote.StudentChatDraft
 import com.example.data.remote.readChatFile
 import com.example.data.remote.studentChatAttachment
+import com.example.ui.navigation.NativeNavigationPolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -28,18 +32,30 @@ import org.json.JSONObject
 
 @Composable
 fun ParentVerifiedMessagingPane(studentId: String, actor: User) {
-    key(studentId, actor.id) { ScopedParentMessagingPane(studentId, actor) }
+    key(studentId, actor.id) { ScopedStudentMessagingPane(studentId, actor) }
 }
 
 @Composable
-private fun ScopedParentMessagingPane(studentId: String, actor: User) {
+internal fun StaffStudentConversation(contact: StaffChatContact, actor: User, area: StaffChatArea, onBack: () -> Unit) {
+    key(contact, actor.id, area) { ScopedStudentMessagingPane(contact.studentId, actor, contact, area, onBack) }
+}
+
+@Composable
+private fun ScopedStudentMessagingPane(
+    studentId: String, actor: User, contact: StaffChatContact? = null, area: StaffChatArea? = null, onBack: (() -> Unit)? = null,
+) {
     val captured = remember { ApiClientProvider.interceptor.captureScope() }
-    val client = remember { NativeParentPortalClient() }
+    val client = remember { NativeStudentChatClient() }
     val coroutine = rememberCoroutineScope()
     val resolver = LocalContext.current.contentResolver
-    val allowed = actor.is_super_admin == true || "parent.send_message" in actor.permissions
+    val parentAllowed = actor.is_super_admin == true || "parent.send_message" in actor.permissions
+    val allowed = if (contact == null) parentAllowed else NativeNavigationPolicy.has(actor, "messaging.read")
+    val canSend = if (contact == null) parentAllowed else NativeNavigationPolicy.has(actor, "messaging.send")
     var teachers by remember { mutableStateOf<List<JSONObject>?>(null) }
-    var teacherId by remember { mutableStateOf<String?>(null) }
+    var partnerId by remember { mutableStateOf(contact?.parentId) }
+    val conversation = remember(partnerId) {
+        partnerId?.let { if (contact == null) client.parent(studentId, it, actor.id) else client.staff(requireNotNull(area), contact, actor.id) }
+    }
     var messages by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var text by remember { mutableStateOf("") }
     var file by remember { mutableStateOf<ChatFile?>(null) }
@@ -56,7 +72,7 @@ private fun ScopedParentMessagingPane(studentId: String, actor: User) {
     val chooseDocument = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         val target = pickingFor
         pickingFor = null
-        if (uri != null && target != null && target == teacherId && captured.current()) {
+        if (uri != null && target != null && target == partnerId && captured.current()) {
             busy = true
             coroutine.launch {
                 try {
@@ -81,7 +97,7 @@ private fun ScopedParentMessagingPane(studentId: String, actor: User) {
     val saveDocument = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         val request = savingFor
         savingFor = null
-        if (uri != null && request != null && request.first == teacherId && captured.current()) {
+        if (uri != null && request != null && request.first == partnerId && captured.current()) {
             busy = true
             coroutine.launch {
                 try {
@@ -101,27 +117,19 @@ private fun ScopedParentMessagingPane(studentId: String, actor: User) {
     }
 
     LaunchedEffect(allowed) {
-        if (allowed) {
-            try { teachers = captured.io { (client.section(studentId, "teachers") as JSONArray).rows() } }
+        if (allowed && contact == null) {
+            try { teachers = captured.io { (NativeParentPortalClient().section(studentId, "teachers") as JSONArray).rows() } }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { if (captured.current()) historyError = "Öğretmenler yüklenemedi." }
         }
     }
-    LaunchedEffect(teacherId, revision, allowed) {
-        val partner = teacherId ?: return@LaunchedEffect
+    LaunchedEffect(conversation, revision, allowed) {
+        val selected = conversation ?: return@LaunchedEffect
         if (!allowed) return@LaunchedEffect
         historyError = ""
         busy = true
         try {
-            messages = captured.io {
-                client.chat(studentId, partner).rows().also { rows ->
-                    check(rows.all {
-                        val mine = it.getBoolean("is_current_user")
-                        it.getString("sender_id") == (if (mine) actor.id else partner) &&
-                            it.getString("receiver_id") == (if (mine) partner else actor.id)
-                    })
-                }
-            }
+            messages = selected.history().rows()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
@@ -132,8 +140,8 @@ private fun ScopedParentMessagingPane(studentId: String, actor: User) {
     }
 
     fun submit(checkOnly: Boolean) {
-        val partner = teacherId ?: return
-        if (busy || !allowed || !captured.current()) return
+        val selected = conversation ?: return
+        if (busy || !allowed || !canSend || !captured.current()) return
         val unresolved = pending
         val draft = unresolved ?: StudentChatDraft(text.trim(), file)
         busy = true
@@ -142,9 +150,9 @@ private fun ScopedParentMessagingPane(studentId: String, actor: User) {
         coroutine.launch {
             var reading = checkOnly
             try {
-                if (!checkOnly) client.sendStudentChat(studentId, partner, actor.id, draft)
+                if (!checkOnly) selected.send(draft)
                 reading = true
-                val stored = client.studentChatReceipt(studentId, partner, actor.id, draft)
+                val stored = selected.receipt(draft)
                 captured.ensureCurrent()
                 messages = (messages + stored).distinctBy { it.getString("id") }
                 text = ""
@@ -172,12 +180,13 @@ private fun ScopedParentMessagingPane(studentId: String, actor: User) {
     }
 
     fun download(partner: String, row: JSONObject) {
+        val selected = conversation ?: return
         if (busy || savingFor != null) return
         busy = true
         fileStatus = ""
         coroutine.launch {
             try {
-                val verified = client.downloadStudentChat(studentId, partner, row)
+                val verified = selected.download(row)
                 captured.ensureCurrent()
                 savingFor = partner to verified
                 saveDocument.launch(verified.name)
@@ -193,13 +202,20 @@ private fun ScopedParentMessagingPane(studentId: String, actor: User) {
     }
 
     if (!captured.current()) return
-    val partner = teacherId
+    val partner = partnerId
     LazyColumn(
         Modifier.fillMaxSize().imePadding().testTag("parent_messages"),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        item { Text("Öğretmenle iletişim", style = MaterialTheme.typography.titleLarge) }
+        item {
+            if (contact == null) Text("Öğretmenle iletişim", style = MaterialTheme.typography.titleLarge)
+            else {
+                TextButton(onClick = requireNotNull(onBack), modifier = Modifier.heightIn(min = 48.dp)) { Text("Öğrenci ve veli listesi") }
+                Text(contact.studentName, style = MaterialTheme.typography.titleLarge)
+                Text(contact.parentName)
+            }
+        }
         if (!allowed) {
             item { Text("Bu hesapla mesajlaşma yetkisi yok.") }
             return@LazyColumn
@@ -209,8 +225,8 @@ private fun ScopedParentMessagingPane(studentId: String, actor: User) {
             val id = row.getString("id")
             OutlinedButton(enabled = !busy && pending == null && pickingFor == null && savingFor == null,
                 onClick = {
-                    if (teacherId != id) {
-                        teacherId = id
+                    if (partnerId != id) {
+                        partnerId = id
                         messages = emptyList()
                         text = ""
                         file = null
@@ -243,6 +259,15 @@ private fun ScopedParentMessagingPane(studentId: String, actor: User) {
         }
         if (actionError.isNotBlank()) item { Text(actionError) }
         if (fileStatus.isNotBlank()) item { Text(fileStatus) }
+        if (!canSend) {
+            item { Text("Bu hesapla gönderim yapılamaz.") }
+            item {
+                TextButton(enabled = !busy, onClick = { revision++ }, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text("Geçmişi yenile")
+                }
+            }
+            return@LazyColumn
+        }
         item {
             OutlinedTextField(text, { if (it.length <= 10000) text = it }, enabled = !busy && pending == null,
                 label = { Text("Mesaj") }, maxLines = 4, modifier = Modifier.fillMaxWidth().testTag("parent_message_text"))
