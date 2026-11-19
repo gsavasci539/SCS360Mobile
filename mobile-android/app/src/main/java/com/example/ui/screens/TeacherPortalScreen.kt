@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.*
 import com.example.data.remote.DailyReportStudentOption
-import com.example.ui.components.RoleContextualAiCard
 import com.example.ui.components.RoleSpeedDialFab
 import com.example.ui.components.RoleSwitchBadge
 import com.example.ui.components.SpeedDialAction
@@ -490,12 +489,8 @@ private fun TeacherDiaryFillTab(
             )
         }
 
-        // AI Analiz ve Pedagojik Rapor Kartı
         item {
-            RoleContextualAiCard(
-                screenName = "DAILY_REPORTS",
-                state = state
-            )
+            DailyReportAnalysisPanel(state)
         }
 
         item {

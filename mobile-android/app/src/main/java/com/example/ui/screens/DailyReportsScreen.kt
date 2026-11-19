@@ -200,6 +200,7 @@ fun DailyReportsScreen(
                         .padding(horizontal = 16.dp, vertical = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    DailyReportAnalysisPanel(state, listRevision = revision)
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it.take(150); page = 1 },

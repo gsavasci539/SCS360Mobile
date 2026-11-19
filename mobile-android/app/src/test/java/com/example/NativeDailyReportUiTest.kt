@@ -4,6 +4,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasText
@@ -15,11 +17,13 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.Density
 import com.example.data.model.DailyReportDraft
 import com.example.data.model.User
 import com.example.data.remote.ApiClientProvider
+import com.example.ui.screens.DailyReportAnalysisPanel
 import com.example.ui.screens.DailyReportsScreen
 import com.example.ui.navigation.NativeNavigationPolicy
 import com.example.ui.navigation.SubScreen
@@ -42,12 +46,60 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w360dp-h620dp-mdpi")
 class NativeDailyReportUiTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun reportAnalysisShowsMeasuredZeroAndResetsOnBranchChange() {
+        val branch = mutableStateOf(UUID(40, 1).toString())
+        val initial = branch.value
+        val base = ApiClientProvider.activeBaseUrl
+        val interceptor = ApiClientProvider.interceptor
+        val previous = listOf(interceptor.authToken, interceptor.tenantId, interceptor.branchId, interceptor.workspaceOrganizationId)
+        val requests = ConcurrentLinkedQueue<String>()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/api/ai/ai-daily-reports-analysis") { exchange ->
+            val query = exchange.requestURI.rawQuery
+            requests.add(query)
+            val body = """{"branch_id":"${query.substringAfter("branch_id=")}","report_stats":{"total":2,"mood_observations":1,"mood_rate":0,"sleep_observations":0,"sleep_rate":null,"meal_observations":3,"meal_rate":66.7},"students_needing_attention":[],"recommendations":[]}""".toByteArray()
+            exchange.responseHeaders.add("Content-Type", "application/json")
+            exchange.sendResponseHeaders(200, body.size.toLong())
+            exchange.responseBody.use { it.write(body) }
+        }
+        server.start()
+        ApiClientProvider.createService("http://127.0.0.1:${server.address.port}/api/")
+        interceptor.setSession("synthetic-analysis-reader", branch = initial)
+        try {
+            compose.setContent {
+                CompositionLocalProvider(LocalDensity provides Density(1f, 2f)) {
+                    Okul360Theme {
+                        DailyReportAnalysisPanel(Okul360UiState(isLoggedIn = true, selectedBranchId = branch.value,
+                            currentUser = User(id = "reader", permissions = listOf("daily_reports.read"))))
+                    }
+                }
+            }
+            val open = "Karne analizini göster"
+            val measured = "Mutlu oranı · %0 · 1 gözlem"
+            compose.onNodeWithText(open).performClick()
+            compose.waitUntil(10_000) { compose.onAllNodesWithText(measured).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("Uyudu oranı · Gözlem yok").assertIsDisplayed()
+            compose.onNodeWithText("Tam yedi oranı · %66,7 · 3 gözlem").assertIsDisplayed()
+            assertEquals(listOf("branch_id=$initial"), requests.toList())
+            val next = UUID(40, 2).toString()
+            compose.runOnIdle { interceptor.branchId = next; branch.value = next }
+            compose.onNodeWithText(measured).assertDoesNotExist()
+            compose.onNodeWithText(open).performClick()
+            compose.waitUntil(10_000) { "branch_id=$next" in requests }
+        } finally {
+            server.stop(0)
+            ApiClientProvider.createService(base)
+            interceptor.setSession(previous[0], previous[1], previous[2], previous[3])
+        }
+    }
 
     @Test fun filteredListRefreshesAfterChangesAndDiscardsAnOldBranch() {
         val oldBranch = UUID(37, 1).toString()
@@ -57,6 +109,7 @@ class NativeDailyReportUiTest {
         val branch = mutableStateOf(oldBranch)
         val saved = mutableLongStateOf(0L)
         val removed = AtomicBoolean(false)
+        val detailReads = AtomicInteger()
         val deleteVersion = AtomicReference<String>()
         val requests = ConcurrentLinkedQueue<String>()
         val releaseOldBranch = CountDownLatch(1)
@@ -77,6 +130,7 @@ class NativeDailyReportUiTest {
                     "null"
                 }
                 exchange.requestURI.path.endsWith("/$report") -> {
+                    detailReads.incrementAndGet()
                     if (removed.get()) {
                         exchange.sendResponseHeaders(404, -1)
                         exchange.close()
@@ -112,9 +166,12 @@ class NativeDailyReportUiTest {
         ApiClientProvider.createService("http://127.0.0.1:${server.address.port}/api/")
         interceptor.setSession("synthetic-report-editor", branch = oldBranch)
         try {
+            lateinit var clearFocus: () -> Unit
             compose.setContent {
                 CompositionLocalProvider(LocalDensity provides Density(1f, 2f)) {
                     Okul360Theme {
+                        val focus = LocalFocusManager.current
+                        clearFocus = { focus.clearFocus() }
                         DailyReportsScreen(Okul360UiState(isLoggedIn = true, selectedBranchId = branch.value,
                             currentUser = User(id = UUID(37, 6).toString(), permissions = listOf("daily_reports.read", "daily_reports.write")),
                             dailyReportSavedRevision = saved.longValue), onNavigateBack = {})
@@ -133,8 +190,11 @@ class NativeDailyReportUiTest {
             compose.waitUntil(10_000) { requests.count { it == filtered } >= 2 }
 
             compose.waitUntil(10_000) { compose.onAllNodesWithText("Filtreli karne").fetchSemanticsNodes().isNotEmpty() }
+            compose.runOnIdle { clearFocus() }
             list.performScrollToNode(hasText("Karneyi aç"))
-            compose.onNodeWithText("Karneyi aç").performClick()
+            compose.onNodeWithText("Karneyi aç").assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+            assertTrue(compose.onAllNodesWithText("Karne ayrıntısı").fetchSemanticsNodes().isNotEmpty())
+            compose.waitUntil(10_000) { detailReads.get() > 0 }
             compose.waitUntil(10_000) { compose.onAllNodesWithText("Sil").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Sil").performClick()
             compose.onNodeWithText("Karneyi sil").performClick()
@@ -195,6 +255,7 @@ class NativeDailyReportUiTest {
                 }
             }
             compose.onNodeWithText("Kayıtlı karneleri görüntüleme yetkiniz yok.").assertIsDisplayed()
+            compose.onNodeWithText("Karne analizini göster").assertDoesNotExist()
             compose.onNodeWithTag("daily_report_fab").performClick()
             compose.onNodeWithText("Kaydet").assertIsNotEnabled()
             compose.waitUntil(10_000) { compose.onAllNodesWithText("Ada Test · KARNE-11").fetchSemanticsNodes().isNotEmpty() }

@@ -22,6 +22,40 @@ import java.util.concurrent.atomic.AtomicReference
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], manifest = Config.NONE)
 class NativeDailyReportClientTest {
+    @Test fun analysisChecksTheReturnedBranchAndPreservesMissingObservations() = runBlocking {
+        val branch = UUID(39, 1).toString()
+        val returnedBranch = AtomicReference(branch)
+        val query = AtomicReference<String>()
+        val base = ApiClientProvider.activeBaseUrl
+        val interceptor = ApiClientProvider.interceptor
+        val previous = listOf(interceptor.authToken, interceptor.tenantId, interceptor.branchId, interceptor.workspaceOrganizationId)
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/api/ai/ai-daily-reports-analysis") { exchange ->
+            query.set(exchange.requestURI.rawQuery)
+            val body = """{"branch_id":"${returnedBranch.get()}","report_stats":{"total":2,"mood_observations":1,"mood_rate":0,"sleep_observations":0,"sleep_rate":null,"meal_observations":3,"meal_rate":66.7},"students_needing_attention":[],"recommendations":[]}""".toByteArray()
+            exchange.responseHeaders.add("Content-Type", "application/json")
+            exchange.sendResponseHeaders(200, body.size.toLong())
+            exchange.responseBody.use { it.write(body) }
+        }
+        server.start()
+        ApiClientProvider.createService("http://127.0.0.1:${server.address.port}/api/")
+        interceptor.setSession("synthetic-analysis-reader")
+        try {
+            val client = NativeDailyReportClient()
+            val analysis = client.analysis(branch)
+            assertEquals("branch_id=$branch", query.get())
+            assertEquals(0.0, analysis.mood.percent)
+            assertEquals(null, analysis.sleep.percent)
+            assertEquals(3, analysis.meals.observations)
+            returnedBranch.set(UUID(39, 2).toString())
+            assertTrue(runCatching { client.analysis(branch) }.exceptionOrNull() is IllegalStateException)
+        } finally {
+            server.stop(0)
+            ApiClientProvider.createService(base)
+            interceptor.setSession(previous[0], previous[1], previous[2], previous[3])
+        }
+    }
+
     @Test fun dailyReportPageSendsFiltersAndUsesServerTotals() = runBlocking {
         val branch = UUID(38, 1).toString()
         val classroom = UUID(38, 2).toString()

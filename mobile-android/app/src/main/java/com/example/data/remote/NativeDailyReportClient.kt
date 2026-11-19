@@ -22,6 +22,10 @@ internal class DailyReportHttpException(val code: Int) : IOException("Günlük k
 internal data class DailyReportStudentOption(val id: String, val label: String, val studentName: String, val classId: String)
 internal data class DailyReportStudentPage(val rows: List<DailyReportStudentOption>, val totalPages: Int)
 internal data class DailyReportPage(val rows: List<DailyReport>, val total: Int, val totalPages: Int)
+internal data class DailyReportMetric(val observations: Int, val percent: Double?)
+internal data class DailyReportFollowUp(val studentName: String, val mood: Int, val sleep: Int, val meals: Int)
+internal data class DailyReportAnalysis(val total: Int, val mood: DailyReportMetric, val sleep: DailyReportMetric,
+    val meals: DailyReportMetric, val followUps: List<DailyReportFollowUp>, val notes: List<String>)
 
 internal data class DailyReportEdit(val meals: String, val sleep: String, val mood: String, val activities: List<String>, val note: String) {
     fun body() = JSONObject().put("meal_status", meals.takeUnless(String::isBlank) ?: JSONObject.NULL)
@@ -65,6 +69,35 @@ internal class NativeDailyReportClient {
             "Karne sonuçları seçilen filtreyle eşleşmedi."
         }
         return DailyReportPage(rows, result.getInt("total"), result.getInt("total_pages"))
+    }
+
+    suspend fun analysis(branch: String?): DailyReportAnalysis {
+        val branchId = branch?.takeUnless { it.isBlank() || it == "all" }?.let { UUID.fromString(it).toString() }
+        val query = branchId?.let { "?branch_id=$it" }.orEmpty()
+        val body = call("ai/ai-daily-reports-analysis$query")
+        val responseBranch = if (body.isNull("branch_id")) null else body.getString("branch_id")
+        check(body.has("branch_id") && responseBranch == branchId) {
+            "Karne analizi şubesi doğrulanamadı."
+        }
+        val stats = body.getJSONObject("report_stats")
+        fun metric(name: String): DailyReportMetric {
+            val count = stats.getInt("${name}_observations")
+            val field = "${name}_rate"
+            check(stats.has(field)) { "Karne analizi oranı eksik." }
+            val percent = if (stats.isNull(field)) null else stats.getDouble(field)
+            check((count == 0 && percent == null) || (count > 0 && percent != null && percent in 0.0..100.0)) {
+                "Karne analizi oranı doğrulanamadı."
+            }
+            return DailyReportMetric(count, percent)
+        }
+        val rows = body.getJSONArray("students_needing_attention")
+        val followUps = (0 until rows.length()).map { index ->
+            val row = rows.getJSONObject(index)
+            DailyReportFollowUp(row.getString("student_name"), row.getInt("poor_mood"), row.getInt("poor_sleep"), row.getInt("poor_meal"))
+        }
+        val notes = body.getJSONArray("recommendations")
+        return DailyReportAnalysis(stats.getInt("total"), metric("mood"), metric("sleep"), metric("meal"),
+            followUps, (0 until notes.length()).map(notes::getString))
     }
 
     suspend fun studentOptions(branch: String?, classroom: String?, search: String, page: Int): DailyReportStudentPage {
