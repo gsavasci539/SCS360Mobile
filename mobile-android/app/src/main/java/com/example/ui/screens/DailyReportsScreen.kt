@@ -48,6 +48,8 @@ fun DailyReportsScreen(
     var searchQuery by remember { mutableStateOf("") }
     var selectedClassFilter by remember { mutableStateOf("ALL") }
     var showCreateDialog by remember(state.currentUser.id, state.workspaceOrganizationId, state.selectedBranchId) { mutableStateOf(false) }
+    var selectedReportId by remember(state.currentUser.id, state.currentUser.resolvedTenantId, state.workspaceOrganizationId,
+        state.selectedBranchId, state.serverBaseUrl) { mutableStateOf<String?>(null) }
     val canCreate = onCreateReport != null && NativeNavigationPolicy.has(state.currentUser, "daily_reports.write", "academic.write")
     val classNames = remember(state.classes) { state.classes.associate { it.id to it.name } }
     LaunchedEffect(state.selectedBranchId, state.workspaceOrganizationId, state.currentUser.id) {
@@ -274,11 +276,19 @@ fun DailyReportsScreen(
                 items(filteredReports, key = { it.id }) { report ->
                     DailyReportCard(
                         report = report,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                        onOpen = { selectedReportId = report.id },
                     )
                 }
             }
         }
+    }
+
+    selectedReportId?.let { id ->
+        DailyReportDetailsDialog(id, state.currentUser.id,
+            NativeNavigationPolicy.has(state.currentUser, "daily_reports.write", "academic.write"),
+            onDismiss = { selectedReportId = null },
+            onChanged = { selectedReportId = null; onReload?.invoke() })
     }
 
     if (showCreateDialog && canCreate) {
@@ -496,7 +506,8 @@ fun AddDailyReportDialog(
 @Composable
 fun DailyReportCard(
     report: DailyReport,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOpen: () -> Unit,
 ) {
     Surface(
         modifier = modifier
@@ -606,6 +617,7 @@ fun DailyReportCard(
                     )
                 }
             }
+            TextButton(onClick = onOpen) { Text("Karneyi aç") }
         }
     }
 }

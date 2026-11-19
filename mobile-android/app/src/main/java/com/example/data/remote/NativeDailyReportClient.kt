@@ -7,11 +7,25 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import org.json.JSONTokener
+import org.json.JSONArray
 import java.io.IOException
 import java.time.LocalDate
 import java.util.UUID
 
 internal class DailyReportHttpException(val code: Int) : IOException("Günlük karne isteği başarısız (HTTP $code)")
+
+internal data class DailyReportEdit(val meals: String, val sleep: String, val mood: String, val activities: List<String>, val note: String) {
+    fun body() = JSONObject().put("meal_status", meals.takeUnless(String::isBlank) ?: JSONObject.NULL)
+        .put("sleep_status", sleep.takeUnless(String::isBlank) ?: JSONObject.NULL)
+        .put("mood", mood.takeUnless(String::isBlank) ?: JSONObject.NULL)
+        .put("activities", JSONArray(activities))
+        .put("teacher_notes", note.takeUnless(String::isBlank) ?: JSONObject.NULL)
+
+    companion object {
+        fun from(row: DailyReport) = DailyReportEdit(row.meal_status.orEmpty(), row.sleep_status.orEmpty(),
+            row.mood_level, row.activities_done, row.teacher_note)
+    }
+}
 
 internal class NativeDailyReportClient {
     private val scope = NativeRequestScope.bound() ?: ApiClientProvider.interceptor.captureScope()
@@ -21,6 +35,57 @@ internal class NativeDailyReportClient {
     suspend fun list(branch: String?): List<DailyReport> = pages(
         branch?.takeUnless { it == "all" || it.isBlank() }?.let { "&branch_id=${UUID.fromString(it)}" }.orEmpty(),
     )
+
+    suspend fun detail(id: String): DailyReport {
+        val canonicalId = UUID.fromString(id).toString()
+        return parse(call("daily-reports/$canonicalId")).also { check(it.id == canonicalId) { "Karne kimliği eşleşmedi." } }
+    }
+
+    suspend fun update(original: DailyReport, draft: DailyReportEdit, actorId: String): DailyReport {
+        val actor = UUID.fromString(actorId).toString()
+        val edit = draft.copy(meals = draft.meals.takeUnless(String::isBlank).orEmpty(),
+            sleep = draft.sleep.takeUnless(String::isBlank).orEmpty(),
+            mood = draft.mood.takeUnless(String::isBlank).orEmpty(), note = draft.note.takeUnless(String::isBlank).orEmpty())
+        fun matches(row: DailyReport) = sameRecord(row, original) && row.recorded_by == actor && DailyReportEdit.from(row) == edit
+        val latest = detail(original.id)
+        if (matches(latest)) return latest
+        requireCurrent(latest, original)
+        try {
+            val response = parse(call("daily-reports/${latest.id}", edit.body(), "PUT"))
+            check(matches(response)) { "Güncelleme yanıtı karneyle eşleşmedi." }
+        } catch (failure: IOException) {
+            if (!uncertain(failure)) throw failure
+        }
+        return detail(latest.id).also { check(matches(it)) { "Güncelleme doğrulanamadı. Taslağınız açık." } }
+    }
+
+    suspend fun delete(original: DailyReport) {
+        val latest = detailOrMissing(original.id) ?: return
+        requireCurrent(latest, original)
+        try {
+            call("daily-reports/${latest.id}", method = "DELETE")
+        } catch (failure: IOException) {
+            if (!uncertain(failure) && (failure as? DailyReportHttpException)?.code != 404) throw failure
+        }
+        check(detailOrMissing(latest.id) == null) { "Silme doğrulanamadı. Yeniden deneyebilirsiniz." }
+    }
+
+    private suspend fun detailOrMissing(id: String): DailyReport? = try {
+        detail(id)
+    } catch (failure: DailyReportHttpException) {
+        if (failure.code == 404) null else throw failure
+    }
+
+    private fun sameRecord(left: DailyReport, right: DailyReport) = left.id == right.id &&
+        left.student_id == right.student_id && left.class_id == right.class_id && left.date == right.date
+
+    private fun requireCurrent(latest: DailyReport, original: DailyReport) {
+        check(sameRecord(latest, original) && latest.recorded_by == original.recorded_by &&
+            DailyReportEdit.from(latest) == DailyReportEdit.from(original)) { "Karne değişti. Güncel kaydı açın." }
+    }
+
+    private fun uncertain(failure: IOException): Boolean =
+        (failure as? DailyReportHttpException)?.let { it.code >= 500 } ?: true
 
     suspend fun save(draft: DailyReportDraft, actorId: String, canRead: Boolean): DailyReport {
         require(draft.hasObservation && (draft.sleepMinutes == null || draft.sleepMinutes in 0..150)) { "En az bir geçerli gözlem girin." }
@@ -80,15 +145,15 @@ internal class NativeDailyReportClient {
         }
     }
 
-    private suspend fun call(path: String, body: JSONObject? = null): JSONObject = scope.io {
+    private suspend fun call(path: String, body: JSONObject? = null, method: String = if (body == null) "GET" else "POST"): JSONObject = scope.io {
         val request = Request.Builder().url(base + path).tag(NativeRequestScope::class.java, scope)
-        if (body != null) request.post(body.toString().toRequestBody("application/json".toMediaType()))
+        request.method(method, body?.toString()?.toRequestBody("application/json".toMediaType()))
         client.newCall(request.build()).execute().use { reply ->
             if (!reply.isSuccessful) throw DailyReportHttpException(reply.code)
             val data = JSONTokener(reply.body?.string().orEmpty()).nextValue() as JSONObject
             if (data.has("success")) {
                 check(data.getBoolean("success")) { "Günlük karne işlemi doğrulanamadı." }
-                data.getJSONObject("data")
+                if (method == "DELETE" && data.isNull("data")) JSONObject() else data.getJSONObject("data")
             } else data
         }
     }
