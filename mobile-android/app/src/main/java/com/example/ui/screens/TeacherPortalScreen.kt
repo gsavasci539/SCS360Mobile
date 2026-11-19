@@ -128,12 +128,8 @@ fun TeacherPortalScreen(
         )
     }
 
-    val teacherClass = state.classes.firstOrNull { it.teacher_name.contains("Ayşe", ignoreCase = true) }
-        ?: state.classes.firstOrNull() ?: ClassGroup("class-1", "Papatyalar Sınıfı (5 Yaş)", "5 Yaş", "branch-1", "Ayşe Yılmaz", 18)
-
-    val classStudents = remember(state.students, teacherClass.id) {
-        val list = state.students.filter { it.class_id == teacherClass.id || it.class_name.contains("Papatya", ignoreCase = true) }
-        if (list.isNotEmpty()) list else state.students
+    val classStudents = remember(state.students, state.attendanceClassId) {
+        state.students.filter { it.class_id == state.attendanceClassId }
     }
 
     val isChatRoomActive = selectedTab == TeacherNavTab.MESSAGING && state.selectedConversationId != null
@@ -188,7 +184,7 @@ fun TeacherPortalScreen(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "${state.currentUser.full_name} • ${teacherClass.name}",
+                                text = state.currentUser.resolvedName,
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -358,10 +354,7 @@ fun TeacherPortalScreen(
                     },
                     onSaveReport = onSaveDailyReport
                 )
-                TeacherNavTab.SCHEDULE -> TeacherScheduleTab(
-                    className = teacherClass.name,
-                    state = state
-                )
+                TeacherNavTab.SCHEDULE -> TeacherDayPane(state)
                 TeacherNavTab.AI_CHATBOT -> {}
             }
 
@@ -666,7 +659,7 @@ private fun TeacherDiaryFillTab(
                                     mood_level = mood,
                                     activities_done = selectedActivities.toList(),
                                     teacher_note = teacherNote,
-                                    teacher_name = "Ayşe Yılmaz"
+                                    teacher_name = state.currentUser.resolvedName
                                 )
                                 onSaveReport(newReport)
                             }
@@ -888,119 +881,6 @@ private fun TeacherNoticesTab(
 // -------------------------------------------------------------
 // 4. TEACHER SCHEDULE TAB
 // -------------------------------------------------------------
-@Composable
-private fun TeacherScheduleTab(
-    className: String,
-    state: Okul360UiState
-) {
-    var scheduleViewMode by remember { mutableIntStateOf(0) } // 0: Haftalık Ders Programı, 1: Günlük Akış Planı
-
-    val weeklySchedule = listOf(
-        Pair("08:45 - 09:15", "Giriş, Ateş Ölçümü & Kahvaltı"),
-        Pair("09:15 - 10:00", "Sabah Çemberi & Günün Konusu"),
-        Pair("10:00 - 10:45", "Montessori & Bilişsel Beceriler"),
-        Pair("10:45 - 11:30", "İngilizce Oyun & Şarkı"),
-        Pair("11:30 - 12:00", "Açık Hava & Bahçe Oyunları"),
-        Pair("12:00 - 13:00", "Öğle Yemeği & Öz Bakım"),
-        Pair("13:00 - 14:30", "Öğle Uykusu / Masal Saati"),
-        Pair("14:45 - 15:30", "Robotik Kodlama & Stem Atölyesi"),
-        Pair("15:30 - 16:00", "İkindi Beslenmesi"),
-        Pair("16:00 - 16:45", "Sanat, Serbest Oyun & Veli Çıkışı")
-    )
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = 24.dp)
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Text(
-                text = "📅 $className Ders & Akış Programı",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Black,
-                color = BrandNavy
-            )
-            Text(
-                text = "Görsel haftalık ders çizelgesi ve saatlik sınıf etkinlik akışı",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                SegmentedButton(
-                    selected = scheduleViewMode == 0,
-                    onClick = { scheduleViewMode = 0 },
-                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
-                ) {
-                    Text("Haftalık Ders Çizelgesi", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                }
-                SegmentedButton(
-                    selected = scheduleViewMode == 1,
-                    onClick = { scheduleViewMode = 1 },
-                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
-                ) {
-                    Text("Saatlik Günlük Akış", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                }
-            }
-        }
-
-        if (scheduleViewMode == 0) {
-            com.example.ui.components.WeeklyTimetableComponent(
-                classes = state.classes,
-                timetableSlots = state.timetableSlots,
-                selectedClassId = state.classes.firstOrNull { it.name.contains(className, ignoreCase = true) }?.id,
-                showClassSelector = false,
-                teacherFilterName = state.currentUser.full_name
-            )
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                weeklySchedule.forEach { item ->
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = Color.White,
-                        shape = RoundedCornerShape(12.dp),
-                        tonalElevation = 1.dp,
-                        shadowElevation = 1.dp
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Surface(
-                                color = SecondaryEmerald.copy(alpha = 0.12f),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text(
-                                    text = item.first,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = SecondaryEmerald,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = item.second,
-                                fontSize = 13.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = BrandNavy
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 // -------------------------------------------------------------
 // 5. TEACHER CLASS & PROFILE TAB
 // -------------------------------------------------------------
