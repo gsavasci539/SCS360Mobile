@@ -9,6 +9,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
 import java.math.BigDecimal
+import java.time.LocalDate
 import java.util.UUID
 
 /** Only explicit server-side parent/child relationships; never match names or phones. */
@@ -41,11 +42,17 @@ class NativeParentPortalClient {
                 student_number = text("student_number"), class_id = text("class_id"), class_name = text("class_name"), status = text("status"))
         }
     }
-    suspend fun section(studentId: String, section: String): Any {
+    suspend fun section(studentId: String, section: String, date: LocalDate? = null): Any {
         require(section in setOf("today-status", "timeline", "grades", "schedule", "attendance", "homework", "materials", "communications", "announcements", "medicine-requests", "excuse-requests", "teachers"))
+        require(date == null || section == "timeline")
         val id = UUID.fromString(studentId).toString()
-        val value = get("parent/child/$id/$section")
-        if (section in setOf("today-status", "timeline")) check((value as JSONObject).getString("student_id") == id) { "Öğrenci yanıtı eşleşmiyor" }
+        val query = date?.let { "?date=$it" }.orEmpty()
+        val value = get("parent/child/$id/$section$query")
+        if (section == "today-status" || section == "timeline") {
+            val day = value as JSONObject
+            check(day.getString("student_id") == id) { "Öğrenci yanıtı eşleşmiyor" }
+            check(date == null || day.getString("date") == date.toString()) { "Günlük akış tarihi eşleşmiyor" }
+        }
         return value
     }
     suspend fun chat(studentId: String, teacherId: String): JSONArray =
