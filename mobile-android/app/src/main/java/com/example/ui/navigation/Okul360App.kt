@@ -110,6 +110,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
     var showQuickPaymentSheet by remember(com.example.ui.components.financePresentationScope(state)) { mutableStateOf(false) }
     var showQuickAttendanceSheet by remember { mutableStateOf(false) }
     val financeScope = com.example.ui.components.financePresentationScope(state)
+    var parentChatbotDestination by remember(financeScope) { mutableStateOf<ChatbotDestination.Parent?>(null) }
     var selectedInvoiceForReceipt by remember(financeScope) { mutableStateOf<Invoice?>(null) }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -149,136 +150,26 @@ fun Okul360App(viewModel: Okul360ViewModel) {
         }
     }
 
-    fun handleChatbotNavigation(actionTag: String) {
-        if (actionTag.startsWith("CONNECT_TEACHER_")) {
-            currentSubScreen = SubScreen.DIRECT_MESSAGING
-        } else {
-            when (actionTag) {
-                "NAV_AI_ANALYTICS", "ACTION_CASHFLOW", "ACTION_BRANCH_HEALTH" -> {
-                    currentSubScreen = SubScreen.AI_ANALYTICS
-                }
-                "NAV_AI_CHAT_AUDIT" -> {
-                    currentSubScreen = SubScreen.AI_CHAT_AUDIT
-                }
-                "NAV_ATTENDANCE", "ACTION_ATTENDANCE" -> {
-                    currentTab = MainTab.ATTENDANCE
-                    currentSubScreen = SubScreen.NONE
-                }
-                "NAV_COMMUNICATION", "ACTION_ANNOUNCEMENT" -> {
-                    currentSubScreen = SubScreen.COMMUNICATION
-                }
-                "NAV_CLASSES", "ACTION_CLASSES" -> {
-                    currentSubScreen = SubScreen.CLASSES
-                }
-                "NAV_STUDENTS", "ACTION_STUDENTS" -> {
-                    currentTab = MainTab.STUDENTS
-                    currentSubScreen = SubScreen.NONE
-                }
-                "NAV_HOMEWORK", "ACTION_HOMEWORK" -> {
-                    currentSubScreen = SubScreen.HOMEWORK
-                }
-                "NAV_DAILY_REPORT", "ACTION_DAILY_REPORT" -> {
-                    currentSubScreen = SubScreen.DAILY_REPORTS
-                }
-                "NAV_FINANCE", "ACTION_OVERDUE", "NAV_INVOICES" -> {
-                    currentTab = MainTab.FINANCE
-                    currentSubScreen = SubScreen.NONE
-                }
-                "NAV_REPORT_CARD", "ACTION_REPORT_CARD" -> {
-                    currentSubScreen = SubScreen.DIGITAL_REPORT_CARD
-                }
-                "NAV_ORGANIZATIONS" -> {
-                    currentSubScreen = SubScreen.ORGANIZATIONS
-                }
-                "NAV_RFID" -> {
-                    currentSubScreen = SubScreen.RFID_DEVICES
-                }
-                "NAV_STAFF" -> {
-                    currentSubScreen = SubScreen.STAFF
-                }
-                "NAV_ADD_STUDENT" -> {
-                    viewModel.openAddStudentDialog(true)
-                }
-                "NAV_MATERIALS" -> {
-                    currentSubScreen = SubScreen.COURSE_MATERIALS
-                }
-                "ACTION_SEND_REMINDER" -> {
-                    viewModel.testPaymentReminderPush()
-                }
-                "NAV_WALLET_TOPUP", "ACTION_WALLET" -> {
-                    currentSubScreen = SubScreen.CANTEEN
-                }
-                "NAV_MESSAGING" -> {
-                    currentSubScreen = SubScreen.DIRECT_MESSAGING
-                }
-                "NAV_CANTEEN_PRODUCTS", "ACTION_POS", "NAV_POS" -> {
-                    currentSubScreen = SubScreen.CANTEEN_PORTAL
-                }
-                "NAV_ALLERGENS", "ACTION_ALLERGEN" -> {
-                    currentSubScreen = SubScreen.CANTEEN
-                }
-                "NAV_TRANSPORT" -> {
-                    currentSubScreen = SubScreen.TRANSPORT
-                }
-                "NAV_SCHEDULE" -> {
-                    currentSubScreen = SubScreen.SCHEDULE
-                }
-                "NAV_APPOINTMENTS" -> {
-                    currentSubScreen = SubScreen.APPOINTMENTS
-                }
-                "NAV_EXAMS" -> {
-                    currentSubScreen = SubScreen.EXAMS
-                }
-                "NAV_INFIRMARY", "NAV_MEDICINE_NOTICE" -> {
-                    currentSubScreen = SubScreen.INFIRMARY
-                }
-                "NAV_CONSENTS", "NAV_LEAVE_NOTICE", "NAV_PICKUP_NOTICE" -> {
-                    currentSubScreen = SubScreen.CONSENTS
-                }
-                "NAV_PAYMENTS" -> {
-                    currentTab = MainTab.FINANCE
-                    currentSubScreen = SubScreen.NONE
-                }
-                "NAV_LIBRARY" -> {
-                    currentSubScreen = SubScreen.LIBRARY
-                }
-                "NAV_CLUBS" -> {
-                    currentSubScreen = SubScreen.CLUBS
-                }
-                "NAV_TUTORING" -> {
-                    currentSubScreen = SubScreen.TUTORING
-                }
-                "NAV_DIGITAL_ID" -> {
-                    currentSubScreen = SubScreen.DIGITAL_ID_CARD
-                }
-                "NAV_SURVEYS" -> {
-                    currentSubScreen = SubScreen.SURVEYS
-                }
-                "NAV_GUIDANCE" -> {
-                    currentSubScreen = SubScreen.GUIDANCE
-                }
-                "NAV_SECURITY" -> {
-                    currentSubScreen = SubScreen.SECURITY
-                }
-                "NAV_PAYROLL" -> {
-                    currentSubScreen = SubScreen.PAYROLL
-                }
-                "NAV_RESOURCES" -> {
-                    currentSubScreen = SubScreen.RESOURCES
-                }
+    fun handleChatbotNavigation(actionTag: String, studentId: String?) {
+        when (val destination = chatbotDestination(state, actionTag, studentId)) {
+            is ChatbotDestination.Parent -> {
+                currentSubScreen = SubScreen.NONE
+                viewModel.selectConversation(null)
+                parentChatbotDestination = destination
             }
+            is ChatbotDestination.Screen -> {
+                if (destination.screen == SubScreen.DIRECT_MESSAGING) viewModel.selectConversation(null)
+                currentSubScreen = destination.screen
+            }
+            is ChatbotDestination.Tab -> {
+                currentTab = destination.tab
+                currentSubScreen = SubScreen.NONE
+            }
+            null -> return
         }
+        showChatbotDialog = false
     }
 
-    // Display splash screen on initial launch
-    if (showSplashScreen) {
-        SplashScreen(
-            onSplashFinished = { showSplashScreen = false }
-        )
-        return
-    }
-
-    // Display snackbar toast on message changes
     LaunchedEffect(state.toastMessage) {
         state.toastMessage?.let { msg ->
             snackbarHostState.showSnackbar(
@@ -374,6 +265,9 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                         UserRole.PARENT -> {
                             ParentPortalScreen(
                                 state = state,
+                                chatbotTab = parentChatbotDestination?.tab,
+                                chatbotStudentId = parentChatbotDestination?.studentId,
+                                onChatbotDestinationOpened = { parentChatbotDestination = null },
                                 onRoleSelected = { role -> viewModel.switchRole(role) },
                                 onPayInvoice = { _, _, _ -> },
                                 onRefresh = { viewModel.loadParentPortal() },
@@ -545,10 +439,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                         Okul360ChatbotModal(
                             state = state,
                             onDismiss = { showChatbotDialog = false },
-                            onNavigateAction = { actionTag ->
-                                showChatbotDialog = false
-                                handleChatbotNavigation(actionTag)
-                            }
+                            onNavigateAction = ::handleChatbotNavigation
                         )
                     }
                 }
@@ -1677,9 +1568,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             )
                             MainTab.AI_CHATBOT -> AiChatbotScreen(
                                 state = state,
-                                onNavigateAction = { actionTag ->
-                                    handleChatbotNavigation(actionTag)
-                                }
+                                onNavigateAction = ::handleChatbotNavigation
                             )
                         }
                     }
@@ -1896,10 +1785,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                 Okul360ChatbotModal(
                     state = state,
                     onDismiss = { showChatbotDialog = false },
-                    onNavigateAction = { actionTag ->
-                        showChatbotDialog = false
-                        handleChatbotNavigation(actionTag)
-                    }
+                    onNavigateAction = ::handleChatbotNavigation
                 )
             }
         }

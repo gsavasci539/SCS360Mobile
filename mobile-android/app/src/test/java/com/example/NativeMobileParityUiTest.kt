@@ -166,4 +166,26 @@ class NativeMobileParityUiTest {
         assertTrue(calls.count { it.startsWith("GET") && it.contains("/chat/") } >= 2)
     }
 
+    @Test fun parentChatbotShortcutOpensTheSelectedChildWithoutSending() {
+        val actor = User(id = id(1), permissions = listOf("parent.send_message"))
+        val state = Okul360UiState(isLoggedIn = true, currentUser = actor, selectedRole = UserRole.PARENT,
+            parentChildren = listOf(Student(id = id(6), first_name = "First"), Student(id = id(7), first_name = "Selected")))
+        var opened = 0
+        compose.setContent {
+            Okul360Theme {
+                ParentPortalScreen(state, {}, { _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _ -> },
+                    chatbotTab = ParentNavTab.MESSAGING, chatbotStudentId = id(7),
+                    onChatbotDestinationOpened = { opened++ }, onLogout = {})
+            }
+        }
+        compose.waitUntil(15000) { compose.onAllNodesWithTag("parent_teacher_${id(9)}").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("parent_messages").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(1, opened) }
+        assertTrue(calls.any { it == "GET /api/parent/child/${id(7)}/teachers" })
+        assertFalse("Unexpected messaging request: $calls", calls.any {
+            (it.startsWith("POST") && (it.contains("/chat/") || it.contains("/messages/"))) ||
+                it.contains("/child/${id(6)}/teachers")
+        })
+    }
+
 }

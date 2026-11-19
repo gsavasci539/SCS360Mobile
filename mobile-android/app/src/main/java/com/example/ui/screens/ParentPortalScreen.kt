@@ -88,6 +88,9 @@ fun ParentPortalScreen(
     onOpenTransport: () -> Unit = {},
     onOpenDismissal: () -> Unit = {},
     onRefresh: () -> Unit = {},
+    chatbotTab: ParentNavTab? = null,
+    chatbotStudentId: String? = null,
+    onChatbotDestinationOpened: () -> Unit = {},
     onLogout: () -> Unit
 ) {
     if (state.parentChildren.isEmpty()) {
@@ -101,14 +104,28 @@ fun ParentPortalScreen(
         return
     }
     val context = LocalContext.current
-    var selectedTab by remember { mutableStateOf(ParentNavTab.TODAY) }
-    var parentFabExpanded by remember { mutableStateOf(false) }
-
     val presentationScope = com.example.ui.components.financePresentationScope(state)
     // The parent portal endpoint has already authorized every relationship.
     val parentChildren = state.parentChildren
-
-    var selectedChildId by remember(presentationScope) { mutableStateOf(parentChildren.firstOrNull()?.id ?: "") }
+    val validShortcut = chatbotStudentId == null || parentChildren.any { it.id == chatbotStudentId }
+    var selectedTab by remember(presentationScope) {
+        mutableStateOf(chatbotTab?.takeIf { validShortcut } ?: ParentNavTab.TODAY)
+    }
+    var parentFabExpanded by remember { mutableStateOf(false) }
+    var selectedChildId by remember(presentationScope) {
+        mutableStateOf(chatbotStudentId?.takeIf { validShortcut } ?: parentChildren.first().id)
+    }
+    LaunchedEffect(chatbotTab, chatbotStudentId, presentationScope) {
+        if (chatbotTab != null) {
+            if (validShortcut) {
+                androidx.compose.runtime.snapshots.Snapshot.withMutableSnapshot {
+                    if (chatbotStudentId != null) selectedChildId = chatbotStudentId
+                    selectedTab = chatbotTab
+                }
+            }
+            onChatbotDestinationOpened()
+        }
+    }
     val currentChild = parentChildren.find { it.id == selectedChildId } ?: parentChildren.firstOrNull()
 
     // Dialog States

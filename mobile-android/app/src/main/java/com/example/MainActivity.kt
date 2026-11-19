@@ -62,10 +62,8 @@ class MainActivity : ComponentActivity() {
             Okul360Theme(
                 themeName = state.selectedThemeName
             ) {
-                ChatProvider(
-                    role = state.selectedRole,
-                    userName = state.currentUser.resolvedName
-                ) {
+                ChatProvider(role = state.selectedRole, userName = state.currentUser.resolvedName,
+                    scope = com.example.ui.components.financePresentationScope(state)) {
                     Okul360App(viewModel = viewModel)
                 }
             }

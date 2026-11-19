@@ -21,6 +21,8 @@ class ChatContextState(
 
     var activeRole by mutableStateOf(initialRole)
     var activeUserName by mutableStateOf(initialUserName)
+    var selectedStudentId by mutableStateOf<String?>(null)
+        private set
 
     init {
         if (_messages.isEmpty()) {
@@ -35,10 +37,15 @@ class ChatContextState(
         if (activeRole != role || activeUserName != userName) {
             activeRole = role
             activeUserName = userName
-            if (_messages.size <= 1) {
-                _messages.clear()
-                _messages.add(Okul360ChatbotEngine.getInitialGreeting(role, userName))
-            }
+            selectedStudentId = null
+            clearHistory()
+        }
+    }
+
+    fun selectStudent(studentId: String?) {
+        if (selectedStudentId != studentId) {
+            selectedStudentId = studentId
+            clearHistory()
         }
     }
 
@@ -57,18 +64,6 @@ class ChatContextState(
         _messages.add(Okul360ChatbotEngine.getInitialGreeting(activeRole, activeUserName))
     }
 
-    /**
-     * Generates formatted conversation transcript for context-aware multi-turn AI responses.
-     */
-    fun getRecentHistoryTranscript(maxTurns: Int = 5): String {
-        val recentTurns = _messages.takeLast(maxTurns * 2)
-        if (recentTurns.isEmpty()) return ""
-
-        return recentTurns.joinToString(separator = "\n") { msg ->
-            val sender = if (msg.isUser) "Kullanıcı" else "AI Asistan"
-            "[$sender]: ${msg.text}"
-        }
-    }
 }
 
 /**
@@ -85,9 +80,10 @@ val LocalChatContext = staticCompositionLocalOf<ChatContextState> {
 fun ChatProvider(
     role: UserRole = UserRole.PARENT,
     userName: String = "Veli",
+    scope: Any? = null,
     content: @Composable () -> Unit
 ) {
-    val chatState = remember { ChatContextState(role, userName) }
+    val chatState = remember(scope) { ChatContextState(role, userName) }
 
     LaunchedEffect(role, userName) {
         chatState.updateRoleContext(role, userName)

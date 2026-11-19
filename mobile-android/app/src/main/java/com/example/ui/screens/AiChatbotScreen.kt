@@ -39,14 +39,18 @@ import androidx.compose.ui.unit.sp
 import android.speech.tts.TextToSpeech
 import android.widget.Toast
 import com.example.data.model.UserRole
+import com.example.data.remote.ChatbotTurn
+import com.example.data.remote.NativeChatbotClient
 import com.example.ui.components.ChatBubbleItem
 import com.example.ui.components.ChatbotAction
 import com.example.ui.components.ChatbotMessage
 import com.example.ui.components.Okul360ChatbotEngine
 import com.example.ui.components.ThinkingIndicator
 import com.example.ui.context.rememberChatContext
+import com.example.ui.navigation.CHATBOT_MESSAGING
+import com.example.ui.navigation.chatbotDestination
 import com.example.ui.viewmodel.Okul360UiState
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -57,18 +61,36 @@ import java.util.Locale
 @Composable
 fun AiChatbotScreen(
     state: Okul360UiState,
-    onNavigateAction: (String) -> Unit,
+    onNavigateAction: (String, String?) -> Unit,
     onBack: (() -> Unit)? = null
+) {
+    key(com.example.ui.components.financePresentationScope(state)) {
+        ScopedAiChatbotScreen(state, onNavigateAction, onBack)
+    }
+}
+
+@Composable
+private fun ScopedAiChatbotScreen(
+    state: Okul360UiState,
+    onNavigateAction: (String, String?) -> Unit,
+    onBack: (() -> Unit)?,
 ) {
     if (onBack != null) {
         BackHandler(onBack = onBack)
     }
 
     val role = state.selectedRole
-    val userName = state.currentUser.resolvedName
+    val client = remember { NativeChatbotClient() }
+    val parentChildren = if (role == UserRole.PARENT) state.parentChildren else emptyList()
 
     val chatContext = rememberChatContext()
     val messages = chatContext.messages
+    var selectedStudentId by remember(parentChildren.map { it.id }) {
+        mutableStateOf(chatContext.selectedStudentId?.takeIf { id -> parentChildren.any { it.id == id } }
+            ?: parentChildren.singleOrNull()?.id)
+    }
+    var studentMenu by remember { mutableStateOf(false) }
+    LaunchedEffect(selectedStudentId) { chatContext.selectStudent(selectedStudentId) }
 
     var inputText by remember { mutableStateOf("") }
     var isThinking by remember { mutableStateOf(false) }
@@ -122,28 +144,31 @@ fun AiChatbotScreen(
         val trimmed = query.trim()
         if (trimmed.isBlank() || isThinking) return
 
+        val studentId = selectedStudentId
+        val history = messages.filter { it.includeInHistory }.map { ChatbotTurn(it.text, it.isUser, it.intent) }
         val userMsg = ChatbotMessage(text = trimmed, isUser = true)
         chatContext.addMessage(userMsg)
         inputText = ""
         isThinking = true
 
         coroutineScope.launch {
-            delay(100)
-            listState.animateScrollToItem(messages.size - 1)
-            delay(200)
-            val historyTranscript = chatContext.getRecentHistoryTranscript()
-            val historyPairs = messages.takeLast(6).map { it.text to it.isUser }
-            val aiResponse = Okul360ChatbotEngine.processUserQueryAsync(
-                query = trimmed,
-                role = role,
-                state = state,
-                conversationHistory = historyTranscript,
-                messageHistory = historyPairs
-            )
-            chatContext.addMessage(aiResponse)
-            isThinking = false
-            delay(100)
-            listState.animateScrollToItem(messages.size - 1)
+            try {
+                val answer = client.ask(trimmed, role, studentId, history)
+                val actions = answer.actions.distinctBy { it.first }.mapNotNull { (tag, label) ->
+                    if (chatbotDestination(state, tag, studentId) == null) null
+                    else ChatbotAction(label, Icons.Default.OpenInNew, tag)
+                }
+                chatContext.addMessage(ChatbotMessage(text = answer.text, isUser = false,
+                    intent = answer.intent, roleContext = role, suggestedActions = actions))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                chatContext.addMessage(ChatbotMessage(text = "Okul asistanından yanıt alınamadı. Tekrar deneyebilirsiniz.",
+                    isUser = false, includeInHistory = false, roleContext = role))
+            } finally {
+                isThinking = false
+            }
+            listState.animateScrollToItem(messages.lastIndex)
         }
     }
 
@@ -210,37 +235,14 @@ fun AiChatbotScreen(
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "SCS360 Yapay Zeka Danışmanı",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF0F172A)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Surface(
-                                    color = Color(0xFFDCFCE7),
-                                    shape = RoundedCornerShape(4.dp)
-                                ) {
-                                    Text(
-                                        text = "Canlı DB",
-                                        color = Color(0xFF166534),
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
-                            Text(
-                                text = "${state.currentUser.resolvedRole} Modu • 30+ Veritabanı Tablosu Aktif",
-                                fontSize = 11.5.sp,
-                                color = Color(0xFF64748B)
-                            )
+                            Text("SCS360 Okul Asistanı", fontWeight = FontWeight.Bold,
+                                maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
 
                     // Temizle Butonu
                     IconButton(
+                        enabled = !isThinking,
                         onClick = { chatContext.clearHistory() },
                         modifier = Modifier
                             .size(34.dp)
@@ -259,39 +261,33 @@ fun AiChatbotScreen(
         }
     }
 
-        // Canlı DB Metrik Çubuğu
-        Surface(
-            color = Color(0xFFF1F5F9),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                QuickMetricBadge(label = "Öğrenci", value = "${state.students.size}", color = Color(0xFF2563EB)) {
-                    sendMessage("öğrenci listesi")
+        if (parentChildren.size > 1 || chatbotDestination(state, CHATBOT_MESSAGING, selectedStudentId) != null) {
+            Row(Modifier.widthIn(max = 840.dp).fillMaxWidth().padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (parentChildren.size > 1) {
+                    Box(Modifier.weight(1f)) {
+                        OutlinedButton(enabled = !isThinking, onClick = { studentMenu = true }) {
+                            Text(parentChildren.find { it.id == selectedStudentId }?.full_name ?: "Öğrenci seçin",
+                                maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                        DropdownMenu(expanded = studentMenu && !isThinking, onDismissRequest = { studentMenu = false },
+                            modifier = Modifier.heightIn(max = 240.dp)) {
+                            parentChildren.forEach { child ->
+                                DropdownMenuItem(text = { Text(child.full_name) }, onClick = {
+                                    studentMenu = false
+                                    selectedStudentId = child.id
+                                    chatContext.selectStudent(child.id)
+                                    inputText = ""
+                                })
+                            }
+                        }
+                    }
                 }
-                QuickMetricBadge(label = "Sınıf", value = "${state.classes.size}", color = Color(0xFF0D9488)) {
-                    sendMessage("sınıflar")
-                }
-                QuickMetricBadge(label = "Katılım", value = "%95.0", color = Color(0xFF16A34A)) {
-                    sendMessage("yoklama durumu")
-                }
-                QuickMetricBadge(label = "Turnike", value = "Aktif", color = Color(0xFF4F46E5)) {
-                    sendMessage("turnike logları")
-                }
-                QuickMetricBadge(label = "Servis", value = "4 Hat", color = Color(0xFFD97706)) {
-                    sendMessage("servis filosu")
-                }
-                QuickMetricBadge(label = "Kasa", value = "₺${String.format(Locale.US, "%,.0f", state.invoices.sumOf { it.paid_amount })}", color = Color(0xFF059669)) {
-                    sendMessage("kasa ve tahsilat")
-                }
-                QuickMetricBadge(label = "Tüm Tablolar", value = "DB Özeti", color = Color(0xFF7C3AED)) {
-                    sendMessage("tüm veritabanı tabloları")
+                if (chatbotDestination(state, CHATBOT_MESSAGING, selectedStudentId) != null) {
+                    TextButton(onClick = { onNavigateAction(CHATBOT_MESSAGING, selectedStudentId) },
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("chatbot_open_messaging")) {
+                        Text(if (role == UserRole.PARENT) "Öğretmenle iletişim" else "Sohbetleri aç")
+                    }
                 }
             }
         }
@@ -311,9 +307,7 @@ fun AiChatbotScreen(
                 ChatBubbleItem(
                     message = msg,
                     roleGradient = roleGradient,
-                    onActionClick = { actionTag ->
-                        onNavigateAction(actionTag)
-                    },
+                    onActionClick = { actionTag -> onNavigateAction(actionTag, selectedStudentId) },
                     onCopyClick = { text ->
                         clipboardManager.setText(AnnotatedString(text))
                         Toast.makeText(context, "Yanıt metni panoya kopyalandı", Toast.LENGTH_SHORT).show()
@@ -454,46 +448,6 @@ fun AiChatbotScreen(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun QuickMetricBadge(
-    label: String,
-    value: String,
-    color: Color,
-    onClick: () -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = Color.White,
-        border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.3f)),
-        modifier = Modifier.clickable { onClick() }
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(color)
-            )
-            Spacer(modifier = Modifier.width(5.dp))
-            Text(
-                text = "$label: ",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Normal,
-                color = Color(0xFF64748B)
-            )
-            Text(
-                text = value,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = color
-            )
         }
     }
 }
