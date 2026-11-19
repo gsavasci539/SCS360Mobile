@@ -36,6 +36,7 @@ class NativeMobileParityUiTest {
     @Volatile private var paid = false
     @Volatile private var sentMessage: JSONObject? = null
     @Volatile private var dropMessageResponse = false
+    @Volatile private var pagedHistory = false
     @Before fun start() {
         oldFont = RuntimeEnvironment.getFontScale(); RuntimeEnvironment.setFontScale(2f)
         base = ApiClientProvider.activeBaseUrl; token = ApiClientProvider.interceptor.authToken
@@ -61,7 +62,15 @@ class NativeMobileParityUiTest {
                         check(e.requestURI.query.contains("parent_id=${id(9)}"))
                         check(e.requestURI.query.contains("branch_id=${id(8)}"))
                     }
-                    if (e.requestMethod == "POST") {
+                    if (pagedHistory) {
+                        val query = e.requestURI.query.orEmpty()
+                        check(query.contains("limit=50"))
+                        val items = if (query.contains("before_id=${id(100)}")) listOf(90) else (100..149).toList()
+                        JSONArray().apply { items.forEach { number ->
+                            put(JSONObject().put("id", id(number)).put("sender_id", id(9)).put("receiver_id", id(1))
+                                .put("is_current_user", false).put("content", "Fixture message $number"))
+                        } }
+                    } else if (e.requestMethod == "POST") {
                         val draft = JSONObject(e.requestBody.readBytes().toString(Charsets.UTF_8))
                         val row = JSONObject().put("id", draft.getString("request_id")).put("sender_id", id(1))
                             .put("receiver_id", id(9)).put("content", draft.getString("message")).put("is_current_user", true)
@@ -231,6 +240,24 @@ class NativeMobileParityUiTest {
         compose.onNodeWithTag("parent_messages").performScrollToNode(hasText("Bu hesapla gönderim yapılamaz."))
         compose.onNodeWithTag("parent_message_send").assertDoesNotExist()
         compose.onNodeWithTag("parent_message_choose_file").assertDoesNotExist()
+        assertFalse(calls.any { it.startsWith("POST ") })
+    }
+
+    @Test fun parentMessagingLoadsOlderPage() {
+        pagedHistory = true
+        val actor = User(id = id(1), permissions = listOf("parent.send_message"))
+        compose.setContent { Okul360Theme { ParentVerifiedMessagingPane(id(7), actor) } }
+        compose.waitUntil(15000) { compose.onAllNodesWithTag("parent_teacher_${id(9)}").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("parent_teacher_${id(9)}").performClick()
+        compose.waitUntil(15000) { compose.onAllNodesWithTag("student_chat_older").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("student_chat_older").performClick()
+        val list = compose.onNodeWithTag("parent_messages")
+        compose.waitUntil(15000) {
+            list.performScrollToIndex(0)
+            compose.onAllNodesWithTag("parent_message_${id(90)}").fetchSemanticsNodes().isNotEmpty()
+        }
+        list.performScrollToNode(hasTestTag("parent_message_${id(149)}"))
+        compose.onNodeWithText("Fixture message 149").assertExists()
         assertFalse(calls.any { it.startsWith("POST ") })
     }
 

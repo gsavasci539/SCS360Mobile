@@ -11,6 +11,8 @@ import org.json.JSONObject
 import org.json.JSONTokener
 import java.util.UUID
 
+internal const val STUDENT_CHAT_PAGE_SIZE = 50
+
 data class StudentChatDraft(val content: String, val file: ChatFile? = null, val id: UUID = UUID.randomUUID()) {
     init {
         require((content.isNotBlank() || file != null) && content.length <= 10000)
@@ -99,8 +101,11 @@ internal class NativeStudentChatClient(
     ) {
         private val actor = actorId?.let(::chatUuid)
 
-        suspend fun history(): JSONArray {
-            val rows = exchange(path, params) as JSONArray
+        suspend fun history(limit: Int? = null, beforeId: String? = null): JSONArray {
+            val query = params.toMutableList()
+            limit?.let { query += "limit" to it.toString() }
+            beforeId?.let { query += "before_id" to chatUuid(it) }
+            val rows = exchange(path, query) as JSONArray
             if (actor != null) {
                 val seen = mutableSetOf<String>()
                 for (index in 0 until rows.length()) {

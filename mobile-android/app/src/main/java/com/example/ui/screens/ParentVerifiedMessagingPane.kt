@@ -19,6 +19,7 @@ import com.example.data.remote.ChatFile
 import com.example.data.remote.NativeParentPortalClient
 import com.example.data.remote.NativeStudentChatClient
 import com.example.data.remote.RegistryHttpException
+import com.example.data.remote.STUDENT_CHAT_PAGE_SIZE
 import com.example.data.remote.StaffChatArea
 import com.example.data.remote.StaffChatContact
 import com.example.data.remote.StudentChatDraft
@@ -57,6 +58,7 @@ private fun ScopedStudentMessagingPane(
         partnerId?.let { if (contact == null) client.parent(studentId, it, actor.id) else client.staff(requireNotNull(area), contact, actor.id) }
     }
     var messages by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var hasOlder by remember { mutableStateOf(false) }
     var text by remember { mutableStateOf("") }
     var file by remember { mutableStateOf<ChatFile?>(null) }
     var pending by remember { mutableStateOf<StudentChatDraft?>(null) }
@@ -123,13 +125,20 @@ private fun ScopedStudentMessagingPane(
             catch (_: Exception) { if (captured.current()) historyError = "Öğretmenler yüklenemedi." }
         }
     }
-    LaunchedEffect(conversation, revision, allowed) {
-        val selected = conversation ?: return@LaunchedEffect
-        if (!allowed) return@LaunchedEffect
+    suspend fun loadHistory(selected: NativeStudentChatClient.Conversation, beforeId: String? = null) {
         historyError = ""
         busy = true
         try {
-            messages = selected.history().rows()
+            val page = selected.history(STUDENT_CHAT_PAGE_SIZE, beforeId).rows()
+            if (beforeId != null) {
+                messages = (page + messages).distinctBy { it.getString("id") }
+                hasOlder = page.size == STUDENT_CHAT_PAGE_SIZE
+            } else {
+                val firstId = page.firstOrNull()?.getString("id")
+                val overlap = messages.indexOfFirst { it.getString("id") == firstId }
+                messages = if (overlap > 0) messages.take(overlap) + page else page
+                if (overlap <= 0) hasOlder = (overlap == 0 && hasOlder) || page.size == STUDENT_CHAT_PAGE_SIZE
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
@@ -137,6 +146,10 @@ private fun ScopedStudentMessagingPane(
         } finally {
             busy = false
         }
+    }
+
+    LaunchedEffect(conversation, revision, allowed) {
+        if (allowed) conversation?.let { loadHistory(it) }
     }
 
     fun submit(checkOnly: Boolean) {
@@ -228,6 +241,7 @@ private fun ScopedStudentMessagingPane(
                     if (partnerId != id) {
                         partnerId = id
                         messages = emptyList()
+                        hasOlder = false
                         text = ""
                         file = null
                         actionError = ""
@@ -240,6 +254,18 @@ private fun ScopedStudentMessagingPane(
         if (contacts?.isEmpty() == true) item { Text("Bu öğrenci için kayıtlı öğretmen bulunamadı.") }
         if (historyError.isNotBlank()) item { Text(historyError) }
         if (partner == null) return@LazyColumn
+        if (hasOlder) item {
+            TextButton(enabled = !busy, onClick = {
+                val selected = conversation
+                val first = messages.firstOrNull()?.getString("id")
+                if (selected != null && first != null && !busy) {
+                    busy = true
+                    coroutine.launch { loadHistory(selected, first) }
+                }
+            }, modifier = Modifier.heightIn(min = 48.dp).testTag("student_chat_older")) {
+                Text("Daha eski mesajları göster")
+            }
+        }
         items(messages, key = { it.getString("id") }) { row ->
             val id = row.getString("id")
             OutlinedCard(Modifier.fillMaxWidth().testTag("parent_message_$id")) {

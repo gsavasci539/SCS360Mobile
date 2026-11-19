@@ -60,6 +60,10 @@ class NativeParentParityBackendAcceptance {
             portal.sendStudentChat(child.id, teacherId, parent.id, draft)
             val stored = portal.chat(child.id, teacherId)
             assertEquals(1, (0 until stored.length()).count { stored.getJSONObject(it).getString("id") == draft.id.toString() })
+            val paged = NativeStudentChatClient().parent(child.id, teacherId, parent.id)
+            val latestId = paged.history(limit = 1).getJSONObject(0).getString("id")
+            val olderId = paged.history(limit = 1, beforeId = latestId).getJSONObject(0).getString("id")
+            assertEquals(setOf(sent.getString("id"), draft.id.toString()), setOf(latestId, olderId))
             try { NativeParentClient(env("NATIVE_TEST_ORGANIZATION")).list(); fail("Parent staff directory") } catch (failure: RegistryHttpException) { assertEquals(403, failure.code) }
             auth.restore(managerToken)
             val staffChat = NativeStudentChatClient()
