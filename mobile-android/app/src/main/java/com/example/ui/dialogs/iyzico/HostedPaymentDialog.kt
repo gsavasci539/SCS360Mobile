@@ -18,6 +18,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.data.payment.SchoolCheckout
 import com.example.data.payment.SchoolCheckoutInProgress
 import com.example.data.payment.SchoolCheckoutReference
@@ -56,6 +59,7 @@ fun HostedPaymentDialog(
     var address by remember(debtId) { mutableStateOf("") }
     var city by remember(debtId) { mutableStateOf("") }
     var country by remember(debtId) { mutableStateOf("") }
+    var browserCheckout by remember(captured) { mutableStateOf<SchoolCheckoutReference?>(null) }
     fun run(action: suspend (SchoolCheckout) -> Unit) {
         if (busy || closed || !captured.current()) return
         busy = true; error = ""
@@ -66,6 +70,26 @@ fun HostedPaymentDialog(
             catch (e: Exception) { if (captured.current()) error = e.message ?: "Ödeme sonucu kontrol edilmeli" }
             finally { if (captured.current()) busy = false }
         }
+    }
+    val checkBrowserReturn by rememberUpdatedState<() -> Unit>({
+        val reference = browserCheckout
+        if (reference != null && !busy && !closed && captured.current()) {
+            browserCheckout = null
+            run { service ->
+                val current = service.status(reference) ?: error("Kayıtlı ödeme işlemi bulunamadı.")
+                captured.ensureCurrent()
+                result = current
+                if (current.optString("status") == SCHOOL_CHECKOUT_COMPLETED) reload()
+            }
+        }
+    })
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle, captured) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) checkBrowserReturn()
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
     }
     LaunchedEffect(debtId, parentStudentId, recoveryOnly, recoveryReference) {
         run { service ->
@@ -115,7 +139,14 @@ fun HostedPaymentDialog(
                         }, modifier = Modifier.testTag("hosted_prepare")) { Text("Ödeme sayfasını hazırla / tekrar dene") }
                     }
                     if (shownResult?.optBoolean("can_resume") == true) item(key = "resume") {
-                        Button(enabled = !busy, onClick = { run { service -> service.resume()?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } } }) { Text("Güvenli ödeme sayfasını aç") }
+                        Button(enabled = !busy, onClick = {
+                            run { service ->
+                                val launch = service.resume() ?: return@run
+                                captured.ensureCurrent()
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(launch.url)))
+                                if (parentStudentId != null) browserCheckout = launch.reference
+                            }
+                        }) { Text("Güvenli ödeme sayfasını aç") }
                     }
                     item(key = "refresh") {
                         Button(enabled = !busy, onClick = { run { service -> result = service.refresh(); debt = service.debt(); captured.ensureCurrent(); reload() } },

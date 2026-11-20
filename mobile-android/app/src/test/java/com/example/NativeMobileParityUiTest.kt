@@ -1,9 +1,16 @@
 package com.example
 
+import android.content.ContextWrapper
+import android.content.Intent
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.data.local.SessionManager
 import com.example.data.model.*
 import com.example.data.remote.ApiClientProvider
@@ -29,6 +36,8 @@ import org.robolectric.annotation.Config
 import java.net.InetSocketAddress
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w360dp-h780dp-mdpi")
@@ -47,6 +56,8 @@ class NativeMobileParityUiTest {
     @Volatile private var pagedHistory = false
     @Volatile private var parentInvoiceResponse: JSONObject? = null
     @Volatile private var rejectCheckout = false
+    private val releaseBrowserStatus = CountDownLatch(1)
+    @Volatile private var holdBrowserStatus = false
     @Before fun start() {
         oldFont = RuntimeEnvironment.getFontScale(); RuntimeEnvironment.setFontScale(2f)
         base = ApiClientProvider.activeBaseUrl; token = ApiClientProvider.interceptor.authToken
@@ -80,8 +91,14 @@ class NativeMobileParityUiTest {
                         .put("amount", "100.00").put("paid_amount", if (paid) "100.00" else "0.00")
                         .put("remaining_amount", if (paid) "0.00" else "100.00").put("status", if (paid) "PAID" else "UNPAID")))
                 e.requestURI.path.contains("/online/debts/") -> JSONObject().put("id", id(2)).put("remaining_amount", if (paid) "0.00" else "100.00").put("online_payment_available", false)
-                e.requestURI.path.contains("/checkouts/") -> JSONObject().put("id", id(3)).put("debt_id", id(2)).put("amount", "100.00")
-                    .put("status", if (paid) "COMPLETED" else "PENDING").put("payment_id", if (paid && !omitPaymentId) id(4) else JSONObject.NULL)
+                e.requestURI.path.contains("/checkouts/") -> {
+                    if (holdBrowserStatus && e.requestMethod == "GET") releaseBrowserStatus.await(30, TimeUnit.SECONDS)
+                    JSONObject().put("id", id(3)).put("debt_id", id(2)).put("amount", "100.00")
+                        .put("status", if (paid) "COMPLETED" else "PENDING")
+                        .put("payment_id", if (paid && !omitPaymentId) id(4) else JSONObject.NULL)
+                        .put("can_resume", !paid)
+                        .put("checkout_url", "https://sandbox-api.iyzipay.com/checkoutform/fixture")
+                }
                 e.requestURI.path.endsWith("/medicine-requests") -> JSONObject().put("id", id(8)).put("student_id", id(7)).put("status", "PENDING")
                 e.requestURI.path.endsWith("/today-status") -> JSONObject().put("student_id", id(7)).put("date", "2026-11-13").put("attendance", JSONObject.NULL).put("daily_report", JSONObject.NULL).put("today_schedule", JSONArray())
                 e.requestURI.path.endsWith("/teachers") -> JSONArray().put(JSONObject().put("id", id(9)).put("name", "Synthetic Teacher"))
@@ -195,6 +212,77 @@ class NativeMobileParityUiTest {
         assertTrue(calls.any { it == "POST /api/parent/payments/checkouts/${id(3)}/refresh" })
         assertTrue(calls.none { it.contains("/payments/online/") || it.contains("/my-children") || it.contains(sibling.id) })
         assertTrue(calls.none { it.startsWith("POST") && !it.endsWith("/refresh") })
+    }
+
+    @Test fun parentBrowserReturnChecksTheSameCheckoutOnce() {
+        verifyParentBrowserReturn(changeSession = false)
+    }
+
+    @Test fun parentBrowserReturnDiscardsAResultAfterSessionChange() {
+        verifyParentBrowserReturn(changeSession = true)
+    }
+
+    private fun verifyParentBrowserReturn(changeSession: Boolean) {
+        val host = object : LifecycleOwner {
+            override val lifecycle = LifecycleRegistry.createUnsafe(this)
+        }
+        val launches = CopyOnWriteArrayList<Intent>()
+        val reloads = CopyOnWriteArrayList<String>()
+        val dismissals = CopyOnWriteArrayList<Int>()
+        var revision by mutableIntStateOf(0)
+        compose.runOnUiThread { host.lifecycle.currentState = Lifecycle.State.RESUMED }
+        compose.setContent {
+            val sessionRevision = revision
+            val context = LocalContext.current
+            val browser = remember(context) {
+                object : ContextWrapper(context) {
+                    override fun startActivity(intent: Intent) { launches.add(intent) }
+                }
+            }
+            CompositionLocalProvider(LocalContext provides browser, LocalLifecycleOwner provides host) {
+                Okul360Theme {
+                    HostedPaymentDialog(id(2), { dismissals.add(sessionRevision) }, { reloads.add(id(7)) },
+                        parentStudentId = id(7))
+                }
+            }
+        }
+        val checkoutPath = "/api/parent/payments/checkouts/${id(3)}"
+        val dialog = compose.onNodeWithTag("hosted_payment")
+        val open = hasText("Güvenli ödeme sayfasını aç")
+        compose.waitUntil(15_000) { runCatching { dialog.performScrollToNode(open) }.isSuccess }
+        compose.onNode(open).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitUntil(15_000) { launches.isNotEmpty() }
+        assertEquals(Intent.ACTION_VIEW, launches.single().action)
+        assertTrue(calls.none { it == "GET $checkoutPath" })
+        val beforeReturn = calls.size
+        holdBrowserStatus = changeSession
+        paid = true
+        compose.runOnIdle {
+            host.lifecycle.currentState = Lifecycle.State.STARTED
+            host.lifecycle.currentState = Lifecycle.State.RESUMED
+        }
+        try {
+            compose.waitUntil(15_000) { calls.contains("GET $checkoutPath") }
+            if (changeSession) {
+                compose.runOnIdle { ApiClientProvider.interceptor.invalidateContext(); revision++ }
+                releaseBrowserStatus.countDown()
+                compose.waitUntil(15_000) { dismissals.isNotEmpty() }
+                dialog.assertDoesNotExist()
+                assertTrue(reloads.isEmpty())
+            } else {
+                compose.waitUntil(15_000) { reloads.isNotEmpty() }
+                dialog.performScrollToNode(hasTestTag("hosted_status"))
+                compose.onNodeWithTag("hosted_status").assertTextEquals("COMPLETED")
+                compose.runOnIdle {
+                    host.lifecycle.currentState = Lifecycle.State.STARTED
+                    host.lifecycle.currentState = Lifecycle.State.RESUMED
+                }
+                assertEquals(listOf(id(7)), reloads)
+            }
+            assertEquals(listOf("GET $checkoutPath"), calls.drop(beforeReturn))
+        } finally {
+            releaseBrowserStatus.countDown()
+        }
     }
 
     @Test fun parentCheckoutConflictReloadsOnlyItsDebtList() {

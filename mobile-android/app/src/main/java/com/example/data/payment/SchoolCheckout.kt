@@ -15,6 +15,7 @@ internal const val SCHOOL_CHECKOUT_COMPLETED = "COMPLETED"
 internal class SchoolCheckoutInProgress : IllegalStateException("Bu borç için açık bir ödeme işlemi var.")
 
 data class SchoolCheckoutReference(val requestId: UUID, val debtId: UUID, val amount: BigDecimal)
+internal data class SchoolCheckoutLaunch(val url: String, val reference: SchoolCheckoutReference)
 
 class SchoolCheckout(context: Context, private val debtId: String, private val parentStudentId: String? = null) {
     private val scope = NativeRequestScope.bound() ?: ApiClientProvider.interceptor.captureScope()
@@ -117,9 +118,11 @@ class SchoolCheckout(context: Context, private val debtId: String, private val p
         check(prefs.edit().remove(fingerprint).commit()) { "Ödeme kaydı güncellenemedi" }
         pending = null
     }
-    suspend fun resume(): String? {
+    internal suspend fun resume(): SchoolCheckoutLaunch? {
         val previous = saved() ?: return null
-        val result = validate(call("$paymentsPath/checkouts/${previous.getString("request_id")}/resume", JSONObject()))
+        val requestId = previous.getString("request_id")
+        val amount = BigDecimal(previous.getString("amount"))
+        val result = validate(call("$paymentsPath/checkouts/$requestId/resume", JSONObject()), requestId, amount)
         if (!result.optBoolean("can_resume")) return null
         val url = result.optString("checkout_url", result.optString("payment_page_url"))
         val parsed = java.net.URI(url)
@@ -129,7 +132,7 @@ class SchoolCheckout(context: Context, private val debtId: String, private val p
             (host == "www.paytr.com" && parsed.path.startsWith("/odeme/guvenli/")) || host.endsWith(".craftgate.io") ||
             ((host == "app.sipay.com.tr" || host == "provisioning.sipay.com.tr") && parsed.path.startsWith("/ccpayment/makepayment/"))
         check(allowed && parsed.scheme == "https" && parsed.userInfo == null && parsed.fragment == null && parsed.port in listOf(-1, 443)) { "Ödeme adresi doğrulanamadı" }
-        return url
+        return SchoolCheckoutLaunch(url, SchoolCheckoutReference(UUID.fromString(requestId), UUID.fromString(debtId), amount))
     }
 
     companion object {
