@@ -101,9 +101,7 @@ fun InteractiveDashboardWidgetsSection(
     onSelectInvoiceForPayment: (Invoice) -> Unit,
     onSendPaymentReminder: (String, String) -> Unit,
     onNavigateToFinance: () -> Unit,
-    onApproveLeaveNotice: (String) -> Unit,
-    onMarkMedicineGiven: (String) -> Unit,
-    onApproveConsent: (String, String) -> Unit,
+    onNavigateToInfirmary: () -> Unit,
     onNavigateToConsents: () -> Unit,
     onNavigateToTransport: () -> Unit,
     onNavigateToAiAnalytics: () -> Unit,
@@ -742,9 +740,7 @@ fun InteractiveDashboardWidgetsSection(
                                                         onSelectInvoiceForPayment = onSelectInvoiceForPayment,
                                                         onSendPaymentReminder = onSendPaymentReminder,
                                                         onNavigateToFinance = onNavigateToFinance,
-                                                        onApproveLeaveNotice = onApproveLeaveNotice,
-                                                        onMarkMedicineGiven = onMarkMedicineGiven,
-                                                        onApproveConsent = onApproveConsent,
+                                                        onNavigateToInfirmary = onNavigateToInfirmary,
                                                         onNavigateToConsents = onNavigateToConsents,
                                                         onNavigateToTransport = onNavigateToTransport,
                                                         onNavigateToAiAnalytics = onNavigateToAiAnalytics,
@@ -783,9 +779,7 @@ fun InteractiveDashboardWidgetsSection(
                                             onSelectInvoiceForPayment = onSelectInvoiceForPayment,
                                             onSendPaymentReminder = onSendPaymentReminder,
                                             onNavigateToFinance = onNavigateToFinance,
-                                            onApproveLeaveNotice = onApproveLeaveNotice,
-                                            onMarkMedicineGiven = onMarkMedicineGiven,
-                                            onApproveConsent = onApproveConsent,
+                                            onNavigateToInfirmary = onNavigateToInfirmary,
                                             onNavigateToConsents = onNavigateToConsents,
                                             onNavigateToTransport = onNavigateToTransport,
                                             onNavigateToAiAnalytics = onNavigateToAiAnalytics,
@@ -1006,9 +1000,7 @@ private fun RenderSingleDashboardWidget(
     onSelectInvoiceForPayment: (Invoice) -> Unit,
     onSendPaymentReminder: (String, String) -> Unit,
     onNavigateToFinance: () -> Unit,
-    onApproveLeaveNotice: (String) -> Unit,
-    onMarkMedicineGiven: (String) -> Unit,
-    onApproveConsent: (String, String) -> Unit,
+    onNavigateToInfirmary: () -> Unit,
     onNavigateToConsents: () -> Unit,
     onNavigateToTransport: () -> Unit,
     onNavigateToAiAnalytics: () -> Unit,
@@ -1040,9 +1032,7 @@ private fun RenderSingleDashboardWidget(
         )
         DashboardWidgetType.CASH_APPROVALS -> DailyCashAndApprovalsInteractiveWidget(
             state = state,
-            onApproveLeaveNotice = onApproveLeaveNotice,
-            onMarkMedicineGiven = onMarkMedicineGiven,
-            onApproveConsent = onApproveConsent,
+            onNavigateToInfirmary = onNavigateToInfirmary,
             onNavigateToConsents = onNavigateToConsents,
             onNavigateToFinance = onNavigateToFinance,
             modifier = modifier
@@ -1968,398 +1958,20 @@ fun UncollectedFeesInteractiveWidget(
     }
 }
 
-/**
- * WIDGET 3: Daily Cash Summary & Pending Approvals ('Günlük Kasa Özeti ve Bekleyen Onaylar')
- */
+/** Daily cash and pending approvals. */
 @Composable
 fun DailyCashAndApprovalsInteractiveWidget(
     state: Okul360UiState,
-    onApproveLeaveNotice: (String) -> Unit,
-    onMarkMedicineGiven: (String) -> Unit,
-    onApproveConsent: (String, String) -> Unit,
     onNavigateToConsents: () -> Unit,
+    onNavigateToInfirmary: () -> Unit,
     onNavigateToFinance: () -> Unit,
     isLoading: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     if (isLoading) {
         DailyCashAndApprovalsWidgetSkeleton(modifier = modifier)
-        return
-    }
-    var expanded by remember { mutableStateOf(false) }
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Bekleyen Onaylar, 1: Günlük Kasa
-    val brand = LocalDashboardBrandPalette.current
-
-    val pendingLeaves = remember(state.leaveNotices) {
-        state.leaveNotices.filter { it.status.equals("PENDING", ignoreCase = true) }
-    }
-    val pendingMedicines = remember(state.medicineNotices) {
-        state.medicineNotices.filter { it.status.equals("PENDING", ignoreCase = true) }
-    }
-    val pendingAppointments = remember(state.appointments) {
-        state.appointments.filter { it.status.equals("PENDING", ignoreCase = true) }
-    }
-
-    val totalPendingApprovals = pendingLeaves.size + pendingMedicines.size + pendingAppointments.size
-
-    val monthlyCollected = state.financeSummary?.total_collected_monthly ?: 185000.0
-    val monthlyExpenses = state.financeSummary?.total_expenses_monthly
-        ?: state.expenses.sumOf { it.amount }.takeIf { it > 0 }
-        ?: 62000.0
-    val netBalance = monthlyCollected - monthlyExpenses
-
-    Surface(
-        modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
-            .clickable { expanded = !expanded }
-            .testTag("widget_cash_and_approvals"),
-        shape = RoundedCornerShape(18.dp),
-        color = Color.White,
-        border = BorderStroke(1.dp, if (expanded) brand.primary.copy(alpha = 0.45f) else Color(0xFFE2E8F0)),
-        shadowElevation = if (expanded) 3.dp else 1.dp
-    ) {
-        Column(modifier = Modifier.padding(11.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(brand.containerLight),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.VerifiedUser,
-                            contentDescription = "Kasa ve Bekleyen Onaylar",
-                            tint = brand.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "Kasa & Bekleyen Onaylar",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.5.sp,
-                                color = Color(0xFF0F172A),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f, fill = false)
-                            )
-                            if (totalPendingApprovals > 0) {
-                                Spacer(modifier = Modifier.width(5.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = Color(0xFFF3E8FF)
-                                ) {
-                                    Text(
-                                        text = "$totalPendingApprovals Bekleyen",
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF6D28D9),
-                                        softWrap = false,
-                                        maxLines = 1,
-                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
-                                    )
-                                }
-                            }
-                        }
-                        Text(
-                            text = "${pendingLeaves.size} İzin • ${pendingMedicines.size} İlaç",
-                            fontSize = 11.sp,
-                            color = Color(0xFF64748B),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(6.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "+₺${String.format("%,.0f", netBalance / 1000)}B",
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 13.5.sp,
-                            color = Color(0xFF059669),
-                            softWrap = false,
-                            maxLines = 1
-                        )
-                        Text(
-                            text = "Net Kasa",
-                            fontSize = 9.5.sp,
-                            color = Color(0xFF64748B),
-                            softWrap = false,
-                            maxLines = 1
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Icon(
-                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = if (expanded) "Daralt" else "Genişlet",
-                        tint = Color(0xFF64748B),
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Interactive Mini Tab Selector inside card
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFFF1F5F9))
-                    .padding(3.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = if (selectedTab == 0) Color.White else Color.Transparent,
-                    shadowElevation = if (selectedTab == 0) 1.dp else 0.dp,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable {
-                            selectedTab = 0
-                            expanded = true
-                        }
-                ) {
-                    Text(
-                        text = "Bekleyen Onaylar ($totalPendingApprovals)",
-                        fontSize = 11.sp,
-                        fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium,
-                        color = if (selectedTab == 0) Color(0xFF6D28D9) else Color(0xFF64748B),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(vertical = 6.dp)
-                    )
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = if (selectedTab == 1) Color.White else Color.Transparent,
-                    shadowElevation = if (selectedTab == 1) 1.dp else 0.dp,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable {
-                            selectedTab = 1
-                            expanded = true
-                        }
-                ) {
-                    Text(
-                        text = "Kasa & Nakit Akışı",
-                        fontSize = 11.sp,
-                        fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium,
-                        color = if (selectedTab == 1) PrimaryBlue else Color(0xFF64748B),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(vertical = 6.dp)
-                    )
-                }
-            }
-
-            AnimatedVisibility(
-                visible = expanded,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
-            ) {
-                Column(modifier = Modifier.padding(top = 12.dp)) {
-                    HorizontalDivider(color = Color(0xFFF1F5F9))
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    if (selectedTab == 0) {
-                        if (totalPendingApprovals == 0) {
-                            Text(
-                                text = "Bekleyen izin, ilaç veya belge onayı bulunmuyor.",
-                                fontSize = 12.sp,
-                                color = Color(0xFF059669),
-                                modifier = Modifier.padding(vertical = 6.dp)
-                            )
-                        } else {
-                            // Pending Medicine Notices
-                            pendingMedicines.take(2).forEach { med ->
-                                ApprovalQuickRow(
-                                    badge = "İlaç Bildirimi",
-                                    badgeBg = Color(0xFFFEF3C7),
-                                    badgeColor = Color(0xFFB45309),
-                                    title = "${med.student_name} • ${med.medicine_name}",
-                                    subtitle = "Saat: ${med.time_to_give} • Doz: ${med.dose}",
-                                    actionLabel = "Verildi İşaretle",
-                                    onAction = { onMarkMedicineGiven(med.id) }
-                                )
-                            }
-
-                            // Pending Leave Notices
-                            pendingLeaves.take(2).forEach { leave ->
-                                ApprovalQuickRow(
-                                    badge = "İzin Talebi",
-                                    badgeBg = Color(0xFFE0E7FF),
-                                    badgeColor = Color(0xFF3730A3),
-                                    title = "${leave.student_name} (${leave.start_date})",
-                                    subtitle = leave.parent_note.ifBlank { "Veli mazeret izni bildirimi" },
-                                    actionLabel = "Onayla",
-                                    onAction = { onApproveLeaveNotice(leave.id) }
-                                )
-                            }
-
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = onNavigateToConsents,
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(36.dp)
-                        ) {
-                            Text("Tüm İzin & Muvafakatnameleri Yönet", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                    } else {
-                        // Daily / Monthly Cash Breakdown
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = Color(0xFFECFDF5),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Column(modifier = Modifier.padding(10.dp)) {
-                                    Text("Toplam Tahsilat", fontSize = 10.5.sp, color = Color(0xFF047857))
-                                    Text(
-                                        text = "₺${String.format("%,.0f", monthlyCollected)}",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.5.sp,
-                                        color = Color(0xFF047857)
-                                    )
-                                }
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = Color(0xFFFEF2F2),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Column(modifier = Modifier.padding(10.dp)) {
-                                    Text("Giderler", fontSize = 10.5.sp, color = Color(0xFFB91C1C))
-                                    Text(
-                                        text = "₺${String.format("%,.0f", monthlyExpenses)}",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.5.sp,
-                                        color = Color(0xFFB91C1C)
-                                    )
-                                }
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = Color(0xFFEFF6FF),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Column(modifier = Modifier.padding(10.dp)) {
-                                    Text("Kantin POS", fontSize = 10.5.sp, color = PrimaryBlue)
-                                    Text(
-                                        text = "₺${String.format("%,.0f", state.canteenWallet.today_spent.coerceAtLeast(1450.0))}",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.5.sp,
-                                        color = PrimaryBlue
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Button(
-                            onClick = onNavigateToFinance,
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(36.dp)
-                        ) {
-                            Text("Detaylı Kasa Raporuna Git", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ApprovalQuickRow(
-    badge: String,
-    badgeBg: Color,
-    badgeColor: Color,
-    title: String,
-    subtitle: String,
-    actionLabel: String,
-    onAction: () -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(10.dp),
-        color = Color(0xFFF8FAFC),
-        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 3.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Surface(shape = RoundedCornerShape(4.dp), color = badgeBg) {
-                    Text(
-                        text = badge,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = badgeColor,
-                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = title,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    color = Color(0xFF0F172A),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = subtitle,
-                    fontSize = 10.5.sp,
-                    color = Color(0xFF64748B),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            FilledTonalButton(
-                onClick = onAction,
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                colors = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = Color(0xFFDCFCE7),
-                    contentColor = Color(0xFF15803D)
-                ),
-                modifier = Modifier.height(28.dp)
-            ) {
-                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(13.dp))
-                Spacer(modifier = Modifier.width(3.dp))
-                Text(actionLabel, fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
-            }
-        }
+    } else {
+        DashboardApprovalsWidget(state, onNavigateToConsents, onNavigateToInfirmary, onNavigateToFinance, modifier)
     }
 }
 
