@@ -205,7 +205,6 @@ data class Okul360UiState(
 
     // 7. Okul360 Ek Modüller State
     val consents: List<StudentConsent> = emptyList(),
-    val guidanceRecords: List<GuidanceRecord> = emptyList(),
     val infirmaryVisits: List<InfirmaryVisit> = emptyList(),
     val schoolClubs: List<SchoolClub> = emptyList(),
     val surveys: List<SchoolSurvey> = emptyList(),
@@ -684,7 +683,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             if (allowed("users.read")) { loadRoles(); loadUsers() }
             if (allowed("settings.read")) { loadRfidCards(); loadHardwareDevices(); checkSystemHealth() }
             if (actor.is_super_admin == true) loadAiAnalyticsData()
-            if (allowed("guidance.read")) loadGuidanceRecords()
             if (allowed("health.read")) loadInfirmaryVisits()
             if (allowed("clubs.read")) loadClubs()
             if (allowed("surveys.read", "surveys.respond")) loadSurveys()
@@ -2926,30 +2924,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     // ==========================================
     // Okul360 Yeni Modül Metotları
     // ==========================================
-
-    // 2. Guidance (Rehberlik & PDR)
-    fun loadGuidanceRecords(studentId: String? = null) {
-        viewModelScope.launch(requestFailures) {
-            val list = repository.getGuidanceRecords(studentId)
-            _uiState.update { it.copy(guidanceRecords = list) }
-        }
-    }
-
-    fun createGuidanceRecord(record: GuidanceRecord) {
-        viewModelScope.launch(requestFailures) {
-            repository.createGuidanceRecord(record)
-            loadGuidanceRecords()
-            _uiState.update { it.copy(toastMessage = "Rehberlik görüşme kaydı eklendi.") }
-        }
-    }
-
-    fun deleteGuidanceRecord(id: String) {
-        viewModelScope.launch(requestFailures) {
-            repository.deleteGuidanceRecord(id)
-            loadGuidanceRecords()
-            _uiState.update { it.copy(toastMessage = "Rehberlik kaydı silindi.") }
-        }
-    }
 
     // 3. Infirmary (Revir & Sağlık)
     fun loadInfirmaryVisits(studentId: String? = null) {

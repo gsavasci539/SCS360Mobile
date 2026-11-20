@@ -1257,8 +1257,6 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             SubScreen.GUIDANCE -> GuidanceScreen(
                                 state = state,
                                 onNavigateBack = { currentSubScreen = SubScreen.NONE },
-                                onCreateRecord = { record -> viewModel.createGuidanceRecord(record) },
-                                onDeleteRecord = { id -> viewModel.deleteGuidanceRecord(id) }
                             )
                             SubScreen.INFIRMARY -> InfirmaryScreen(
                                 state = state,
