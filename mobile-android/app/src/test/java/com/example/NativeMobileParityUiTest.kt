@@ -237,7 +237,12 @@ class NativeMobileParityUiTest {
         verifyRemainingPaymentForm(changeSession = true)
     }
 
-    private fun verifyRemainingPaymentForm(changeSession: Boolean) {
+    @Test @Config(qualifiers = "w640dp-h360dp-land-mdpi")
+    fun parentRemainingPaymentCanScrollAndSubmitInLandscape() {
+        verifyRemainingPaymentForm(changeSession = false, checkLandscapeLayout = true)
+    }
+
+    private fun verifyRemainingPaymentForm(changeSession: Boolean, checkLandscapeLayout: Boolean = false) {
         paid = true
         parentInvoiceResponse = JSONObject("""{
             "student_id":"${id(7)}","online_payment_available":true,"invoices":[
@@ -271,10 +276,14 @@ class NativeMobileParityUiTest {
             for ((label, value) in listOf(identity to "TEST-001", "Telefon" to "5555555555",
                 "Fatura adresi" to "Synthetic test address", "Şehir" to "Test", "Ülke" to "TR")) {
                 dialog.performScrollToNode(hasText(label))
-                compose.onNode(hasText(label) and hasSetTextAction()).performTextInput(value)
+                val field = compose.onNode(hasText(label) and hasSetTextAction())
+                if (checkLandscapeLayout) field.performScrollTo().assertIsDisplayed()
+                field.performTextInput(value)
             }
             dialog.performScrollToNode(hasTestTag("hosted_prepare"))
-            compose.onNodeWithTag("hosted_prepare").performScrollTo().assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
+            val submit = compose.onNodeWithTag("hosted_prepare").performScrollTo().assertIsEnabled()
+            if (checkLandscapeLayout) submit.assertIsDisplayed().performClick()
+            else submit.performSemanticsAction(SemanticsActions.OnClick)
             compose.waitUntil(15_000) { nextCheckout != null }
             val request = requireNotNull(nextCheckout)
             assertEquals("75.00", request.getString("amount"))
