@@ -23,6 +23,16 @@ internal data class InfirmaryVisitDraft(
     val temperature: Double?, val treatment: String, val followUpRequired: Boolean, val followUpNotes: String,
     val parentNotified: Boolean, val notificationMethod: String,
 )
+internal enum class HealthFileField(val key: String, val label: String, val maxLength: Int) {
+    BLOOD_TYPE("blood_type", "Kan grubu", 5),
+    ALLERGIES("allergies", "Alerji bilgisi", 1000),
+    CONDITIONS("chronic_conditions", "Kronik durum bilgisi", 1000),
+    CONTACT_NAME("emergency_contact_name", "Acil kişi adı", 255),
+    CONTACT_PHONE("emergency_contact_phone", "Acil kişi telefonu", 20),
+    CONTACT_RELATION("emergency_contact_relation", "Yakınlık", 50),
+    CHECKUP_DATE("last_checkup_date", "Son kontrol tarihi (YYYY-AA-GG)", 10),
+}
+internal data class InfirmaryHealthFile(val id: String, val values: Map<HealthFileField, String>)
 
 internal class NativeInfirmaryClient(selectedBranch: String, private val actorId: String) {
     private val scope = ApiClientProvider.interceptor.captureScope()
@@ -34,13 +44,14 @@ internal class NativeInfirmaryClient(selectedBranch: String, private val actorId
     private fun JSONObject.text(field: String) = if (isNull(field)) null else getString(field)
     private fun JSONArray.rows() = (0 until length()).map(::getJSONObject)
 
-    private suspend fun call(resource: String, query: Map<String, String?> = emptyMap(), body: JSONObject? = null): Any =
+    private suspend fun call(resource: String, query: Map<String, String?> = emptyMap(), body: JSONObject? = null,
+        method: String = "POST"): Any =
         scope.io {
             val url = (base + "infirmary/" + resource).toHttpUrl().newBuilder().apply {
                 query.forEach { (key, value) -> if (value != null) addQueryParameter(key, value) }
             }.build()
             val request = Request.Builder().url(url).tag(NativeRequestScope::class.java, scope)
-            if (body != null) request.post(body.toString().toRequestBody("application/json".toMediaType()))
+            if (body != null) request.method(method, body.toString().toRequestBody("application/json".toMediaType()))
             http.newCall(request.build()).execute().use { response ->
                 if (!response.isSuccessful) throw RegistryHttpException(response.code)
                 val result = JSONTokener(response.body?.string().orEmpty()).nextValue()
@@ -101,5 +112,27 @@ internal class NativeInfirmaryClient(selectedBranch: String, private val actorId
             "Sunucu yanıtı seçili ziyaret ile eşleşmiyor."
         }
         return saved.text("follow_up_notes") == notes
+    }
+
+    suspend fun healthFile(student: InfirmaryStudent): InfirmaryHealthFile? {
+        val query = mapOf("student_id" to id(student.id), "limit" to "2")
+        val rows = (call("health-records", query) as JSONArray).rows()
+        check(rows.all { it.getString("student_id") == student.id }) { "Sağlık dosyası seçili öğrenciyle eşleşmiyor." }
+        check(rows.size <= 1) { "Öğrencinin birden fazla eski sağlık dosyası var. Kayıtları Web revir ekranında inceleyin." }
+        return rows.singleOrNull()?.let { row ->
+            InfirmaryHealthFile(id(row.getString("id")), HealthFileField.entries.associateWith { row.text(it.key).orEmpty() })
+        }
+    }
+
+    suspend fun saveHealthFile(student: InfirmaryStudent, existing: InfirmaryHealthFile?, changes: Map<HealthFileField, String>) {
+        require(changes.isNotEmpty())
+        val body = JSONObject().put("student_id", id(student.id))
+        changes.forEach { (field, value) -> body.put(field.key, value.ifBlank { JSONObject.NULL }) }
+        val saved = call("health-records/${id(student.id)}", body = body, method = "PUT") as JSONObject
+        val savedId = id(saved.getString("id"))
+        check(saved.getString("student_id") == student.id && saved.getString("updated_by") == id(actorId) &&
+            (existing == null || savedId == existing.id) && changes.all { (field, value) ->
+                saved.has(field.key) && saved.text(field.key).orEmpty() == value
+            }) { "Sunucudaki sağlık dosyası gönderilen değişikliklerle eşleşmiyor." }
     }
 }

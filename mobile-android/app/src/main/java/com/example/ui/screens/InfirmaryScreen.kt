@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.*
@@ -11,6 +12,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.example.data.remote.InfirmaryOptions
+import com.example.data.remote.HealthFileField
+import com.example.data.remote.InfirmaryHealthFile
 import com.example.data.remote.InfirmaryStudent
 import com.example.data.remote.InfirmaryVisitDraft
 import com.example.data.remote.NativeInfirmaryClient
@@ -55,6 +58,10 @@ private fun InfirmaryWorkspace(branch: String, actor: String, canWrite: Boolean,
     var optionsError by remember { mutableStateOf<String?>(null) }
     var optionsRevision by remember { mutableIntStateOf(0) }
     var student by remember { mutableStateOf<InfirmaryStudent?>(null) }
+    var healthFile by remember(student) { mutableStateOf<Result<InfirmaryHealthFile?>?>(null) }
+    var fileRevision by remember { mutableIntStateOf(0) }
+    var editingFile by remember(student) { mutableStateOf(false) }
+    var fileSaved by remember(student) { mutableStateOf(false) }
     var dayText by remember { mutableStateOf("") }
     var day by remember { mutableStateOf<LocalDate?>(null) }
     var page by remember { mutableIntStateOf(0) }
@@ -88,6 +95,14 @@ private fun InfirmaryWorkspace(branch: String, actor: String, canWrite: Boolean,
         infirmaryRequest({ client.visits(student, selectedDate, page * VISIT_PAGE_SIZE, VISIT_PAGE_SIZE + 1) },
             { visits = it }, { visitsError = it })
     }
+    val currentStudent = student
+    LaunchedEffect(section, currentStudent, fileRevision) {
+        if (section == InfirmarySection.FILES && currentStudent != null) {
+            healthFile = null
+            infirmaryRequest({ client.healthFile(currentStudent) }, { healthFile = Result.success(it) },
+                { healthFile = Result.failure(IllegalStateException(it)) })
+        }
+    }
 
     LazyColumn(Modifier.fillMaxSize().testTag("infirmary_visits"),
         contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -102,11 +117,19 @@ private fun InfirmaryWorkspace(branch: String, actor: String, canWrite: Boolean,
                 }
             }
         }
-        if (section == InfirmarySection.VISITS) {
+        if (section == InfirmarySection.VISITS || section == InfirmarySection.FILES) {
             item {
                 Text(student?.name ?: "Tüm öğrenciler")
                 OutlinedButton(enabled = options != null, onClick = { choosing = true }) { Text("Öğrenci seç") }
                 if (student != null) TextButton(onClick = { student = null; feedback = null; reload(0) }) { Text("Öğrenci filtresini temizle") }
+                if (optionsError != null) {
+                    Text(optionsError.orEmpty())
+                    OutlinedButton(onClick = { optionsError = null; optionsRevision++ }) { Text("Seçenekleri yeniden yükle") }
+                }
+            }
+        }
+        if (section == InfirmarySection.VISITS) {
+            item {
                 val parsed = visitDate(dayText)
                 OutlinedTextField(dayText, { dayText = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
                     label = { Text("Ziyaret günü (YYYY-AA-GG)") }, isError = dayText.isNotBlank() && parsed == null)
@@ -122,10 +145,7 @@ private fun InfirmaryWorkspace(branch: String, actor: String, canWrite: Boolean,
             }
             val rows = visits
             when {
-                optionsError != null -> item {
-                    Text(optionsError.orEmpty())
-                    OutlinedButton(onClick = { optionsError = null; optionsRevision++ }) { Text("Seçenekleri yeniden yükle") }
-                }
+                optionsError != null && day == null -> Unit
                 visitsError != null -> item {
                     Text(visitsError.orEmpty())
                     OutlinedButton(onClick = { reload(page) }) { Text("Ziyaretleri yeniden yükle") }
@@ -150,6 +170,14 @@ private fun InfirmaryWorkspace(branch: String, actor: String, canWrite: Boolean,
                 OutlinedButton(enabled = page > 0, onClick = { reload(page - 1) }) { Text("Önceki") }
                 OutlinedButton(enabled = rows.size > VISIT_PAGE_SIZE, onClick = { reload(page + 1) }) { Text("Sonraki") }
             }
+        } else if (section == InfirmarySection.FILES) {
+            healthFileRows(currentStudent, healthFile, canWrite, fileSaved, {
+                healthFile = null
+                fileRevision++
+            }) {
+                fileSaved = false
+                editingFile = true
+            }
         } else item {
             Text("${section.label} için Web revir ekranını kullanın.")
         }
@@ -163,7 +191,14 @@ private fun InfirmaryWorkspace(branch: String, actor: String, canWrite: Boolean,
             reload(0)
         }
     }
-    val currentStudent = student
+    if (editingFile && section == InfirmarySection.FILES && currentStudent != null && healthFile?.isSuccess == true) {
+        InfirmaryHealthFileEditor(client, currentStudent, healthFile?.getOrNull(), { editingFile = false }) {
+            editingFile = false
+            fileSaved = true
+            healthFile = null
+            fileRevision++
+        }
+    }
     val currentDate = day
     val clock = options?.time
     if (creating && canWrite && currentStudent != null && currentDate != null && clock != null) {
@@ -180,6 +215,60 @@ private fun InfirmaryWorkspace(branch: String, actor: String, canWrite: Boolean,
             feedback = if (matches) "Ziyaret takibi kaydedildi." else "Sunucudaki takip notu farklı. Kayıt yeniden yüklendi."
             reload(page)
         }
+    }
+}
+
+private fun LazyListScope.healthFileRows(student: InfirmaryStudent?, result: Result<InfirmaryHealthFile?>?, canWrite: Boolean,
+    saved: Boolean, onRetry: () -> Unit, onEdit: () -> Unit) {
+    when {
+        student == null -> item { Text("Sağlık dosyası için öğrenci seçin.") }
+        result == null -> item { Text("Sağlık dosyası yükleniyor…") }
+        result.isFailure -> item {
+            Text(result.exceptionOrNull()?.message ?: "Sağlık dosyası yüklenemedi.")
+            OutlinedButton(onClick = onRetry) { Text("Dosyayı yeniden yükle") }
+        }
+        else -> {
+            val file = result.getOrNull()
+            if (saved) item { Text("Sağlık dosyası kaydedildi.") }
+            if (file == null) item { Text("Seçili öğrenci için sağlık dosyası bulunamadı.") }
+            file?.values?.forEach { (field, value) -> if (value.isNotBlank()) item {
+                Text(field.label, style = MaterialTheme.typography.labelLarge)
+                Text(value)
+            } }
+            if (canWrite) item {
+                Button(onClick = onEdit) { Text(if (file == null) "Sağlık dosyası oluştur" else "Sağlık dosyasını düzenle") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfirmaryHealthFileEditor(client: NativeInfirmaryClient, student: InfirmaryStudent, file: InfirmaryHealthFile?,
+    onClose: () -> Unit, onSaved: () -> Unit) {
+    val initial = file?.values.orEmpty()
+    var fields by remember { mutableStateOf(initial) }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val changes = fields.mapValues { (_, value) -> value.trim() }.filter { (field, value) ->
+        value != initial[field].orEmpty().trim()
+    }
+    val checkup = fields[HealthFileField.CHECKUP_DATE].orEmpty().trim()
+    ConsentFormDialog("Sağlık dosyası", "infirmary_file", busy, onClose, {
+        item { Text(student.name) }
+        items(HealthFileField.entries, key = { it.key }) { field ->
+            VisitField(fields[field].orEmpty(), { fields = fields + (field to it) }, field.label, busy, field.maxLength)
+        }
+        error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
+    }) {
+        Button(enabled = !busy && changes.isNotEmpty() && (checkup.isEmpty() || visitDate(checkup) != null), onClick = {
+            busy = true
+            error = null
+            scope.launch {
+                infirmaryRequest({ client.saveHealthFile(student, file, changes) }, { onSaved() }, { error = it })
+                busy = false
+            }
+        }) { Text("Sağlık dosyasını kaydet") }
     }
 }
 
