@@ -310,7 +310,7 @@ private fun ConsentDecisionForm(
 }
 
 @Composable
-private fun ConsentFormDialog(
+internal fun ConsentFormDialog(
     title: String, tag: String, busy: Boolean, onClose: () -> Unit,
     fields: LazyListScope.() -> Unit, confirm: @Composable () -> Unit,
 ) {

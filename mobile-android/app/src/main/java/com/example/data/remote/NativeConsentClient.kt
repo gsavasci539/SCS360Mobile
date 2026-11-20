@@ -7,6 +7,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
+import java.security.MessageDigest
 import java.util.UUID
 
 internal data class ConsentDocumentRow(
@@ -32,6 +33,13 @@ internal data class ConsentDecisionRow(
 internal data class ConsentChoice(val id: String, val label: String)
 internal data class ConsentOptions(val students: List<ConsentChoice>, val parents: List<ConsentChoice>, val moreStudents: Boolean)
 internal data class ConsentDocumentDraft(val title: String, val type: String, val content: String, val version: String, val effectiveDate: String)
+internal data class GuardianConsentDocument(
+    val document: ConsentDocumentRow,
+    val status: String,
+    val decidedAt: String?,
+    val contentHash: String,
+    val canDecide: Boolean,
+)
 
 internal class NativeConsentClient(
     private val scope: NativeRequestScope = ApiClientProvider.interceptor.captureScope(),
@@ -55,12 +63,33 @@ internal class NativeConsentClient(
     private fun JSONArray.rows(): List<JSONObject> = (0 until length()).map(::getJSONObject)
     private fun id(value: String) = UUID.fromString(value).toString()
     private fun JSONObject.text(key: String) = if (isNull(key)) null else getString(key)
+    private fun JSONObject.document() = ConsentDocumentRow(
+        id(getString("id")), getString("title"), getString("document_type"), getString("version"),
+        getString("content"), getString("effective_date"),
+    )
 
     suspend fun documents(active: Boolean, offset: Int, limit: Int): List<ConsentDocumentRow> =
-        (call("consents/documents?is_active=$active&offset=$offset&limit=$limit") as JSONArray).rows().map { doc ->
-            ConsentDocumentRow(id(doc.getString("id")), doc.getString("title"),
-                doc.getString("document_type"), doc.getString("version"), doc.getString("content"), doc.getString("effective_date"))
+        (call("consents/documents?is_active=$active&offset=$offset&limit=$limit") as JSONArray).rows().map { it.document() }
+
+    suspend fun guardianDocuments(student: String, offset: Int, limit: Int): List<GuardianConsentDocument> =
+        (call("parent/child/${id(student)}/consents?offset=$offset&limit=$limit") as JSONArray).rows().map { row ->
+            val document = row.document()
+            val expectedHash = row.getString("content_sha256")
+            val actualHash = MessageDigest.getInstance("SHA-256").digest(document.content.toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(it) }
+            GuardianConsentDocument(document, row.getString("consent_status"), row.text("consented_at"),
+                expectedHash, row.getBoolean("can_decide") && expectedHash == actualHash && document.content.isNotBlank())
         }
+
+    suspend fun saveGuardianDecision(student: String, record: GuardianConsentDocument, status: String, signedName: String) {
+        require(record.canDecide && status in setOf("APPROVED", "REJECTED") && signedName.length in 2..200)
+        val document = record.document
+        val body = JSONObject().put("consent_status", status).put("acknowledged", true)
+            .put("document_version", document.version).put("content_sha256", record.contentHash).put("signed_name", signedName)
+        val response = call("parent/child/${id(student)}/consents/${document.id}", "POST", body) as JSONObject
+        id(response.getString("id"))
+        check(response.getString("consent_status") == status && !response.isNull("consented_at")) { "Veli kararı doğrulanamadı." }
+    }
 
     suspend fun decisions(offset: Int, limit: Int): List<ConsentDecisionRow> =
         (call("consents/student-consents?offset=$offset&limit=$limit") as JSONArray).rows().map { decision ->

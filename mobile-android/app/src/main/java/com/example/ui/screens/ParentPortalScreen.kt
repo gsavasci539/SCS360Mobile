@@ -67,6 +67,7 @@ enum class ParentNavTab(
     MATERIALS("Materyal", Icons.Default.MenuBook, Icons.Outlined.MenuBook),
     MESSAGING("İletişim", Icons.Default.ChatBubble, Icons.Outlined.ChatBubble),
     PAYMENTS("Ödemeler", Icons.Default.CreditCard, Icons.Outlined.CreditCard),
+    CONSENTS("İzin belgeleri", Icons.Default.FactCheck, Icons.Outlined.FactCheck),
     AI_CHATBOT("AI Asistan", Icons.Default.AutoAwesome, Icons.Outlined.AutoAwesome),
     DIARY("Gelişim", Icons.Default.AutoStories, Icons.Outlined.AutoStories)
 }
@@ -119,12 +120,13 @@ fun ParentPortalScreen(
     val presentationScope = com.example.ui.components.financePresentationScope(state)
     val canReadAttendance = NativeNavigationPolicy.has(state.currentUser, "parent.view_attendance")
     val canReadFinances = NativeNavigationPolicy.canReadParentFinances(state.currentUser)
+    val canReadConsents = NativeNavigationPolicy.has(state.currentUser, "parent.view_children")
     val limitedToModules = !NativeNavigationPolicy.canReadParentChildProfile(state.currentUser) &&
         (canReadAttendance || canReadFinances)
     val visibleTabs = if (limitedToModules) buildList {
         if (canReadAttendance) add(ParentNavTab.DIARY)
         if (canReadFinances) add(ParentNavTab.PAYMENTS)
-    } else ParentNavTab.entries
+    } else ParentNavTab.entries.filter { it != ParentNavTab.CONSENTS || canReadConsents }
     // The parent portal endpoint has already authorized every relationship.
     val parentChildren = state.parentChildren
     val validShortcut = chatbotStudentId == null || parentChildren.any { it.id == chatbotStudentId }
@@ -505,6 +507,9 @@ fun ParentPortalScreen(
                         onRefresh = { onRefreshInvoices(currentChild.id) },
                         balanceChanged = balanceChanged,
                     )
+                    ParentNavTab.CONSENTS -> key(presentationScope, currentChild.id) {
+                        ParentConsentsPane(currentChild.id, NativeNavigationPolicy.has(state.currentUser, "parent.give_consent"))
+                    }
                     ParentNavTab.DIARY -> ParentDiaryAndGrowthTab(
                         student = currentChild,
                         state = state,

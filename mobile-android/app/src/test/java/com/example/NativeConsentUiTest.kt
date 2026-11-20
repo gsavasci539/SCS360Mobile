@@ -3,8 +3,12 @@ package com.example
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import com.example.data.model.User
+import com.example.data.model.Student
+import com.example.data.model.UserRole
 import com.example.data.remote.ApiClientProvider
 import com.example.ui.screens.ConsentsScreen
+import com.example.ui.screens.ParentNavTab
+import com.example.ui.screens.ParentPortalScreen
 import com.example.ui.theme.Okul360Theme
 import com.example.ui.viewmodel.Okul360UiState
 import com.sun.net.httpserver.HttpServer
@@ -17,6 +21,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import java.net.InetSocketAddress
+import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -36,6 +41,12 @@ class NativeConsentUiTest {
     @Volatile private var decisionBody: JSONObject? = null
     @Volatile private var decisionSaved = false
     @Volatile private var documentBody: JSONObject? = null
+    @Volatile private var guardianBody: JSONObject? = null
+    private var useWrongDocumentHash = false
+    private val guardianPath get() = "/api/parent/child/${id(3)}/consents"
+    private val guardianText = "İzole test belge metni."
+    private val guardianHash = MessageDigest.getInstance("SHA-256").digest(guardianText.toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
 
     @Before fun start() {
         originalBase = ApiClientProvider.activeBaseUrl
@@ -70,6 +81,15 @@ class NativeConsentUiTest {
                     .put("id", id(5)).put("student_name", "Test Öğrencisi").put("document_title", "Test izin belgesi")
                     .put("document_version", "1.3").put("parent_name", "Test Velisi")
                     .put("consent_status", "REJECTED").put("consent_method", "MANUAL"))
+                method == "GET" && uri.path == guardianPath -> JSONArray().put(JSONObject()
+                    .put("id", id(1)).put("title", "Veli belge testi").put("version", "1.3")
+                    .put("document_type", "TRIP_CONSENT").put("content", guardianText).put("effective_date", "2026-11-20")
+                    .put("consent_status", if (guardianBody == null) "PENDING" else "APPROVED").put("can_decide", true)
+                    .put("content_sha256", if (useWrongDocumentHash) "0".repeat(64) else guardianHash))
+                method == "POST" && uri.path == "$guardianPath/${id(1)}" -> {
+                    guardianBody = JSONObject(exchange.requestBody.use { it.readBytes().decodeToString() })
+                    JSONObject().put("id", id(8)).put("consent_status", "APPROVED").put("consented_at", "2026-11-20T15:00:00Z")
+                }
                 else -> {
                     exchange.sendResponseHeaders(404, -1)
                     exchange.close()
@@ -167,5 +187,48 @@ class NativeConsentUiTest {
         assertEquals("REJECTED", row.getString("consent_status"))
         assertEquals("MANUAL", row.getString("consent_method"))
         assertEquals(listOf("POST $decisions"), paths.filter { it.startsWith("POST ") })
+    }
+
+    private fun openGuardianConsent(canDecide: Boolean) {
+        val child = Student(id = id(3), first_name = "Test Öğrencisi")
+        val permissions = if (canDecide) listOf("parent.view_children", "parent.give_consent") else listOf("parent.view_children")
+        val user = User(id = id(6), organization_id = id(2), permissions = permissions)
+        val state = Okul360UiState(isLoggedIn = true, currentUser = user, selectedRole = UserRole.PARENT, parentChildren = listOf(child))
+        compose.setContent {
+            Okul360Theme {
+                ParentPortalScreen(state, {}, { _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _ -> },
+                    chatbotTab = ParentNavTab.CONSENTS, chatbotStudentId = child.id, onLogout = {})
+            }
+        }
+        clickIn("parent_consent_records", "Belgenin tam metnini oku")
+    }
+
+    @Test fun guardianAcknowledgesAndSignsTheVerifiedDocumentForTheSelectedChild() {
+        openGuardianConsent(canDecide = true)
+        val form = compose.onNodeWithTag("parent_consent_document")
+        form.performScrollToNode(hasText("Onaylıyorum"))
+        compose.onNodeWithText("Onaylıyorum").assertIsNotEnabled()
+        form.performScrollToNode(hasText("Adınız ve soyadınız"))
+        compose.onNode(hasText("Adınız ve soyadınız") and hasSetTextAction()).performTextInput("Test Velisi")
+        form.performScrollToNode(hasTestTag("parent_consent_ack"))
+        compose.onNodeWithTag("parent_consent_ack").performScrollTo().performClick()
+        clickIn("parent_consent_document", "Onaylıyorum")
+        compose.waitUntil(15_000) { paths.count { it.startsWith("GET $guardianPath?") } == 2 }
+        val saved = requireNotNull(guardianBody)
+        assertEquals("APPROVED", saved.getString("consent_status"))
+        assertEquals("1.3", saved.getString("document_version"))
+        assertEquals(guardianHash, saved.getString("content_sha256"))
+        assertEquals("Test Velisi", saved.getString("signed_name"))
+        assertTrue(saved.getBoolean("acknowledged"))
+        assertEquals(listOf("POST $guardianPath/${id(1)}"), paths.filter { it.startsWith("POST ") })
+    }
+
+    @Test fun guardianCanReadButCannotSignADocumentWithUnverifiedContent() {
+        useWrongDocumentHash = true
+        openGuardianConsent(canDecide = true)
+        compose.onNodeWithText(guardianText).assertIsDisplayed()
+        compose.onNodeWithText("Onaylıyorum").assertDoesNotExist()
+        compose.onNodeWithText("Onay vermiyorum").assertDoesNotExist()
+        assertTrue(paths.none { it.startsWith("POST ") })
     }
 }
