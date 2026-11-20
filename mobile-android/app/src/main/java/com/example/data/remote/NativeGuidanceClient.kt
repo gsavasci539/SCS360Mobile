@@ -15,6 +15,13 @@ internal data class GuidanceOptions(
     val students: List<GuidanceChoice>, val counselors: List<GuidanceChoice>, val today: LocalDate,
     val moreStudents: Boolean, val moreCounselors: Boolean,
 )
+internal data class GuidanceSummary(
+    val sessions: Int, val notes: Int, val incidents: Int, val activeCases: Int, val resolutionRate: Double,
+)
+internal data class GuidanceTimelineEntry(
+    val id: String, val type: String, val category: String, val date: String, val description: String?,
+    val author: String?, val confidentiality: String?, val resolved: Boolean?,
+)
 internal sealed interface GuidanceRow {
     val id: String
     val studentName: String?
@@ -85,6 +92,23 @@ internal class NativeGuidanceClient {
         return GuidanceOptions(students, choices("counselors"), LocalDate.parse(result.getString("today")),
             result.getBoolean("more_students"), result.getBoolean("more_counselors"))
     }
+
+    suspend fun summary(student: GuidanceChoice?): GuidanceSummary {
+        val query = student?.let { listOf("student_id" to id(it.id)) }.orEmpty()
+        val result = call("summary", query) as JSONObject
+        check(result.text("student_id") == student?.id) { "Rehberlik özeti seçili öğrenciyle eşleşmiyor." }
+        return GuidanceSummary(result.getInt("total_sessions"), result.getInt("total_notes"),
+            result.getInt("total_incidents"), result.getInt("active_cases"), result.getDouble("resolution_rate"))
+    }
+
+    suspend fun timeline(student: GuidanceChoice): List<GuidanceTimelineEntry> =
+        (call("students/${id(student.id)}/timeline") as JSONArray).rows().map { row ->
+            check(id(row.getString("student_id")) == student.id) { "Geçmiş kaydı seçili öğrenciyle eşleşmiyor." }
+            val type = row.getString("type")
+            GuidanceTimelineEntry(id(row.getString("id")), type, row.getString("category"), row.getString("date"),
+                row.text("description"), row.text("counselor") ?: row.text("reported_by"), row.text("confidentiality_level"),
+                if (row.isNull("resolved")) null else row.getBoolean("resolved"))
+        }
 
     private suspend fun scopedRows(resource: String, student: GuidanceChoice?, offset: Int, limit: Int): List<JSONObject> {
         val query = buildList {

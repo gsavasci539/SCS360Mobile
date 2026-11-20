@@ -49,8 +49,20 @@ class NativeGuidanceUiTest {
                 uri.path == "/api/guidance/options" -> {
                     val counselor = JSONArray()
                     if (uri.query.contains("student_id=${id(2)}")) counselor.put(JSONObject().put("id", id(3)).put("name", "Test Danışmanı"))
-                    JSONObject().put("students", JSONArray().put(JSONObject().put("id", id(2)).put("name", "Test Öğrencisi")))
+                    JSONObject().put("students", JSONArray().put(JSONObject().put("id", id(2)).put("name", "Test Öğrencisi"))
+                        .put(JSONObject().put("id", id(8)).put("name", "İkinci Öğrenci")))
                         .put("counselors", counselor).put("more_students", false).put("more_counselors", false).put("today", "2026-11-20")
+                }
+                uri.path == "/api/guidance/summary" -> {
+                    val student = uri.query?.substringAfter("student_id=")
+                    val count = if (student == id(2)) 3 else 0
+                    JSONObject().put("student_id", student).put("total_sessions", count)
+                        .put("total_notes", 0).put("total_incidents", 0).put("active_cases", 0).put("resolution_rate", 0)
+                }
+                uri.path == "/api/guidance/students/${id(2)}/timeline" ||
+                    uri.path == "/api/guidance/students/${id(8)}/timeline" -> {
+                    JSONArray().put(JSONObject().put("student_id", id(2)).put("id", id(4)).put("type", "SESSION")
+                        .put("category", "INDIVIDUAL").put("date", "2026-11-20").put("description", "İlk öğrencinin geçmişi"))
                 }
                 uri.path == "/api/guidance/sessions" && exchange.requestMethod == "POST" -> {
                     val sent = JSONObject(exchange.requestBody.use { it.readBytes().decodeToString() })
@@ -138,6 +150,37 @@ class NativeGuidanceUiTest {
         open(canWrite = false)
         compose.onNodeWithText("Yeni görüşme").assertDoesNotExist()
         assertTrue(requests.none { it.startsWith("POST ") || it.contains("counselor_search=") && it.contains("student_id=") })
+    }
+
+    @Test fun reportsUseSelectedStudentAndRejectTimelineRowsFromAPreviousStudent() {
+        open(canWrite = false)
+        click("guidance_sessions", "Rehberlik özeti")
+        awaitDisplayed("guidance_summary", "Görüşmeler · 3")
+        click("guidance_summary", "İptal")
+        click("guidance_sessions", "Öğrenci geçmişi")
+        awaitDisplayed("guidance_timeline", "İlk öğrencinin geçmişi")
+        click("guidance_timeline", "İptal")
+        click("guidance_sessions", "Öğrenci seç")
+        click("guidance_students", "İkinci Öğrenci")
+        click("guidance_sessions", "Rehberlik özeti")
+        awaitDisplayed("guidance_summary", "Görüşmeler · 0")
+        compose.onNodeWithText("Görüşmeler · 3").assertDoesNotExist()
+        click("guidance_summary", "İptal")
+        click("guidance_sessions", "Öğrenci geçmişi")
+        awaitDisplayed("guidance_timeline", "Geçmiş kaydı seçili öğrenciyle eşleşmiyor.")
+        compose.onNodeWithText("İlk öğrencinin geçmişi").assertDoesNotExist()
+        assertEquals(listOf("GET /api/guidance/summary?student_id=${id(2)}", "GET /api/guidance/summary?student_id=${id(8)}"),
+            requests.filter { it.startsWith("GET /api/guidance/summary?") })
+        assertEquals(listOf("GET /api/guidance/students/${id(2)}/timeline", "GET /api/guidance/students/${id(8)}/timeline"),
+            requests.filter { it.endsWith("/timeline") })
+    }
+
+    private fun awaitDisplayed(container: String, text: String) {
+        val target = hasText(text)
+        compose.waitUntil(15_000) {
+            runCatching { compose.onNodeWithTag(container).performScrollToNode(target) }.isSuccess
+        }
+        compose.onNode(target).performScrollTo().assertIsDisplayed()
     }
 
     @Test fun createsSessionForTheVerifiedStudentAndCounselorInLandscape() {

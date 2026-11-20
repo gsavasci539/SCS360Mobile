@@ -17,6 +17,8 @@ import com.example.data.remote.GuidanceOptions
 import com.example.data.remote.GuidanceRow
 import com.example.data.remote.GuidanceSessionDraft
 import com.example.data.remote.GuidanceSessionRow
+import com.example.data.remote.GuidanceSummary
+import com.example.data.remote.GuidanceTimelineEntry
 import com.example.data.remote.NativeGuidanceClient
 import com.example.ui.components.financePresentationScope
 import com.example.ui.navigation.NativeNavigationPolicy
@@ -31,6 +33,7 @@ private val guidanceTypes = mapOf("INDIVIDUAL" to "Bireysel", "GROUP" to "Grup",
 private val confidentialityLevels = mapOf("STANDARD" to "Standart", "RESTRICTED" to "Kısıtlı", "CONFIDENTIAL" to "Gizli")
 private val noteTypes = mapOf("OBSERVATION" to "Gözlem", "ASSESSMENT" to "Değerlendirme", "INTERVENTION" to "Müdahale")
 private val severityLevels = mapOf("MINOR" to "Düşük", "MODERATE" to "Orta", "SEVERE" to "Yüksek", "CRITICAL" to "Kritik")
+private enum class GuidanceReport { SUMMARY, TIMELINE }
 private enum class GuidanceSection(val title: String, val createTitle: String, val saveTitle: String, val saved: String) {
     SESSIONS("Görüşmeler", "Yeni görüşme", "Görüşmeyi kaydet", "Rehberlik görüşmesi kaydedildi."),
     NOTES("Danışman notları", "Yeni danışman notu", "Notu kaydet", "Danışman notu kaydedildi."),
@@ -64,6 +67,7 @@ private fun GuidanceRecords(actorId: String, canWrite: Boolean, onBack: () -> Un
     var creating by remember { mutableStateOf(false) }
     var selectedRecord by remember { mutableStateOf<GuidanceRow?>(null) }
     var feedback by remember { mutableStateOf<String?>(null) }
+    var report by remember { mutableStateOf<GuidanceReport?>(null) }
 
     fun reload(targetPage: Int) {
         records = null
@@ -112,6 +116,12 @@ private fun GuidanceRecords(actorId: String, canWrite: Boolean, onBack: () -> Un
                 Text(section.createTitle)
             }
             feedback?.let { Text(it) }
+        }
+        item {
+            OutlinedButton(onClick = { report = GuidanceReport.SUMMARY }) { Text("Rehberlik özeti") }
+            if (student != null) {
+                OutlinedButton(onClick = { report = GuidanceReport.TIMELINE }) { Text("Öğrenci geçmişi") }
+            }
         }
         val rows = records
         when {
@@ -168,6 +178,15 @@ private fun GuidanceRecords(actorId: String, canWrite: Boolean, onBack: () -> Un
         reload(0)
     }
     val currentStudent = student
+    key(currentStudent, report) {
+        when (report) {
+            GuidanceReport.SUMMARY -> GuidanceSummaryDialog(client, currentStudent) { report = null }
+            GuidanceReport.TIMELINE -> currentStudent?.let {
+                GuidanceTimelineDialog(client, it) { report = null }
+            }
+            null -> Unit
+        }
+    }
     if (creating && canWrite && currentStudent != null) {
         GuidanceCreateRecord(client, actorId, section, currentStudent, { creating = false }) {
             feedback = section.saved
@@ -190,6 +209,81 @@ private fun GuidanceRecords(actorId: String, canWrite: Boolean, onBack: () -> Un
             reload(page)
         }
         null -> Unit
+    }
+}
+
+@Composable
+private fun GuidanceSummaryDialog(client: NativeGuidanceClient, student: GuidanceChoice?, onClose: () -> Unit) {
+    var result by remember { mutableStateOf<Result<GuidanceSummary>?>(null) }
+    var revision by remember { mutableIntStateOf(0) }
+    LaunchedEffect(revision) {
+        result = loadGuidanceReport { client.summary(student) }
+    }
+    ConsentFormDialog("Rehberlik özeti", "guidance_summary", false, onClose, {
+        item { Text(student?.name ?: "Tüm öğrenciler") }
+        val summary = result?.getOrNull()
+        if (summary == null) item {
+            GuidanceReportStatus(result?.exceptionOrNull()) { result = null; revision++ }
+        } else {
+            item { Text("Görüşmeler · ${summary.sessions}") }
+            item { Text("Danışman notları · ${summary.notes}") }
+            item { Text("Davranış olayları · ${summary.incidents}") }
+            item { Text("Açık olaylar · ${summary.activeCases}") }
+            item { Text("Çözüm oranı · %${java.text.NumberFormat.getNumberInstance().format(summary.resolutionRate)}") }
+        }
+    }) {}
+}
+
+@Composable
+private fun GuidanceTimelineDialog(client: NativeGuidanceClient, student: GuidanceChoice, onClose: () -> Unit) {
+    var result by remember { mutableStateOf<Result<List<GuidanceTimelineEntry>>?>(null) }
+    var revision by remember { mutableIntStateOf(0) }
+    LaunchedEffect(revision) {
+        result = loadGuidanceReport { client.timeline(student) }
+    }
+    ConsentFormDialog("Öğrenci geçmişi", "guidance_timeline", false, onClose, {
+        item { Text(student.name) }
+        val entries = result?.getOrNull()
+        when {
+            entries == null -> item { GuidanceReportStatus(result?.exceptionOrNull()) { result = null; revision++ } }
+            entries.isEmpty() -> item { Text("Bu öğrenci için görünür rehberlik kaydı bulunamadı.") }
+            else -> items(entries, key = { "${it.type}/${it.id}" }) { entry ->
+                val title = when (entry.type) {
+                    "SESSION" -> "Görüşme · ${guidanceTypes[entry.category] ?: entry.category}"
+                    "NOTE" -> "Danışman notu · ${noteTypes[entry.category] ?: entry.category}"
+                    "INCIDENT" -> "Davranış olayı · ${severityLevels[entry.category] ?: entry.category}"
+                    else -> entry.category
+                }
+                OutlinedCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(title, style = MaterialTheme.typography.titleMedium)
+                        Text(entry.date.take(10))
+                        entry.author?.let { Text(it) }
+                        entry.confidentiality?.let { Text(confidentialityLevels[it] ?: it) }
+                        entry.resolved?.let { Text(if (it) "Çözüldü" else "Açık olay") }
+                        entry.description?.let { Text(it) }
+                    }
+                }
+            }
+        }
+    }) {}
+}
+
+private suspend fun <T> loadGuidanceReport(load: suspend () -> T): Result<T> = try {
+    Result.success(load())
+} catch (cancelled: CancellationException) {
+    throw cancelled
+} catch (failure: Exception) {
+    Result.failure(failure)
+}
+
+@Composable
+private fun GuidanceReportStatus(failure: Throwable?, onRetry: () -> Unit) {
+    if (failure == null) {
+        Text("Rehberlik verisi yükleniyor…")
+    } else {
+        Text(failure.message ?: "Rehberlik verisi yüklenemedi.", color = MaterialTheme.colorScheme.error)
+        OutlinedButton(onClick = onRetry) { Text("Yeniden yükle") }
     }
 }
 
