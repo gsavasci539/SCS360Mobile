@@ -554,7 +554,12 @@ private fun ParentTodayTab(
             item { OutlinedButton(onClick = onOpenPickup, modifier = Modifier.heightIn(min = 48.dp)) { Text("Teslim yetkisi") } }
             item { OutlinedButton(onClick = onOpenMessage, modifier = Modifier.heightIn(min = 48.dp)) { Text("Mesajlar") } }
         }
-        key(com.example.ui.components.financePresentationScope(state), student.id) { ParentVerifiedRecordsPane(student.id, "today-status", Modifier.weight(1f)) }
+        val canReadAttendance = state.currentUser?.let {
+            com.example.ui.navigation.NativeNavigationPolicy.has(it, "parent.view_attendance")
+        } == true
+        key(com.example.ui.components.financePresentationScope(state), student.id) {
+            ParentVerifiedRecordsPane(student.id, "today-status", Modifier.weight(1f), canReadAttendance = canReadAttendance)
+        }
     }
 }
 
@@ -594,7 +599,8 @@ internal fun ParentDiaryAndGrowthTab(
                         attendanceDate = day
                         selected = "attendance"
                     } else null
-                    ParentVerifiedRecordsPane(student.id, section, Modifier.weight(1f), onOpenAttendance = openAttendance)
+                    ParentVerifiedRecordsPane(student.id, section, Modifier.weight(1f),
+                        canReadAttendance = canReadAttendance, onOpenAttendance = openAttendance)
                 }
                 else -> ParentVerifiedRecordsPane(student.id, section, Modifier.weight(1f))
             }

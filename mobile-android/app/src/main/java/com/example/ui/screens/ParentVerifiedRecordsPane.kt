@@ -18,6 +18,7 @@ import java.time.LocalDate
 /** Render only records returned for this child; absence is never a synthetic score or health fact. */
 @Composable
 fun ParentVerifiedRecordsPane(studentId: String, section: String, modifier: Modifier = Modifier,
+    canReadAttendance: Boolean = false,
     onOpenAttendance: ((LocalDate) -> Unit)? = null) {
     val captured = remember(studentId, section) { ApiClientProvider.interceptor.captureScope() }
     var dateInput by rememberSaveable(studentId, section) { mutableStateOf("") }
@@ -41,7 +42,7 @@ fun ParentVerifiedRecordsPane(studentId: String, section: String, modifier: Modi
         is JSONArray -> (0 until data.length()).map { data.getJSONObject(it) }
         is JSONObject -> (data.optJSONArray("events") ?: data.optJSONArray("medicine_requests") ?: data.optJSONArray("excuse_requests"))?.let { array -> (0 until array.length()).map { array.getJSONObject(it) } } ?: listOf(data)
         else -> emptyList()
-    }
+    }.filterNot { section == "timeline" && !canReadAttendance && it.text("type") == "ATTENDANCE" }
     LazyColumn(modifier.fillMaxSize().testTag("parent_verified_$section"), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (section == "timeline") item {
             OutlinedTextField(value = dateInput, onValueChange = { dateInput = it.take(10) },
@@ -56,7 +57,14 @@ fun ParentVerifiedRecordsPane(studentId: String, section: String, modifier: Modi
             OutlinedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (section == "today-status") {
                     Text(row.text("date"), style = MaterialTheme.typography.titleMedium)
-                    row.optJSONObject("attendance")?.let { Text("Yoklama: ${it.text("status")}"); it.optional("check_in_time")?.let { time -> Text("Giriş: $time") } } ?: Text("Bugün için yoklama kaydı yok.")
+                    if (canReadAttendance && row.has("attendance")) {
+                        val attendance = row.optJSONObject("attendance")
+                        if (attendance == null) Text("Bugün için yoklama kaydı yok.")
+                        else {
+                            Text("Yoklama: ${attendance.text("status")}")
+                            attendance.optional("check_in_time")?.let { Text("Giriş: $it") }
+                        }
+                    }
                     row.optJSONObject("daily_report")?.let { report ->
                         for ((key, label) in listOf("meal_status" to "Yemek", "sleep_status" to "Uyku", "mood" to "Duygu durumu", "teacher_notes" to "Öğretmen notu")) report.optional(key)?.let { Text("$label: $it") }
                         report.activitiesText()?.let { Text("Etkinlikler: $it") }

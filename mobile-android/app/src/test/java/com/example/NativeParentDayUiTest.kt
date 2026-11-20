@@ -50,7 +50,7 @@ class NativeParentDayUiTest {
             requests.add(uri.toString())
             val data = if (uri.path.endsWith("/timeline")) {
                 val date = uri.rawQuery?.substringAfter("date=") ?: "2026-11-20"
-                """{"student_id":"$child","date":"$date","events":[{"type":"ATTENDANCE","title":"Yoklama kaydı","details":{}}]}"""
+                """{"student_id":"$child","date":"$date","events":[{"type":"ATTENDANCE","title":"Yoklama kaydı","details":{}},{"type":"DAILY_REPORT","title":"Öğretmen günlük raporu","details":{}}]}"""
             } else {
                 val october = uri.rawQuery == "year=2025&month=10"
                 val day = """{"date":"2025-10-07","status":"PRESENT","check_in_time":"08:45","check_out_time":null,"note":"Kayıtlı yoklama notu"}"""
@@ -75,7 +75,8 @@ class NativeParentDayUiTest {
                     }
                 }
             }
-            compose.waitUntil(10_000) { compose.onAllNodesWithText("Yoklama kaydı").fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntil(10_000) { compose.onAllNodesWithText("Öğretmen günlük raporu").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("Yoklama kaydı").assertDoesNotExist()
             compose.onNodeWithText("Aylık yoklamayı aç").assertDoesNotExist()
             compose.onNodeWithText("Yoklama").assertDoesNotExist()
             assertFalse(requests.any { it.contains("/attendance") })
@@ -106,6 +107,7 @@ class NativeParentDayUiTest {
         val second = UUID(41, 2).toString()
         val student = mutableStateOf(first)
         val section = mutableStateOf("today-status")
+        val canReadAttendance = mutableStateOf(false)
         val base = ApiClientProvider.activeBaseUrl
         val interceptor = ApiClientProvider.interceptor
         val previous = listOf(interceptor.authToken, interceptor.tenantId, interceptor.branchId, interceptor.workspaceOrganizationId)
@@ -128,7 +130,8 @@ class NativeParentDayUiTest {
                 else -> "\"Kitap okuma\",\"Çizim\""
             }
             val report = """{"activities":[$activities],"teacher_notes":"Kayıtlı gözlem"}"""
-            val fields = if (uri.path.endsWith("/today-status")) """"daily_report":$report"""
+            val fields = if (uri.path.endsWith("/today-status"))
+                """"daily_report":$report,"attendance":{"status":"PRESENT","check_in_time":"08:45"}"""
                 else """"events":[{"title":"Öğretmen günlük raporu","details":$report}]"""
             val bytes = """{"success":true,"data":{"student_id":"$child","date":"$date",$fields}}""".toByteArray()
             try {
@@ -147,7 +150,9 @@ class NativeParentDayUiTest {
         try {
             compose.setContent {
                 CompositionLocalProvider(LocalDensity provides Density(1f, 2f)) {
-                    Okul360Theme { ParentVerifiedRecordsPane(student.value, section.value) }
+                    Okul360Theme {
+                        ParentVerifiedRecordsPane(student.value, section.value, canReadAttendance = canReadAttendance.value)
+                    }
                 }
             }
             fun awaitText(text: String) {
@@ -155,6 +160,10 @@ class NativeParentDayUiTest {
                 compose.onNodeWithText(text).assertIsDisplayed()
             }
             awaitText("Etkinlikler: Kitap okuma, Çizim")
+            compose.onNodeWithText("Yoklama: PRESENT").assertDoesNotExist()
+            compose.onNodeWithText("Bugün için yoklama kaydı yok.").assertDoesNotExist()
+            compose.runOnIdle { canReadAttendance.value = true }
+            awaitText("Yoklama: PRESENT")
             compose.runOnIdle { section.value = "timeline" }
             awaitText("Etkinlikler: Kitap okuma, Çizim")
             compose.onNodeWithTag("parent_timeline_date").performTextReplacement("2026-11-18")
