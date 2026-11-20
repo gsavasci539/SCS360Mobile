@@ -163,6 +163,7 @@ class NativeMobileParityUiTest {
         compose.onNodeWithTag("hosted_payment").performScrollToNode(hasTestTag("hosted_refresh"))
         compose.onNodeWithTag("hosted_refresh").performScrollTo().assertIsEnabled().performClick()
         compose.waitUntil(15_000) { state.invoices.any { it.student_id == child.id && it.status == "PAID" } }
+        compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag("hosted_status") and hasText("PAID")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("hosted_status").assertTextEquals("PAID")
         compose.onNodeWithTag("hosted_payment").assertExists()
         assertEquals(0, portalReloads)
@@ -171,6 +172,45 @@ class NativeMobileParityUiTest {
         assertTrue(calls.any { it == "POST /api/parent/payments/checkouts/${id(3)}/refresh" })
         assertTrue(calls.none { it.contains("/payments/online/") || it.contains("/my-children") || it.contains(sibling.id) })
         assertTrue(calls.none { it.startsWith("POST") && !it.endsWith("/refresh") })
+    }
+
+    @Test fun parentCanReadSavedCheckoutWhileOnlinePaymentIsUnavailable() {
+        val child = Student(id = id(7), first_name = "Deniz")
+        val user = User(id = id(1), permissions = listOf("parent.view_finances", "parent.make_payment"))
+        parentInvoiceResponse = JSONObject("""{
+            "student_id":"${child.id}","online_payment_available":false,"invoices":[
+                {"debt_id":"${id(5)}","amount":50,"paid_amount":0,"remaining_amount":50,"status":"UNPAID"},
+                {"debt_id":"${id(2)}","amount":100,"paid_amount":0,"remaining_amount":100,"status":"UNPAID"}]
+        }""")
+        val snapshot = runBlocking { NativeParentPortalClient().invoiceSnapshot(child) }
+        val state = Okul360UiState(isLoggedIn = true, currentUser = user, selectedRole = UserRole.PARENT,
+            parentChildren = listOf(child), parentInvoiceStates = mapOf(child.id to ParentInvoiceLoadState.LOADED),
+            parentInvoiceSnapshots = mapOf(child.id to snapshot))
+        val refreshed = mutableListOf<String>()
+        compose.setContent {
+            Okul360Theme {
+                ParentPortalScreen(state, {}, { _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _ -> },
+                    onRefreshInvoices = { refreshed.add(it) }, onLogout = {})
+            }
+        }
+        val list = compose.onNodeWithTag("parent_invoices")
+        val recovery = hasText("Ödeme sonucunu kontrol et")
+        list.performScrollToNode(hasTestTag("parent_invoice_${id(5)}"))
+        compose.onAllNodes(recovery and hasAnyAncestor(hasTestTag("parent_invoice_${id(5)}"))).assertCountEquals(0)
+        list.performScrollToNode(recovery)
+        compose.onAllNodesWithText("Online Öde").assertCountEquals(0)
+        compose.onNode(recovery).assertIsDisplayed().performClick()
+        compose.waitUntil(15_000) { compose.onAllNodesWithTag("hosted_status").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("hosted_status").assertTextEquals("PENDING")
+        compose.onNodeWithText("Kimlik / pasaport numarası").assertDoesNotExist()
+        compose.onNodeWithText("Ödeme sayfasını hazırla / tekrar dene").assertDoesNotExist()
+        paid = true
+        compose.onNodeWithTag("hosted_refresh").assertIsDisplayed().performClick()
+        compose.waitUntil(15_000) { refreshed.size == 1 }
+        compose.onNodeWithTag("hosted_status").assertTextEquals("PAID")
+        assertEquals(listOf(child.id), refreshed)
+        assertEquals(2, calls.count { it == "GET /api/parent/payments/checkouts/${id(3)}" })
+        assertTrue(calls.none { it.startsWith("POST") || it.contains("/payments/online/") })
     }
     @Test @Config(qualifiers = "w780dp-h360dp-land-mdpi")
     fun closeFitsLargeFontLandscapeAndStaleWorkspaceNeverReloads() {

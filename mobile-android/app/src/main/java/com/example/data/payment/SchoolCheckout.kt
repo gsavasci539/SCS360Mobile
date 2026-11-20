@@ -18,8 +18,7 @@ class SchoolCheckout(context: Context, private val debtId: String, private val p
     private val baseUrl = ApiClientProvider.activeBaseUrl
     private val workspace = ApiClientProvider.interceptor.workspaceOrganizationId
     private val tenant = ApiClientProvider.interceptor.tenantId
-    private val fingerprint = java.security.MessageDigest.getInstance("SHA-256")
-        .digest("$baseUrl|$userId|$tenant|$workspace|$debtId".toByteArray()).joinToString("") { "%02x".format(it) }
+    private val fingerprint = attemptKey(baseUrl, userId, tenant, workspace, debtId)
     private var pending: JSONObject? = null
     private val client = ApiClientProvider.createOkHttpClient()
     private val paymentsPath = if (parentStudentId == null) "payments/online" else "parent/payments"
@@ -30,6 +29,7 @@ class SchoolCheckout(context: Context, private val debtId: String, private val p
         require(actor.isNotBlank()) { "Oturum gerekli" }
     }
     fun saved(): JSONObject? = prefs.getString(fingerprint, null)?.let { JSONObject(it) }
+    suspend fun status(): JSONObject? = saved()?.let { validate(call("$paymentsPath/checkouts/${it.getString("request_id")}")) }
     private fun sameSession() = scope.ensureCurrent()
     private suspend fun call(path: String, body: JSONObject? = null): JSONObject = scope.io {
         sameSession()
@@ -72,8 +72,7 @@ class SchoolCheckout(context: Context, private val debtId: String, private val p
     }
     suspend fun refresh(): JSONObject? = saved()?.let { validate(call("$paymentsPath/checkouts/${it.getString("request_id")}/refresh", JSONObject())) }
     suspend fun clearFailed() {
-        val previous = saved() ?: return
-        val result = validate(call("$paymentsPath/checkouts/${previous.getString("request_id")}"))
+        val result = status() ?: return
         check(result.optString("status") in listOf("FAILED", "REFUNDED")) { "Önceki ödeme hâlâ kontrol edilmeli" }
         check(prefs.edit().remove(fingerprint).commit()) { "Ödeme kaydı güncellenemedi" }
         pending = null
@@ -91,5 +90,18 @@ class SchoolCheckout(context: Context, private val debtId: String, private val p
             ((host == "app.sipay.com.tr" || host == "provisioning.sipay.com.tr") && parsed.path.startsWith("/ccpayment/makepayment/"))
         check(allowed && parsed.scheme == "https" && parsed.userInfo == null && parsed.fragment == null && parsed.port in listOf(-1, 443)) { "Ödeme adresi doğrulanamadı" }
         return url
+    }
+
+    companion object {
+        private fun attemptKey(baseUrl: String, userId: String, tenant: String?, workspace: String?, debtId: String): String =
+            java.security.MessageDigest.getInstance("SHA-256")
+                .digest("$baseUrl|$userId|$tenant|$workspace|$debtId".toByteArray()).joinToString("") { "%02x".format(it) }
+
+        internal fun hasSavedAttempt(context: Context, userId: String, debtId: String): Boolean {
+            val interceptor = ApiClientProvider.interceptor
+            if (userId.isBlank() || interceptor.authToken.isNullOrBlank()) return false
+            val key = attemptKey(ApiClientProvider.activeBaseUrl, userId, interceptor.tenantId, interceptor.workspaceOrganizationId, debtId)
+            return context.getSharedPreferences("school_checkout_v1", Context.MODE_PRIVATE).contains(key)
+        }
     }
 }

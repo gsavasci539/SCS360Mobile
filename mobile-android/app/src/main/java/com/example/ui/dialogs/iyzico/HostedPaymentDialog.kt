@@ -23,7 +23,13 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 @Composable
-fun HostedPaymentDialog(debtId: String, onDismiss: () -> Unit, onReconciled: () -> Unit = {}, parentStudentId: String? = null) {
+fun HostedPaymentDialog(
+    debtId: String,
+    onDismiss: () -> Unit,
+    onReconciled: () -> Unit = {},
+    parentStudentId: String? = null,
+    recoveryOnly: Boolean = false,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val captured = remember(debtId, parentStudentId) { ApiClientProvider.interceptor.captureScope() }
@@ -56,7 +62,16 @@ fun HostedPaymentDialog(debtId: String, onDismiss: () -> Unit, onReconciled: () 
             finally { if (captured.current()) busy = false }
         }
     }
-    LaunchedEffect(debtId, parentStudentId) { run { service -> debt = service.debt(); if (service.saved() != null) result = service.refresh() } }
+    LaunchedEffect(debtId, parentStudentId, recoveryOnly) {
+        run { service ->
+            if (recoveryOnly) {
+                result = service.status() ?: error("Kayıtlı ödeme işlemi bulunamadı.")
+            } else {
+                debt = service.debt()
+                if (service.saved() != null) result = service.refresh()
+            }
+        }
+    }
     if (!captured.current()) { LaunchedEffect(captured) { dismiss() }; return }
     val paid = result?.optString("status") == "PAID"
     val shownResult = result
@@ -68,12 +83,18 @@ fun HostedPaymentDialog(debtId: String, onDismiss: () -> Unit, onReconciled: () 
             shape = androidx.compose.material3.MaterialTheme.shapes.large) {
             androidx.compose.foundation.lazy.LazyColumn(Modifier.padding(16.dp).testTag("hosted_payment"), state = listState,
                 verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                item(key = "heading") { Text("Kurum güvenli ödemesi", style = androidx.compose.material3.MaterialTheme.typography.titleLarge) }
-                item(key = "instruction") { Text("Kart bilgileri sağlayıcının güvenli sayfasında girilir. Tahsilat yalnız sunucu doğrulamasıyla kaydedilir.") }
+                item(key = "heading") { Text(if (recoveryOnly) "Kayıtlı ödeme sonucu" else "Kurum güvenli ödemesi", style = androidx.compose.material3.MaterialTheme.typography.titleLarge) }
+                if (!recoveryOnly) item(key = "instruction") { Text("Kart bilgileri sağlayıcının güvenli sayfasında girilir. Tahsilat yalnız sunucu doğrulamasıyla kaydedilir.") }
                 item(key = "remaining") { debt?.let { Text("Kalan: ${it.optString("remaining_amount")} TRY") } }
                 item(key = "error") { if (error.isNotBlank()) Text(error) }
                 item(key = "status") { shownResult?.let { Text(it.optString("message", it.optString("status")), Modifier.testTag("hosted_status")) } }
-                if (!paid) {
+                if (recoveryOnly && !paid) item(key = "refresh") {
+                    Button(enabled = !busy, onClick = { run { service ->
+                        result = service.status() ?: error("Kayıtlı ödeme işlemi bulunamadı.")
+                        if (result?.optString("status") == "PAID") reload()
+                    } }, modifier = Modifier.heightIn(min = 48.dp).testTag("hosted_refresh")) { Text("Sunucudan sonucu kontrol et") }
+                }
+                if (!paid && !recoveryOnly) {
                     item(key = "identity") { OutlinedTextField(identity, { identity = it }, enabled = !busy, label = { Text("Kimlik / pasaport numarası") }, modifier = Modifier.fillMaxWidth()) }
                     item(key = "phone") { OutlinedTextField(phone, { phone = it }, enabled = !busy, label = { Text("Telefon") }, modifier = Modifier.fillMaxWidth()) }
                     item(key = "address") { OutlinedTextField(address, { address = it }, enabled = !busy, label = { Text("Fatura adresi") }, modifier = Modifier.fillMaxWidth()) }

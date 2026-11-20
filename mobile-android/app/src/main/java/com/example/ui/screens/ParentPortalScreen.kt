@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.*
+import com.example.data.payment.SchoolCheckout
 import com.example.ui.components.AttendanceMonthlyCalendarView
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import java.time.LocalDate
@@ -68,6 +69,8 @@ enum class ParentNavTab(
     AI_CHATBOT("AI Asistan", Icons.Default.AutoAwesome, Icons.Outlined.AutoAwesome),
     DIARY("Gelişim", Icons.Default.AutoStories, Icons.Outlined.AutoStories)
 }
+
+private data class ParentCheckoutRequest(val invoice: Invoice, val recoveryOnly: Boolean = false)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -145,7 +148,7 @@ fun ParentPortalScreen(
     var showLeaveDialog by remember(presentationScope, selectedChildId) { mutableStateOf(false) }
     var showPickupDialog by remember(presentationScope, selectedChildId) { mutableStateOf(false) }
     var showMessageDialog by remember(presentationScope, selectedChildId) { mutableStateOf(false) }
-    var showPaymentDialogForInvoice by remember(presentationScope, selectedChildId) { mutableStateOf<Invoice?>(null) }
+    var checkoutRequest by remember(presentationScope, selectedChildId) { mutableStateOf<ParentCheckoutRequest?>(null) }
     var showReceiptForInvoice by remember(presentationScope, selectedChildId) { mutableStateOf<Invoice?>(null) }
 
     val parentActions = remember(presentationScope, selectedChildId) {
@@ -466,7 +469,7 @@ fun ParentPortalScreen(
                         onOpenLeave = { showLeaveDialog = true },
                         onOpenPickup = { showPickupDialog = true },
                         onOpenMessage = { selectedTab = ParentNavTab.MESSAGING },
-                        onPayClicked = { invoice -> showPaymentDialogForInvoice = invoice },
+                        onPayClicked = { invoice -> checkoutRequest = ParentCheckoutRequest(invoice) },
                         onNavigateToPayments = { selectedTab = ParentNavTab.PAYMENTS },
                         onOpenConsents = onOpenConsents,
                         onOpenClubs = onOpenClubs,
@@ -485,8 +488,9 @@ fun ParentPortalScreen(
                     ParentNavTab.PAYMENTS -> ParentPaymentsTab(
                         student = currentChild,
                         state = state,
-                        onPayClicked = { invoice -> showPaymentDialogForInvoice = invoice },
-                        onReceiptClicked = { invoice -> showReceiptForInvoice = invoice }
+                        onPayClicked = { invoice -> checkoutRequest = ParentCheckoutRequest(invoice) },
+                        onReceiptClicked = { invoice -> showReceiptForInvoice = invoice },
+                        onRecoverCheckout = { invoice -> checkoutRequest = ParentCheckoutRequest(invoice, recoveryOnly = true) },
                     )
                     ParentNavTab.DIARY -> ParentDiaryAndGrowthTab(
                         student = currentChild,
@@ -505,11 +509,13 @@ fun ParentPortalScreen(
             if (showLeaveDialog && currentChild != null) com.example.ui.dialogs.NativeParentRequestDialog(currentChild.id, state.currentUser, "EXCUSE", { showLeaveDialog = false }, onRefresh)
             if (showPickupDialog && currentChild != null) com.example.ui.dialogs.NativeParentRequestDialog(currentChild.id, state.currentUser, "PICKUP", { showPickupDialog = false }, onRefresh)
 
-            showPaymentDialogForInvoice?.takeIf { NativeNavigationPolicy.has(state.currentUser, "parent.make_payment") }?.let { invoice ->
+            checkoutRequest?.takeIf { NativeNavigationPolicy.has(state.currentUser, "parent.make_payment") }?.let { request ->
+                val invoice = request.invoice
                 if (invoice.student_id == currentChild?.id && state.parentChildren.any { it.id == invoice.student_id }) {
                     com.example.ui.dialogs.iyzico.HostedPaymentDialog(invoice.id,
-                        onDismiss = { showPaymentDialogForInvoice = null },
-                        onReconciled = { onRefreshInvoices(invoice.student_id) }, parentStudentId = invoice.student_id)
+                        onDismiss = { checkoutRequest = null },
+                        onReconciled = { onRefreshInvoices(invoice.student_id) },
+                        parentStudentId = invoice.student_id, recoveryOnly = request.recoveryOnly)
                 }
             }
 
@@ -628,7 +634,8 @@ internal fun ParentPaymentsTab(
     student: Student,
     state: Okul360UiState,
     onPayClicked: (Invoice) -> Unit,
-    onReceiptClicked: (Invoice) -> Unit
+    onReceiptClicked: (Invoice) -> Unit,
+    onRecoverCheckout: (Invoice) -> Unit = {},
 ) {
     val invoiceListState = key(student.id) { rememberLazyListState() }
     val snapshot = state.parentInvoiceSnapshots[student.id]
@@ -645,7 +652,9 @@ internal fun ParentPaymentsTab(
         return
     }
 
-    val canMakePayment = snapshot.onlinePaymentAvailable && NativeNavigationPolicy.has(state.currentUser, "parent.make_payment")
+    val canCheckPayment = NativeNavigationPolicy.has(state.currentUser, "parent.make_payment")
+    val canMakePayment = snapshot.onlinePaymentAvailable && canCheckPayment
+    val context = LocalContext.current
     val currency = remember {
         NumberFormat.getCurrencyInstance(Locale.forLanguageTag("tr-TR")).apply {
             minimumFractionDigits = 2
@@ -703,13 +712,17 @@ internal fun ParentPaymentsTab(
                     Text("Tutar: ${currency.format(row.amount)}")
                     Text("Ödenen: ${currency.format(row.paid)}")
                     Text("Kalan: ${currency.format(row.remaining)}", fontWeight = FontWeight.Bold)
-                    when {
-                        invoice.status == "PAID" -> OutlinedButton(
+                    if (invoice.status == "PAID") OutlinedButton(
                             onClick = { onReceiptClicked(invoice) }, modifier = Modifier.heightIn(min = 48.dp)
                         ) { Text("Makbuz İncele") }
-                        canMakePayment && row.isPayable -> Button(
+                    if (canMakePayment && row.isPayable) {
+                        Button(
                             onClick = { onPayClicked(invoice) }, modifier = Modifier.heightIn(min = 48.dp)
                         ) { Text("Online Öde") }
+                    } else if (canCheckPayment && SchoolCheckout.hasSavedAttempt(context, state.currentUser.id, invoice.id)) {
+                        OutlinedButton(
+                            onClick = { onRecoverCheckout(invoice) }, modifier = Modifier.heightIn(min = 48.dp)
+                        ) { Text("Ödeme sonucunu kontrol et") }
                     }
                 }
             }
