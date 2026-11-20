@@ -498,6 +498,7 @@ fun ParentPortalScreen(
                         onRecoverCheckout = { invoice, reference ->
                             checkoutRequest = ParentCheckoutRequest(invoice, recoveryOnly = true, reference = reference)
                         },
+                        onRefresh = { onRefreshInvoices(currentChild.id) },
                     )
                     ParentNavTab.DIARY -> ParentDiaryAndGrowthTab(
                         student = currentChild,
@@ -645,24 +646,22 @@ internal fun ParentPaymentsTab(
     onPayClicked: (Invoice) -> Unit,
     onReceiptClicked: (Invoice) -> Unit,
     onRecoverCheckout: (Invoice, SchoolCheckoutReference?) -> Unit = { _, _ -> },
+    onRefresh: () -> Unit = {},
 ) {
+    if (!NativeNavigationPolicy.canReadParentFinances(state.currentUser)) {
+        Text("Borçları görüntüleme yetkiniz yok.", modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 48.dp))
+        return
+    }
     val invoiceListState = key(student.id) { rememberLazyListState() }
     val snapshot = state.parentInvoiceSnapshots[student.id]
-    val loadMessage = if (!NativeNavigationPolicy.canReadParentFinances(state.currentUser)) {
-        "Borçları görüntüleme yetkiniz yok."
-    } else when (state.parentInvoiceStates[student.id]) {
+    val loadState = state.parentInvoiceStates[student.id]
+    val loadMessage = when (loadState) {
         ParentInvoiceLoadState.LOADING -> "Borçlar yükleniyor."
         ParentInvoiceLoadState.FAILED -> "Borçlar yüklenemedi. Yeniden deneyin."
         ParentInvoiceLoadState.LOADED -> null
         null -> "Borçlar henüz doğrulanmadı."
     }
-    if (loadMessage != null || snapshot == null) {
-        Text(loadMessage ?: "Borçlar henüz doğrulanmadı.", modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 48.dp))
-        return
-    }
-
     val canCheckPayment = NativeNavigationPolicy.has(state.currentUser, "parent.make_payment")
-    val canMakePayment = snapshot.onlinePaymentAvailable && canCheckPayment
     val context = LocalContext.current
     val currency = remember {
         NumberFormat.getCurrencyInstance(Locale.forLanguageTag("tr-TR")).apply {
@@ -670,8 +669,6 @@ internal fun ParentPaymentsTab(
             maximumFractionDigits = 2
         }
     }
-    val totalRemaining = snapshot.rows.filter { it.isPayable }.sumOf { it.remaining }
-
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("parent_invoices"),
         state = invoiceListState,
@@ -690,7 +687,19 @@ internal fun ParentPaymentsTab(
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (snapshot.rows.isNotEmpty()) Text("Ödenebilir kalan borç: ${currency.format(totalRemaining)}")
+        }
+        item {
+            OutlinedButton(onClick = onRefresh, enabled = loadState != ParentInvoiceLoadState.LOADING,
+                modifier = Modifier.heightIn(min = 48.dp)) { Text("Borçları yenile") }
+        }
+        if (loadMessage != null || snapshot == null) {
+            item { Text(loadMessage ?: "Borçlar henüz doğrulanmadı.") }
+            return@LazyColumn
+        }
+        val canMakePayment = snapshot.onlinePaymentAvailable && canCheckPayment
+        if (snapshot.rows.isNotEmpty()) item {
+            val totalRemaining = snapshot.rows.filter { it.isPayable }.sumOf { it.remaining }
+            Text("Ödenebilir kalan borç: ${currency.format(totalRemaining)}")
         }
         if (snapshot.rows.isEmpty()) item { Text("Kayıtlı borç bulunamadı") }
 

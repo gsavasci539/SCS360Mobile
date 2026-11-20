@@ -251,6 +251,20 @@ class NativeMobileParityUiTest {
         assertEquals(listOf("POST /api/parent/payments/initialize"), calls.filter { it.startsWith("POST") })
         assertTrue(calls.none { it.contains("/checkouts/") })
         assertTrue(preferences.all.isEmpty())
+
+        parentInvoiceResponse!!.getJSONArray("invoices").getJSONObject(0).put("payment_in_progress", false)
+        val reload = hasText("Borçları yenile")
+        list.performScrollToNode(reload)
+        compose.onNode(reload).performScrollTo().assertIsEnabled().performClick()
+        compose.waitUntil(20_000) {
+            state.parentInvoiceStates[child.id] == ParentInvoiceLoadState.LOADED &&
+                state.parentInvoiceSnapshots[child.id]?.rows?.single()?.paymentInProgress == false
+        }
+        list.performScrollToNode(hasText("Online Öde"))
+        compose.onNodeWithText("Online Öde").assertExists()
+        assertEquals(listOf(child.id, child.id), refreshed)
+        assertEquals(4, calls.count { it == "GET /api/parent/child/${child.id}/financial-invoices" })
+        assertEquals(1, calls.count { it.startsWith("POST") })
     }
 
     @Test fun parentCanReadSavedCheckoutWhileOnlinePaymentIsUnavailable() {
