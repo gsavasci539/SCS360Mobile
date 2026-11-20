@@ -12,6 +12,8 @@ import java.util.UUID
 
 internal const val SCHOOL_CHECKOUT_COMPLETED = "COMPLETED"
 
+data class SchoolCheckoutReference(val requestId: UUID, val debtId: UUID, val amount: BigDecimal)
+
 class SchoolCheckout(context: Context, private val debtId: String, private val parentStudentId: String? = null) {
     private val scope = NativeRequestScope.bound() ?: ApiClientProvider.interceptor.captureScope()
     private val prefs = context.getSharedPreferences("school_checkout_v1", Context.MODE_PRIVATE)
@@ -31,7 +33,17 @@ class SchoolCheckout(context: Context, private val debtId: String, private val p
         require(actor.isNotBlank()) { "Oturum gerekli" }
     }
     fun saved(): JSONObject? = prefs.getString(fingerprint, null)?.let { JSONObject(it) }
-    suspend fun status(): JSONObject? = saved()?.let { validate(call("$paymentsPath/checkouts/${it.getString("request_id")}")) }
+    suspend fun status(reference: SchoolCheckoutReference? = null): JSONObject? {
+        if (reference == null) {
+            val previous = saved() ?: return null
+            val requestId = previous.getString("request_id")
+            return validate(call("$paymentsPath/checkouts/$requestId"), requestId, BigDecimal(previous.getString("amount")))
+        }
+        check(parentStudentId != null && reference.debtId.toString() == debtId && reference.amount.signum() > 0) {
+            "Ödeme kaydı seçili borçla eşleşmiyor"
+        }
+        return validate(call("$paymentsPath/checkouts/${reference.requestId}"), reference.requestId.toString(), reference.amount)
+    }
     private fun sameSession() = scope.ensureCurrent()
     private suspend fun call(path: String, body: JSONObject? = null): JSONObject = scope.io {
         sameSession()
@@ -56,8 +68,12 @@ class SchoolCheckout(context: Context, private val debtId: String, private val p
     }
     private fun validate(result: JSONObject): JSONObject {
         val previous = saved() ?: error("Ödeme kaydı bulunamadı")
-        check(result.optString("id", result.optString("conversation_id")) == previous.getString("request_id") && result.getString("debt_id") == debtId &&
-            BigDecimal(result.getString("amount")).compareTo(BigDecimal(previous.getString("amount"))) == 0) { "Ödeme sonucu eşleşmiyor" }
+        return validate(result, previous.getString("request_id"), BigDecimal(previous.getString("amount")))
+    }
+
+    private fun validate(result: JSONObject, requestId: String, amount: BigDecimal): JSONObject {
+        check(result.optString("id", result.optString("conversation_id")) == requestId && result.getString("debt_id") == debtId &&
+            BigDecimal(result.getString("amount")).compareTo(amount) == 0) { "Ödeme sonucu eşleşmiyor" }
         if (result.optString("status") == SCHOOL_CHECKOUT_COMPLETED) {
             val paymentId = result.optString("payment_id")
             check(runCatching { UUID.fromString(paymentId).toString().equals(paymentId, ignoreCase = true) }.getOrDefault(false)) {
@@ -104,11 +120,24 @@ class SchoolCheckout(context: Context, private val debtId: String, private val p
             java.security.MessageDigest.getInstance("SHA-256")
                 .digest("$baseUrl|$userId|$tenant|$workspace|$debtId".toByteArray()).joinToString("") { "%02x".format(it) }
 
-        internal fun hasSavedAttempt(context: Context, userId: String, debtId: String): Boolean {
+        internal fun hasSavedAttempt(
+            context: Context,
+            userId: String,
+            debtId: String,
+            reference: SchoolCheckoutReference? = null,
+        ): Boolean {
             val interceptor = ApiClientProvider.interceptor
             if (userId.isBlank() || interceptor.authToken.isNullOrBlank()) return false
             val key = attemptKey(ApiClientProvider.activeBaseUrl, userId, interceptor.tenantId, interceptor.workspaceOrganizationId, debtId)
-            return context.getSharedPreferences("school_checkout_v1", Context.MODE_PRIVATE).contains(key)
+            val preferences = context.getSharedPreferences("school_checkout_v1", Context.MODE_PRIVATE)
+            if (reference == null) return preferences.contains(key)
+            val raw = preferences.getString(key, null) ?: return false
+            return runCatching {
+                val saved = JSONObject(raw)
+                saved.getString("request_id") == reference.requestId.toString() &&
+                    saved.getString("debt_id") == reference.debtId.toString() &&
+                    BigDecimal(saved.getString("amount")).compareTo(reference.amount) == 0
+            }.getOrDefault(false)
         }
     }
 }

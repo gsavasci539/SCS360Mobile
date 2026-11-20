@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.*
 import com.example.data.payment.SchoolCheckout
+import com.example.data.payment.SchoolCheckoutReference
 import com.example.ui.components.AttendanceMonthlyCalendarView
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import java.time.LocalDate
@@ -70,7 +71,11 @@ enum class ParentNavTab(
     DIARY("Gelişim", Icons.Default.AutoStories, Icons.Outlined.AutoStories)
 }
 
-private data class ParentCheckoutRequest(val invoice: Invoice, val recoveryOnly: Boolean = false)
+private data class ParentCheckoutRequest(
+    val invoice: Invoice,
+    val recoveryOnly: Boolean = false,
+    val reference: SchoolCheckoutReference? = null,
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -490,7 +495,9 @@ fun ParentPortalScreen(
                         state = state,
                         onPayClicked = { invoice -> checkoutRequest = ParentCheckoutRequest(invoice) },
                         onReceiptClicked = { invoice -> showReceiptForInvoice = invoice },
-                        onRecoverCheckout = { invoice -> checkoutRequest = ParentCheckoutRequest(invoice, recoveryOnly = true) },
+                        onRecoverCheckout = { invoice, reference ->
+                            checkoutRequest = ParentCheckoutRequest(invoice, recoveryOnly = true, reference = reference)
+                        },
                     )
                     ParentNavTab.DIARY -> ParentDiaryAndGrowthTab(
                         student = currentChild,
@@ -515,7 +522,8 @@ fun ParentPortalScreen(
                     com.example.ui.dialogs.iyzico.HostedPaymentDialog(invoice.id,
                         onDismiss = { checkoutRequest = null },
                         onReconciled = { onRefreshInvoices(invoice.student_id) },
-                        parentStudentId = invoice.student_id, recoveryOnly = request.recoveryOnly)
+                        parentStudentId = invoice.student_id, recoveryOnly = request.recoveryOnly,
+                        recoveryReference = request.reference)
                 }
             }
 
@@ -636,7 +644,7 @@ internal fun ParentPaymentsTab(
     state: Okul360UiState,
     onPayClicked: (Invoice) -> Unit,
     onReceiptClicked: (Invoice) -> Unit,
-    onRecoverCheckout: (Invoice) -> Unit = {},
+    onRecoverCheckout: (Invoice, SchoolCheckoutReference?) -> Unit = { _, _ -> },
 ) {
     val invoiceListState = key(student.id) { rememberLazyListState() }
     val snapshot = state.parentInvoiceSnapshots[student.id]
@@ -716,13 +724,16 @@ internal fun ParentPaymentsTab(
                     if (invoice.status == "PAID" || row.paid.signum() > 0) OutlinedButton(
                             onClick = { onReceiptClicked(invoice) }, modifier = Modifier.heightIn(min = 48.dp)
                         ) { Text("Makbuz İncele") }
-                    if (canMakePayment && row.isPayable) {
+                    val openCheckout = row.openCheckout
+                    val alreadySaved = canCheckPayment &&
+                        SchoolCheckout.hasSavedAttempt(context, state.currentUser.id, invoice.id, openCheckout)
+                    if (canMakePayment && row.isPayable && (openCheckout == null || alreadySaved)) {
                         Button(
                             onClick = { onPayClicked(invoice) }, modifier = Modifier.heightIn(min = 48.dp)
-                        ) { Text("Online Öde") }
-                    } else if (canCheckPayment && SchoolCheckout.hasSavedAttempt(context, state.currentUser.id, invoice.id)) {
+                        ) { Text(if (openCheckout == null) "Online Öde" else "Ödeme işlemine dön") }
+                    } else if (canCheckPayment && (openCheckout != null || alreadySaved)) {
                         OutlinedButton(
-                            onClick = { onRecoverCheckout(invoice) }, modifier = Modifier.heightIn(min = 48.dp)
+                            onClick = { onRecoverCheckout(invoice, row.openCheckout) }, modifier = Modifier.heightIn(min = 48.dp)
                         ) { Text("Ödeme sonucunu kontrol et") }
                     }
                 }

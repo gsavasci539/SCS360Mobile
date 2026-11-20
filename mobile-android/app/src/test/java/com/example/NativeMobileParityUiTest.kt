@@ -182,14 +182,32 @@ class NativeMobileParityUiTest {
     }
 
     @Test fun parentCanReadSavedCheckoutWhileOnlinePaymentIsUnavailable() {
+        verifyParentReadsCheckout(fromServer = false)
+    }
+
+    @Test fun parentFindsOpenCheckoutOnAnotherDevice() {
+        verifyParentReadsCheckout(fromServer = true, hasLocalAttempt = false)
+    }
+
+    @Test fun parentCanContinueOpenCheckoutOnOriginalDevice() {
+        verifyParentReadsCheckout(fromServer = true)
+    }
+
+    private fun verifyParentReadsCheckout(fromServer: Boolean, hasLocalAttempt: Boolean = true) {
         val child = Student(id = id(7), first_name = "Deniz")
         val user = User(id = id(1), permissions = listOf("parent.view_finances", "parent.make_payment"))
+        val preferences = RuntimeEnvironment.getApplication().getSharedPreferences("school_checkout_v1", 0)
+        if (!hasLocalAttempt) assertTrue(preferences.edit().clear().commit())
         parentInvoiceResponse = JSONObject("""{
-            "student_id":"${child.id}","online_payment_available":false,"invoices":[
-                {"debt_id":"${id(5)}","amount":50,"paid_amount":0,"remaining_amount":50,"status":"UNPAID"},
+            "student_id":"${child.id}","online_payment_available":$fromServer,"invoices":[
+                {"debt_id":"${id(5)}","amount":50,"paid_amount":0,"remaining_amount":50,"status":"CANCELLED"},
                 {"debt_id":"${id(2)}","amount":100,"paid_amount":0,"remaining_amount":100,"status":"UNPAID"}]
-        }""")
+        }""").apply {
+            if (fromServer) getJSONArray("invoices").getJSONObject(1).put("open_checkout",
+                JSONObject().put("request_id", id(3)).put("debt_id", id(2)).put("amount", "100.00"))
+        }
         val snapshot = runBlocking { NativeParentPortalClient().invoiceSnapshot(child) }
+        assertEquals(fromServer, snapshot.rows.last().openCheckout != null)
         val state = Okul360UiState(isLoggedIn = true, currentUser = user, selectedRole = UserRole.PARENT,
             parentChildren = listOf(child), parentInvoiceStates = mapOf(child.id to ParentInvoiceLoadState.LOADED),
             parentInvoiceSnapshots = mapOf(child.id to snapshot))
@@ -201,13 +219,24 @@ class NativeMobileParityUiTest {
             }
         }
         val list = compose.onNodeWithTag("parent_invoices")
+        if (fromServer && hasLocalAttempt) {
+            val continuation = hasText("Ödeme işlemine dön")
+            list.performScrollToNode(continuation)
+            compose.onNode(continuation).assertIsDisplayed()
+            return
+        }
         val recovery = hasText("Ödeme sonucunu kontrol et")
         list.performScrollToNode(hasTestTag("parent_invoice_${id(5)}"))
         compose.onAllNodes(recovery and hasAnyAncestor(hasTestTag("parent_invoice_${id(5)}"))).assertCountEquals(0)
         list.performScrollToNode(recovery)
         compose.onAllNodesWithText("Online Öde").assertCountEquals(0)
         compose.onNode(recovery).assertIsDisplayed().performClick()
-        compose.waitUntil(15_000) { compose.onAllNodesWithTag("hosted_status").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(20_000) { calls.contains("GET /api/parent/payments/checkouts/${id(3)}") }
+        compose.waitUntil(20_000) {
+            runCatching {
+                compose.onNodeWithTag("hosted_payment").performScrollToNode(hasTestTag("hosted_status"))
+            }.isSuccess
+        }
         compose.onNodeWithTag("hosted_status").assertTextEquals("PENDING")
         compose.onNodeWithText("Kimlik / pasaport numarası").assertDoesNotExist()
         compose.onNodeWithText("Ödeme sayfasını hazırla / tekrar dene").assertDoesNotExist()
@@ -219,6 +248,7 @@ class NativeMobileParityUiTest {
         assertEquals(listOf(child.id), refreshed)
         assertEquals(2, calls.count { it == "GET /api/parent/payments/checkouts/${id(3)}" })
         assertTrue(calls.none { it.startsWith("POST") || it.contains("/payments/online/") })
+        if (!hasLocalAttempt) assertTrue(preferences.all.isEmpty())
     }
     @Test fun completedStatusWithoutRecordedPaymentNeverShowsSuccess() {
         paid = true

@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.data.payment.SchoolCheckout
+import com.example.data.payment.SchoolCheckoutReference
 import com.example.data.payment.SCHOOL_CHECKOUT_COMPLETED
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -30,6 +31,7 @@ fun HostedPaymentDialog(
     onReconciled: () -> Unit = {},
     parentStudentId: String? = null,
     recoveryOnly: Boolean = false,
+    recoveryReference: SchoolCheckoutReference? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -63,10 +65,10 @@ fun HostedPaymentDialog(
             finally { if (captured.current()) busy = false }
         }
     }
-    LaunchedEffect(debtId, parentStudentId, recoveryOnly) {
+    LaunchedEffect(debtId, parentStudentId, recoveryOnly, recoveryReference) {
         run { service ->
             if (recoveryOnly) {
-                result = service.status() ?: error("Kayıtlı ödeme işlemi bulunamadı.")
+                result = service.status(recoveryReference) ?: error("Kayıtlı ödeme işlemi bulunamadı.")
             } else {
                 debt = service.debt()
                 if (service.saved() != null) result = service.refresh()
@@ -91,7 +93,7 @@ fun HostedPaymentDialog(
                 item(key = "status") { shownResult?.let { Text(it.optString("message", it.optString("status")), Modifier.testTag("hosted_status")) } }
                 if (recoveryOnly && !paid) item(key = "refresh") {
                     Button(enabled = !busy, onClick = { run { service ->
-                        result = service.status() ?: error("Kayıtlı ödeme işlemi bulunamadı.")
+                        result = service.status(recoveryReference) ?: error("Kayıtlı ödeme işlemi bulunamadı.")
                         if (result?.optString("status") == SCHOOL_CHECKOUT_COMPLETED) reload()
                     } }, modifier = Modifier.heightIn(min = 48.dp).testTag("hosted_refresh")) { Text("Sunucudan sonucu kontrol et") }
                 }

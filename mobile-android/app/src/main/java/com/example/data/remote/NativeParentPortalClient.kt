@@ -3,6 +3,7 @@ package com.example.data.remote
 import com.example.data.model.Invoice
 import com.example.data.model.ParentAttendanceMonth
 import com.example.data.model.Student
+import com.example.data.payment.SchoolCheckoutReference
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -28,6 +29,7 @@ data class ParentInvoiceRow(
     val amount: BigDecimal,
     val paid: BigDecimal,
     val remaining: BigDecimal,
+    val openCheckout: SchoolCheckoutReference? = null,
 ) {
     val isPayable: Boolean
         get() = remaining.signum() > 0 && invoice.status in setOf("UNPAID", "PARTIALLY_PAID", "OVERDUE")
@@ -172,7 +174,17 @@ class NativeParentPortalClient {
                 amount = amount.toDouble(), paid_amount = paid.toDouble(), status = row.getString("status"),
                 description = if (row.isNull("description")) "" else row.getString("description"),
                 due_date = if (row.isNull("due_date")) "" else row.getString("due_date"))
-            ParentInvoiceRow(invoice, if (row.isNull("debt_type")) null else row.getString("debt_type"), amount, paid, remaining)
+            val checkout = if (row.isNull("open_checkout")) null else row.getJSONObject("open_checkout").let { reference ->
+                check(reference.getString("debt_id") == debt) { "Ödeme kaydı seçili borçla eşleşmiyor" }
+                val requestId = reference.getString("request_id")
+                val identifier = UUID.fromString(requestId)
+                val checkoutAmount = BigDecimal(reference.getString("amount"))
+                check(identifier.toString() == requestId && checkoutAmount.signum() > 0 && checkoutAmount.scale() == 2) {
+                    "Açık ödeme bilgileri doğrulanamadı"
+                }
+                SchoolCheckoutReference(identifier, UUID.fromString(debt), checkoutAmount)
+            }
+            ParentInvoiceRow(invoice, if (row.isNull("debt_type")) null else row.getString("debt_type"), amount, paid, remaining, checkout)
         }
         return ParentInvoiceSnapshot(invoices, value.opt("online_payment_available") == true)
     }
