@@ -10,6 +10,8 @@ import org.json.JSONObject
 import java.math.BigDecimal
 import java.util.UUID
 
+internal const val SCHOOL_CHECKOUT_COMPLETED = "COMPLETED"
+
 class SchoolCheckout(context: Context, private val debtId: String, private val parentStudentId: String? = null) {
     private val scope = NativeRequestScope.bound() ?: ApiClientProvider.interceptor.captureScope()
     private val prefs = context.getSharedPreferences("school_checkout_v1", Context.MODE_PRIVATE)
@@ -56,7 +58,12 @@ class SchoolCheckout(context: Context, private val debtId: String, private val p
         val previous = saved() ?: error("Ödeme kaydı bulunamadı")
         check(result.optString("id", result.optString("conversation_id")) == previous.getString("request_id") && result.getString("debt_id") == debtId &&
             BigDecimal(result.getString("amount")).compareTo(BigDecimal(previous.getString("amount"))) == 0) { "Ödeme sonucu eşleşmiyor" }
-        if (result.optString("status") == "PAID") check(!result.isNull("payment_id") && result.optString("payment_id").isNotBlank()) { "Tahsilat doğrulanamadı" }
+        if (result.optString("status") == SCHOOL_CHECKOUT_COMPLETED) {
+            val paymentId = result.optString("payment_id")
+            check(runCatching { UUID.fromString(paymentId).toString().equals(paymentId, ignoreCase = true) }.getOrDefault(false)) {
+                "Tahsilat doğrulanamadı"
+            }
+        }
         return result
     }
     suspend fun start(amount: String, buyer: JSONObject): JSONObject {

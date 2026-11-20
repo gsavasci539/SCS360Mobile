@@ -40,6 +40,7 @@ class NativeMobileParityUiTest {
     private var oldFont = 1f
     private val calls = CopyOnWriteArrayList<String>()
     @Volatile private var paid = false
+    @Volatile private var omitPaymentId = false
     @Volatile private var sentMessage: JSONObject? = null
     @Volatile private var dropMessageResponse = false
     @Volatile private var pagedHistory = false
@@ -63,7 +64,8 @@ class NativeMobileParityUiTest {
                         .put("amount", "100.00").put("paid_amount", if (paid) "100.00" else "0.00")
                         .put("remaining_amount", if (paid) "0.00" else "100.00").put("status", if (paid) "PAID" else "UNPAID")))
                 e.requestURI.path.contains("/online/debts/") -> JSONObject().put("id", id(2)).put("remaining_amount", if (paid) "0.00" else "100.00").put("online_payment_available", false)
-                e.requestURI.path.contains("/checkouts/") -> JSONObject().put("id", id(3)).put("debt_id", id(2)).put("amount", "100.00").put("status", if (paid) "PAID" else "PENDING").put("payment_id", if (paid) id(4) else JSONObject.NULL)
+                e.requestURI.path.contains("/checkouts/") -> JSONObject().put("id", id(3)).put("debt_id", id(2)).put("amount", "100.00")
+                    .put("status", if (paid) "COMPLETED" else "PENDING").put("payment_id", if (paid && !omitPaymentId) id(4) else JSONObject.NULL)
                 e.requestURI.path.endsWith("/medicine-requests") -> JSONObject().put("id", id(8)).put("student_id", id(7)).put("status", "PENDING")
                 e.requestURI.path.endsWith("/today-status") -> JSONObject().put("student_id", id(7)).put("date", "2026-11-13").put("attendance", JSONObject.NULL).put("daily_report", JSONObject.NULL).put("today_schedule", JSONArray())
                 e.requestURI.path.endsWith("/teachers") -> JSONArray().put(JSONObject().put("id", id(9)).put("name", "Synthetic Teacher"))
@@ -122,7 +124,7 @@ class NativeMobileParityUiTest {
         compose.onNodeWithTag("hosted_payment").performScrollToNode(hasTestTag("hosted_refresh"))
         compose.onNodeWithTag("hosted_refresh").performScrollTo().assertIsEnabled().performClick()
         compose.waitUntil(15000) { reloads == 1 }
-        compose.onNodeWithTag("hosted_status").assertTextEquals("PAID")
+        compose.onNodeWithTag("hosted_status").assertTextEquals("COMPLETED")
         compose.onNodeWithTag("hosted_close").assertIsDisplayed().performClick()
         assertEquals(1, closed); assertEquals(2, reloads)
         assertTrue(calls.all { it.contains("/payments/online/") })
@@ -168,8 +170,8 @@ class NativeMobileParityUiTest {
         compose.onNodeWithTag("hosted_payment").performScrollToNode(hasTestTag("hosted_refresh"))
         compose.onNodeWithTag("hosted_refresh").performScrollTo().assertIsEnabled().performClick()
         compose.waitUntil(15_000) { state.invoices.any { it.student_id == child.id && it.status == "PAID" } }
-        compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag("hosted_status") and hasText("PAID")).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("hosted_status").assertTextEquals("PAID")
+        compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag("hosted_status") and hasText("COMPLETED")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("hosted_status").assertTextEquals("COMPLETED")
         compose.onNodeWithTag("hosted_payment").assertExists()
         assertEquals(0, portalReloads)
         assertEquals(listOf(child.id), refreshedChildren)
@@ -212,11 +214,23 @@ class NativeMobileParityUiTest {
         paid = true
         compose.onNodeWithTag("hosted_refresh").assertIsDisplayed().performClick()
         compose.waitUntil(15_000) { refreshed.size == 1 }
-        compose.onNodeWithTag("hosted_status").assertTextEquals("PAID")
+        compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag("hosted_status") and hasText("COMPLETED")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("hosted_status").assertTextEquals("COMPLETED")
         assertEquals(listOf(child.id), refreshed)
         assertEquals(2, calls.count { it == "GET /api/parent/payments/checkouts/${id(3)}" })
         assertTrue(calls.none { it.startsWith("POST") || it.contains("/payments/online/") })
     }
+    @Test fun completedStatusWithoutRecordedPaymentNeverShowsSuccess() {
+        paid = true
+        omitPaymentId = true
+        var reloads = 0
+        compose.setContent { Okul360Theme { HostedPaymentDialog(id(2), {}, { reloads++ }) } }
+        compose.waitUntil(15_000) { compose.onAllNodesWithText("Tahsilat doğrulanamadı").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("hosted_status").assertDoesNotExist()
+        compose.onNodeWithText("Tahsilat doğrulandı · Kapat").assertDoesNotExist()
+        assertEquals(0, reloads)
+    }
+
     @Test @Config(qualifiers = "w780dp-h360dp-land-mdpi")
     fun closeFitsLargeFontLandscapeAndStaleWorkspaceNeverReloads() {
         var reloads = 0; var closed = 0; var revision by mutableIntStateOf(0)

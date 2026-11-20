@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.data.payment.SchoolCheckout
+import com.example.data.payment.SCHOOL_CHECKOUT_COMPLETED
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -73,7 +74,7 @@ fun HostedPaymentDialog(
         }
     }
     if (!captured.current()) { LaunchedEffect(captured) { dismiss() }; return }
-    val paid = result?.optString("status") == "PAID"
+    val paid = result?.optString("status") == SCHOOL_CHECKOUT_COMPLETED
     val shownResult = result
     val listState = key(paid) { androidx.compose.foundation.lazy.rememberLazyListState() }
     androidx.compose.ui.window.Dialog(onDismissRequest = ::close,
@@ -91,7 +92,7 @@ fun HostedPaymentDialog(
                 if (recoveryOnly && !paid) item(key = "refresh") {
                     Button(enabled = !busy, onClick = { run { service ->
                         result = service.status() ?: error("Kayıtlı ödeme işlemi bulunamadı.")
-                        if (result?.optString("status") == "PAID") reload()
+                        if (result?.optString("status") == SCHOOL_CHECKOUT_COMPLETED) reload()
                     } }, modifier = Modifier.heightIn(min = 48.dp).testTag("hosted_refresh")) { Text("Sunucudan sonucu kontrol et") }
                 }
                 if (!paid && !recoveryOnly) {
