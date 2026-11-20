@@ -7,6 +7,7 @@ import com.example.data.local.SessionManager
 import com.example.data.model.*
 import com.example.data.remote.ApiClientProvider
 import com.example.data.remote.NativeParentPortalClient
+import com.example.data.remote.ParentInvoiceSnapshot
 import com.example.ui.dialogs.iyzico.HostedPaymentDialog
 import com.example.ui.navigation.*
 import com.example.ui.screens.*
@@ -16,6 +17,7 @@ import com.example.ui.viewmodel.ParentInvoiceLoadState
 import com.example.ui.viewmodel.withParentInvoiceResult
 import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.json.*
 import org.junit.*
 import org.junit.Assert.*
@@ -41,6 +43,7 @@ class NativeMobileParityUiTest {
     @Volatile private var sentMessage: JSONObject? = null
     @Volatile private var dropMessageResponse = false
     @Volatile private var pagedHistory = false
+    @Volatile private var parentInvoiceResponse: JSONObject? = null
     @Before fun start() {
         oldFont = RuntimeEnvironment.getFontScale(); RuntimeEnvironment.setFontScale(2f)
         base = ApiClientProvider.activeBaseUrl; token = ApiClientProvider.interceptor.authToken
@@ -48,9 +51,9 @@ class NativeMobileParityUiTest {
         server.createContext("/") { e ->
             calls.add("${e.requestMethod} ${e.requestURI.path}")
             val data: Any = when {
-                e.requestURI.path.endsWith("/financial-invoices") -> JSONObject()
+                e.requestURI.path.endsWith("/financial-invoices") -> parentInvoiceResponse ?: JSONObject()
                     .put("student_id", id(7))
-                    .put("online_payment_available", false)
+                    .put("online_payment_available", true)
                     .put("invoices", JSONArray().put(JSONObject().put("debt_id", id(2))
                         .put("amount", "100.00").put("paid_amount", if (paid) "100.00" else "0.00")
                         .put("remaining_amount", if (paid) "0.00" else "100.00").put("status", if (paid) "PAID" else "UNPAID")))
@@ -126,10 +129,12 @@ class NativeMobileParityUiTest {
         val child = Student(id = id(7), first_name = "İkinci", class_name = "A")
         val siblingInvoice = Invoice(id = id(5), student_id = sibling.id, amount = 50.0)
         val user = User(id = id(1), permissions = listOf("parent.view_children", "parent.view_finances", "parent.make_payment"))
+        val snapshot = runBlocking { NativeParentPortalClient().invoiceSnapshot(child) }
         var state by mutableStateOf(Okul360UiState(
             isLoggedIn = true, currentUser = user, selectedRole = UserRole.PARENT, parentChildren = listOf(sibling, child),
             invoices = listOf(siblingInvoice, Invoice(id = id(2), student_id = child.id, amount = 100.0, paid_amount = 0.0, status = "UNPAID")),
             parentInvoiceStates = mapOf(sibling.id to ParentInvoiceLoadState.LOADED, child.id to ParentInvoiceLoadState.LOADED),
+            parentInvoiceSnapshots = mapOf(child.id to snapshot),
         ))
         var portalReloads = 0
         val refreshedChildren = mutableListOf<String>()
@@ -142,8 +147,8 @@ class NativeMobileParityUiTest {
                         refreshedChildren.add(studentId)
                         state = state.copy(parentInvoiceStates = state.parentInvoiceStates + (studentId to ParentInvoiceLoadState.LOADING))
                         scope.launch {
-                            val invoices = NativeParentPortalClient().invoices(child)
-                            state = state.withParentInvoiceResult(studentId, Result.success(invoices))
+                            val refreshed = NativeParentPortalClient().invoiceSnapshot(child)
+                            state = state.withParentInvoiceResult(studentId, Result.success(refreshed))
                         }
                     }, onLogout = {})
             }
@@ -231,11 +236,53 @@ class NativeMobileParityUiTest {
     @Test fun anEmptyRealDebtListNeverCreatesSampleInvoices() {
         val child = Student(id = id(7), first_name = "Synthetic", last_name = "Child")
         val state = Okul360UiState(currentUser = User(permissions = listOf("parent.view_finances")),
-            parentInvoiceStates = mapOf(child.id to com.example.ui.viewmodel.ParentInvoiceLoadState.LOADED))
+            parentInvoiceStates = mapOf(child.id to ParentInvoiceLoadState.LOADED),
+            parentInvoiceSnapshots = mapOf(child.id to ParentInvoiceSnapshot(emptyList(), false)))
         compose.setContent { Okul360Theme { ParentPaymentsTab(child, state, {}, {}) } }
         compose.onNodeWithText("Kayıtlı borç bulunamadı").assertExists()
         compose.onAllNodesWithText("FAT-2026", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("4500", substring = true).assertCountEquals(0)
+    }
+
+    @Test fun parentInvoiceRowsUseRecordedCentsStatusAndOnlineAvailability() {
+        val child = Student(id = id(7), first_name = "Deniz")
+        val user = User(permissions = listOf("parent.view_finances", "parent.make_payment"))
+        val apiData = JSONObject("""{
+            "student_id":"${child.id}","online_payment_available":false,"invoices":[
+                {"debt_id":"${id(2)}","amount":125.35,"paid_amount":25.10,"remaining_amount":100.25,
+                 "status":"PARTIALLY_PAID","description":"Kasım ödemesi"},
+                {"debt_id":"${id(5)}","amount":1.4,"paid_amount":0.0,"remaining_amount":1.4,
+                 "status":"CANCELLED","description":"İptal edilen kayıt"}]
+        }""")
+        parentInvoiceResponse = apiData
+        var state by mutableStateOf(Okul360UiState(
+            currentUser = user,
+            parentInvoiceStates = mapOf(child.id to ParentInvoiceLoadState.LOADED),
+            parentInvoiceSnapshots = mapOf(child.id to runBlocking { NativeParentPortalClient().invoiceSnapshot(child) }),
+        ))
+        var openedDebt: String? = null
+        compose.setContent { Okul360Theme { ParentPaymentsTab(child, state, { openedDebt = it.id }, {}) } }
+        val list = compose.onNodeWithTag("parent_invoices")
+        val partial = hasTestTag("parent_invoice_${id(2)}")
+        val cancelled = hasTestTag("parent_invoice_${id(5)}")
+        list.performScrollToNode(partial)
+        compose.onNodeWithText("Kısmi ödendi").assertExists()
+        compose.onNodeWithText("125,35", substring = true).assertExists()
+        compose.onNodeWithText("Kalan: ₺100,25").assertExists()
+        compose.onAllNodesWithText("Online Öde").assertCountEquals(0)
+        compose.onAllNodesWithText("Hatırlatıcı").assertCountEquals(0)
+
+        parentInvoiceResponse = JSONObject(apiData.toString()).put("online_payment_available", true)
+        val available = runBlocking { NativeParentPortalClient().invoiceSnapshot(child) }
+        compose.runOnIdle { state = state.copy(parentInvoiceSnapshots = mapOf(child.id to available)) }
+        list.performScrollToNode(cancelled)
+        compose.onNodeWithText("İptal").assertExists()
+        compose.onAllNodes(hasText("Online Öde") and hasAnyAncestor(cancelled)).assertCountEquals(0)
+        list.performScrollToNode(hasText("Online Öde"))
+        compose.onNodeWithText("Online Öde").assert(hasAnyAncestor(partial)).performClick()
+        assertEquals(id(2), openedDebt)
+        compose.runOnIdle { state = state.copy(currentUser = user.copy(permissions = listOf("parent.view_finances"))) }
+        compose.onAllNodesWithText("Online Öde").assertCountEquals(0)
     }
     @Test fun parentMessagingReadsAuthorizedTeachersAndServerHistoryAfterAcknowledgement() {
         val actor = User(id = id(1), permissions = listOf("parent.send_message"))

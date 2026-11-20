@@ -12,12 +12,12 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.Density
 import com.example.data.model.Student
-import com.example.data.model.Invoice
 import com.example.data.model.User
 import com.example.data.model.UserRole
 import com.example.data.remote.ApiClientProvider
 import com.example.data.remote.NativeParentPortalClient
 import com.example.data.remote.ParentChildOptionsModule
+import com.example.data.remote.ParentInvoiceSnapshot
 import com.example.ui.screens.ParentVerifiedRecordsPane
 import com.example.ui.screens.ParentDiaryAndGrowthTab
 import com.example.ui.screens.ParentPortalScreen
@@ -72,7 +72,7 @@ class NativeParentDayUiTest {
         interceptor.setSession("synthetic-parent")
         try {
             var children = emptyList<Student>()
-            val results = mutableMapOf<String, Result<List<Invoice>>>()
+            val results = mutableMapOf<String, Result<ParentInvoiceSnapshot>>()
             runBlocking {
                 NativeParentPortalClient().loadPortalRecords(null, readFinances = true, onChildren = { children = it }) { id, result ->
                     assertEquals(listOf(first, second), children.map { it.id })
@@ -81,13 +81,14 @@ class NativeParentDayUiTest {
             }
             assertEquals(listOf(first, second), children.map { it.id })
             assertEquals(true, results.getValue(first).isFailure)
-            assertEquals(debt, results.getValue(second).getOrThrow().single().id)
+            assertEquals(debt, results.getValue(second).getOrThrow().rows.single().invoice.id)
 
             val invoiceStates = results.mapValues { (_, result) ->
                 if (result.isSuccess) ParentInvoiceLoadState.LOADED else ParentInvoiceLoadState.FAILED
             }
             val state = Okul360UiState(currentUser = User(permissions = listOf("parent.view_finances")),
-                parentChildren = children, invoices = results.getValue(second).getOrThrow(), parentInvoiceStates = invoiceStates)
+                parentChildren = children, parentInvoiceStates = invoiceStates,
+                parentInvoiceSnapshots = mapOf(second to results.getValue(second).getOrThrow()))
             compose.setContent { Okul360Theme { ParentPaymentsTab(children.first(), state, {}, {}) } }
             compose.onNodeWithText("Borçlar yüklenemedi. Yeniden deneyin.").assertIsDisplayed()
             compose.onNodeWithText("Kayıtlı borç bulunamadı").assertDoesNotExist()

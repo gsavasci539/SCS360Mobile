@@ -22,6 +22,19 @@ enum class ParentChildOptionsModule(val queryValue: String) {
     FINANCES("finances")
 }
 
+data class ParentInvoiceRow(
+    val invoice: Invoice,
+    val type: String?,
+    val amount: BigDecimal,
+    val paid: BigDecimal,
+    val remaining: BigDecimal,
+) {
+    val isPayable: Boolean
+        get() = remaining.signum() > 0 && invoice.status in setOf("UNPAID", "PARTIALLY_PAID", "OVERDUE")
+}
+
+data class ParentInvoiceSnapshot(val rows: List<ParentInvoiceRow>, val onlinePaymentAvailable: Boolean)
+
 /** Only explicit server-side parent/child relationships; never match names or phones. */
 class NativeParentPortalClient {
     private val scope = NativeRequestScope.bound() ?: ApiClientProvider.interceptor.captureScope()
@@ -58,14 +71,14 @@ class NativeParentPortalClient {
         module: ParentChildOptionsModule?,
         readFinances: Boolean,
         onChildren: (List<Student>) -> Unit,
-        onInvoices: (String, Result<List<Invoice>>) -> Unit,
+        onInvoices: (String, Result<ParentInvoiceSnapshot>) -> Unit,
     ) = coroutineScope {
         val children = children(module)
         scope.ensureCurrent()
         onChildren(children)
         if (readFinances) for (child in children) launch {
             val result = try {
-                Result.success(invoices(child))
+                Result.success(invoiceSnapshot(child))
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
@@ -142,21 +155,25 @@ class NativeParentPortalClient {
         check(value.getString("student_id") == id) { "Talep yanıtı öğrenciyle eşleşmiyor" }
         return value
     }
-    suspend fun invoices(child: Student): List<Invoice> {
+    suspend fun invoices(child: Student): List<Invoice> = invoiceSnapshot(child).rows.map { it.invoice }
+
+    suspend fun invoiceSnapshot(child: Student): ParentInvoiceSnapshot {
         val id = UUID.fromString(child.id).toString()
         val value = get("parent/child/$id/financial-invoices") as JSONObject
         check(value.getString("student_id") == id) { "Borçlar seçili öğrenciyle eşleşmiyor" }
         val rows = value.getJSONArray("invoices"); val seen = mutableSetOf<String>()
-        return (0 until rows.length()).map {
+        val invoices = (0 until rows.length()).map {
             val row = rows.getJSONObject(it); val debt = UUID.fromString(row.getString("debt_id")).toString()
             check(seen.add(debt)) { "Borç listesi tutarsız" }
             val amount = BigDecimal(row.getString("amount")); val paid = BigDecimal(row.getString("paid_amount"))
             val remaining = BigDecimal(row.getString("remaining_amount"))
             check(amount.signum() >= 0 && paid.signum() >= 0 && remaining.signum() >= 0 && (amount - paid).compareTo(remaining) == 0) { "Borç tutarları doğrulanamadı" }
-            Invoice(id = debt, student_id = id, student_name = child.full_name, class_name = child.class_name,
+            val invoice = Invoice(id = debt, student_id = id, student_name = child.full_name, class_name = child.class_name,
                 amount = amount.toDouble(), paid_amount = paid.toDouble(), status = row.getString("status"),
                 description = if (row.isNull("description")) "" else row.getString("description"),
                 due_date = if (row.isNull("due_date")) "" else row.getString("due_date"))
+            ParentInvoiceRow(invoice, if (row.isNull("debt_type")) null else row.getString("debt_type"), amount, paid, remaining)
         }
+        return ParentInvoiceSnapshot(invoices, value.opt("online_payment_available") == true)
     }
 }

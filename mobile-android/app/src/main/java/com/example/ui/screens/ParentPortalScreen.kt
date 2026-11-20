@@ -40,14 +40,11 @@ import com.example.data.model.*
 import com.example.ui.components.AttendanceMonthlyCalendarView
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import java.time.LocalDate
-import com.example.ui.components.FinancialSummaryCard
-import com.example.ui.components.PaymentStatusPieChart
 import com.example.ui.components.ReportCardViewer
 import com.example.ui.components.RoleContextualAiCard
 import com.example.ui.components.RoleSpeedDialFab
 import com.example.ui.components.RoleSwitchBadge
 import com.example.ui.components.SpeedDialAction
-import com.example.ui.components.UpcomingPaymentReminderBanner
 import com.example.ui.dialogs.ReceiptDialog
 import com.example.ui.dialogs.ceppos.CepPosPaymentDialog
 import com.example.ui.dialogs.iyzico.IyzicoPaymentDialog
@@ -55,6 +52,7 @@ import com.example.ui.navigation.NativeNavigationPolicy
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.Okul360UiState
 import com.example.ui.viewmodel.ParentInvoiceLoadState
+import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -633,6 +631,7 @@ internal fun ParentPaymentsTab(
     onReceiptClicked: (Invoice) -> Unit
 ) {
     val invoiceListState = key(student.id) { rememberLazyListState() }
+    val snapshot = state.parentInvoiceSnapshots[student.id]
     val loadMessage = if (!NativeNavigationPolicy.canReadParentFinances(state.currentUser)) {
         "Borçları görüntüleme yetkiniz yok."
     } else when (state.parentInvoiceStates[student.id]) {
@@ -641,18 +640,19 @@ internal fun ParentPaymentsTab(
         ParentInvoiceLoadState.LOADED -> null
         null -> "Borçlar henüz doğrulanmadı."
     }
-    if (loadMessage != null) {
-        Text(loadMessage, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 48.dp))
+    if (loadMessage != null || snapshot == null) {
+        Text(loadMessage ?: "Borçlar henüz doğrulanmadı.", modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 48.dp))
         return
     }
 
-    val canMakePayment = NativeNavigationPolicy.has(state.currentUser, "parent.make_payment")
-    val studentInvoices = remember(state.invoices, student.id) {
-        state.invoices.filter { it.student_id == student.id }
+    val canMakePayment = snapshot.onlinePaymentAvailable && NativeNavigationPolicy.has(state.currentUser, "parent.make_payment")
+    val currency = remember {
+        NumberFormat.getCurrencyInstance(Locale.forLanguageTag("tr-TR")).apply {
+            minimumFractionDigits = 2
+            maximumFractionDigits = 2
+        }
     }
-
-    val totalPaid = studentInvoices.sumOf { it.paid_amount }
-    val totalPending = studentInvoices.sumOf { it.amount - it.paid_amount }
+    val totalRemaining = snapshot.rows.filter { it.isPayable }.sumOf { it.remaining }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("parent_invoices"),
@@ -660,7 +660,6 @@ internal fun ParentPaymentsTab(
         contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 88.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        if (studentInvoices.isEmpty()) item { Text("Kayıtlı borç bulunamadı") }
         item {
             Text(
                 text = "💳 Ödemeler & Aidat Takibi",
@@ -673,42 +672,9 @@ internal fun ParentPaymentsTab(
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (snapshot.rows.isNotEmpty()) Text("Ödenebilir kalan borç: ${currency.format(totalRemaining)}")
         }
-
-        // Upcoming / Overdue Payment In-App Alert Banner
-        if (canMakePayment && studentInvoices.any { !it.status.equals("PAID", ignoreCase = true) && !it.status.equals("ODENDI", ignoreCase = true) }) {
-            item {
-                UpcomingPaymentReminderBanner(
-                    upcomingInvoices = studentInvoices,
-                    onPayClicked = onPayClicked
-                )
-            }
-        }
-
-        // Financial Summary Card (Borç & Ödeme Görselleştirmesi)
-        item {
-            FinancialSummaryCard(
-                student = student,
-                invoices = studentInvoices,
-                financeSummary = state.financeSummary,
-                isParentView = true,
-                onPayClick = onPayClicked.takeIf { canMakePayment },
-                onViewReceipts = {
-                    studentInvoices.firstOrNull { it.status.equals("PAID", ignoreCase = true) || it.status.equals("ODENDI", ignoreCase = true) }?.let { onReceiptClicked(it) }
-                }
-            )
-        }
-
-        // Interactive Student Payment Pie Chart
-        item {
-            PaymentStatusPieChart(
-                invoices = studentInvoices,
-                totalInvoiced = totalPaid + totalPending,
-                totalCollected = totalPaid,
-                pendingBalance = totalPending,
-                overdueBalance = studentInvoices.filter { it.status.equals("OVERDUE", ignoreCase = true) }.sumOf { it.amount - it.paid_amount }
-            )
-        }
+        if (snapshot.rows.isEmpty()) item { Text("Kayıtlı borç bulunamadı") }
 
         item {
             Text(
@@ -719,78 +685,31 @@ internal fun ParentPaymentsTab(
             )
         }
 
-        items(studentInvoices) { inv ->
-            val isPaid = inv.status.equals("PAID", ignoreCase = true) || inv.status.equals("ODENDI", ignoreCase = true) || (inv.paid_amount >= inv.amount && inv.amount > 0)
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = Color.White,
-                shape = RoundedCornerShape(16.dp),
-                tonalElevation = 1.dp,
-                shadowElevation = 1.dp
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(inv.invoice_number, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = BrandNavy)
-                            Text("Vade: ${inv.due_date}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-
-                        Surface(
-                            color = if (isPaid) SecondaryEmerald.copy(alpha = 0.15f) else AccentAmber.copy(alpha = 0.15f),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text(
-                                text = if (isPaid) "ÖDENDİ" else "BEKLİYOR",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isPaid) SecondaryEmerald else AccentAmber,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(inv.description, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "₺${inv.amount.toInt()}",
-                            fontWeight = FontWeight.Black,
-                            fontSize = 18.sp,
-                            color = BrandNavy
-                        )
-
-                        if (isPaid) {
-                            OutlinedButton(
-                                onClick = { onReceiptClicked(inv) },
-                                shape = RoundedCornerShape(10.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Icon(Icons.Default.ReceiptLong, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Makbuz İncele", fontSize = 12.sp)
-                            }
-                        } else if (canMakePayment) {
-                            Button(
-                                onClick = { onPayClicked(inv) },
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
-                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                            ) {
-                                Icon(Icons.Default.Payment, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Online Öde", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
+        items(snapshot.rows, key = { it.invoice.id }) { row ->
+            val invoice = row.invoice
+            val status = when (invoice.status) {
+                "PAID" -> "Ödendi"
+                "UNPAID" -> "Ödenmedi"
+                "PARTIALLY_PAID" -> "Kısmi ödendi"
+                "OVERDUE" -> "Gecikmiş"
+                "CANCELLED" -> "İptal"
+                else -> invoice.status.ifBlank { "Belirsiz" }
+            }
+            OutlinedCard(Modifier.fillMaxWidth().testTag("parent_invoice_${invoice.id}")) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(invoice.description.ifBlank { row.type ?: "Borç kaydı" }, style = MaterialTheme.typography.titleMedium)
+                    if (invoice.due_date.isNotBlank()) Text("Vade: ${invoice.due_date}")
+                    Text(status, fontWeight = FontWeight.SemiBold)
+                    Text("Tutar: ${currency.format(row.amount)}")
+                    Text("Ödenen: ${currency.format(row.paid)}")
+                    Text("Kalan: ${currency.format(row.remaining)}", fontWeight = FontWeight.Bold)
+                    when {
+                        invoice.status == "PAID" -> OutlinedButton(
+                            onClick = { onReceiptClicked(invoice) }, modifier = Modifier.heightIn(min = 48.dp)
+                        ) { Text("Makbuz İncele") }
+                        canMakePayment && row.isPayable -> Button(
+                            onClick = { onPayClicked(invoice) }, modifier = Modifier.heightIn(min = 48.dp)
+                        ) { Text("Online Öde") }
                     }
                 }
             }

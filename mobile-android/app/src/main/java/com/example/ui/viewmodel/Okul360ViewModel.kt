@@ -7,6 +7,7 @@ import com.example.data.model.*
 import com.example.data.payment.iyzico.IyzicoPaymentResult
 import com.example.data.repository.Okul360Repository
 import com.example.data.remote.ParentChildOptionsModule
+import com.example.data.remote.ParentInvoiceSnapshot
 import com.example.ui.navigation.NativeNavigationPolicy
 import android.content.Context
 import com.example.util.NetworkMonitor
@@ -26,12 +27,14 @@ import java.util.*
 
 enum class ParentInvoiceLoadState { LOADING, LOADED, FAILED }
 
-internal fun Okul360UiState.withParentInvoiceResult(childId: String, result: Result<List<Invoice>>): Okul360UiState {
+internal fun Okul360UiState.withParentInvoiceResult(childId: String, result: Result<ParentInvoiceSnapshot>): Okul360UiState {
     if (parentInvoiceStates[childId] != ParentInvoiceLoadState.LOADING) return this
     val status = if (result.isSuccess) ParentInvoiceLoadState.LOADED else ParentInvoiceLoadState.FAILED
+    val snapshot = result.getOrNull()
     return copy(
-        invoices = invoices.filterNot { it.student_id == childId } + result.getOrDefault(emptyList()),
+        invoices = invoices.filterNot { it.student_id == childId } + snapshot?.rows.orEmpty().map { it.invoice },
         parentInvoiceStates = parentInvoiceStates + (childId to status),
+        parentInvoiceSnapshots = if (snapshot == null) parentInvoiceSnapshots - childId else parentInvoiceSnapshots + (childId to snapshot),
     )
 }
 
@@ -66,6 +69,7 @@ data class Okul360UiState(
     val isParentPortalLoading: Boolean = false,
     val parentPortalError: String? = null,
     val parentInvoiceStates: Map<String, ParentInvoiceLoadState> = emptyMap(),
+    val parentInvoiceSnapshots: Map<String, ParentInvoiceSnapshot> = emptyMap(),
 
     // Students State
     val students: List<Student> = emptyList(),
@@ -709,7 +713,8 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         val user = _uiState.value.currentUser
         _uiState.update {
             it.copy(parentChildren = emptyList(), students = emptyList(), invoices = emptyList(),
-                parentInvoiceStates = emptyMap(), isParentPortalLoading = true, parentPortalError = null)
+                parentInvoiceStates = emptyMap(), parentInvoiceSnapshots = emptyMap(),
+                isParentPortalLoading = true, parentPortalError = null)
         }
         parentPortalJob = viewModelScope.launch {
             try {
@@ -760,7 +765,7 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         val job = viewModelScope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
             try {
                 val result = try {
-                    Result.success(captured.io { com.example.data.remote.NativeParentPortalClient().invoices(student) })
+                    Result.success(captured.io { com.example.data.remote.NativeParentPortalClient().invoiceSnapshot(student) })
                 } catch (cancelled: kotlinx.coroutines.CancellationException) {
                     throw cancelled
                 } catch (failure: Exception) {
