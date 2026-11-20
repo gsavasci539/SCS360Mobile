@@ -30,6 +30,7 @@ data class ParentInvoiceRow(
     val paid: BigDecimal,
     val remaining: BigDecimal,
     val openCheckout: SchoolCheckoutReference? = null,
+    val paymentInProgress: Boolean = openCheckout != null,
 ) {
     val isPayable: Boolean
         get() = remaining.signum() > 0 && invoice.status in setOf("UNPAID", "PARTIALLY_PAID", "OVERDUE")
@@ -184,7 +185,8 @@ class NativeParentPortalClient {
                 }
                 SchoolCheckoutReference(identifier, UUID.fromString(debt), checkoutAmount)
             }
-            ParentInvoiceRow(invoice, if (row.isNull("debt_type")) null else row.getString("debt_type"), amount, paid, remaining, checkout)
+            ParentInvoiceRow(invoice, if (row.isNull("debt_type")) null else row.getString("debt_type"), amount, paid, remaining,
+                checkout, checkout != null || row.opt("payment_in_progress") == true)
         }
         return ParentInvoiceSnapshot(invoices, value.opt("online_payment_available") == true)
     }

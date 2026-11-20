@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.data.payment.SchoolCheckout
+import com.example.data.payment.SchoolCheckoutInProgress
 import com.example.data.payment.SchoolCheckoutReference
 import com.example.data.payment.SCHOOL_CHECKOUT_COMPLETED
 import kotlinx.coroutines.launch
@@ -61,6 +62,7 @@ fun HostedPaymentDialog(
         scope.launch {
             try { captured.ensureCurrent(); action(checkout.getOrThrow()); captured.ensureCurrent() }
             catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: SchoolCheckoutInProgress) { if (captured.current()) close() }
             catch (e: Exception) { if (captured.current()) error = e.message ?: "Ödeme sonucu kontrol edilmeli" }
             finally { if (captured.current()) busy = false }
         }
@@ -110,7 +112,7 @@ fun HostedPaymentDialog(
                                     .put("registrationAddress", address.trim()).put("city", city.trim()).put("country", country.trim())
                                 result = service.start(service.saved()?.getString("amount") ?: debt!!.getString("remaining_amount"), buyer)
                             }
-                        }) { Text("Ödeme sayfasını hazırla / tekrar dene") }
+                        }, modifier = Modifier.testTag("hosted_prepare")) { Text("Ödeme sayfasını hazırla / tekrar dene") }
                     }
                     if (shownResult?.optBoolean("can_resume") == true) item(key = "resume") {
                         Button(enabled = !busy, onClick = { run { service -> service.resume()?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } } }) { Text("Güvenli ödeme sayfasını aç") }

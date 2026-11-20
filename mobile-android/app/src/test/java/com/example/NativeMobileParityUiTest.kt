@@ -1,6 +1,7 @@
 package com.example
 
 import androidx.compose.runtime.*
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import com.example.data.local.SessionManager
@@ -45,12 +46,27 @@ class NativeMobileParityUiTest {
     @Volatile private var dropMessageResponse = false
     @Volatile private var pagedHistory = false
     @Volatile private var parentInvoiceResponse: JSONObject? = null
+    @Volatile private var rejectCheckout = false
     @Before fun start() {
         oldFont = RuntimeEnvironment.getFontScale(); RuntimeEnvironment.setFontScale(2f)
         base = ApiClientProvider.activeBaseUrl; token = ApiClientProvider.interceptor.authToken
         server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/") { e ->
             calls.add("${e.requestMethod} ${e.requestURI.path}")
+            if (rejectCheckout && e.requestMethod == "POST" && e.requestURI.path == "/api/parent/payments/initialize") {
+                e.requestBody.use { it.readBytes() }
+                parentInvoiceResponse = JSONObject("""{
+                    "student_id":"${id(7)}","online_payment_available":true,"invoices":[
+                        {"debt_id":"${id(2)}","amount":"100.00","paid_amount":"0.00","remaining_amount":"100.00","status":"UNPAID",
+                         "payment_in_progress":true,"open_checkout":null}]
+                }""")
+                val conflict = """{"success":false,"errors":[{"code":"SCHOOL_CHECKOUT_IN_PROGRESS"}]}""".toByteArray()
+                e.responseHeaders.add("Content-Type", "application/json")
+                e.sendResponseHeaders(409, conflict.size.toLong())
+                e.responseBody.use { it.write(conflict) }
+                e.close()
+                return@createContext
+            }
             val data: Any = when {
                 e.requestURI.path == "/api/parent/child/${id(7)}/debts/${id(2)}/receipts" ->
                     JSONObject().put("student_id", id(7)).put("debt_id", id(2)).put("total", 1)
@@ -179,6 +195,62 @@ class NativeMobileParityUiTest {
         assertTrue(calls.any { it == "POST /api/parent/payments/checkouts/${id(3)}/refresh" })
         assertTrue(calls.none { it.contains("/payments/online/") || it.contains("/my-children") || it.contains(sibling.id) })
         assertTrue(calls.none { it.startsWith("POST") && !it.endsWith("/refresh") })
+    }
+
+    @Test fun parentCheckoutConflictReloadsOnlyItsDebtList() {
+        val child = Student(id = id(7), first_name = "Deniz")
+        val user = User(id = id(1), permissions = listOf("parent.view_finances", "parent.make_payment"))
+        val preferences = RuntimeEnvironment.getApplication().getSharedPreferences("school_checkout_v1", 0)
+        assertTrue(preferences.edit().clear().commit())
+        rejectCheckout = true
+        val snapshot = runBlocking { NativeParentPortalClient().invoiceSnapshot(child) }
+        var state by mutableStateOf(Okul360UiState(isLoggedIn = true, currentUser = user, selectedRole = UserRole.PARENT,
+            parentChildren = listOf(child), parentInvoiceStates = mapOf(child.id to ParentInvoiceLoadState.LOADED),
+            parentInvoiceSnapshots = mapOf(child.id to snapshot)))
+        val refreshed = mutableListOf<String>()
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            Okul360Theme {
+                ParentPortalScreen(state, {}, { _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _ -> },
+                    onRefreshInvoices = { studentId ->
+                        refreshed.add(studentId)
+                        state = state.copy(parentInvoiceStates = state.parentInvoiceStates + (studentId to ParentInvoiceLoadState.LOADING))
+                        scope.launch {
+                            state = state.withParentInvoiceResult(studentId, Result.success(NativeParentPortalClient().invoiceSnapshot(child)))
+                        }
+                    }, onLogout = {})
+            }
+        }
+        val list = compose.onNodeWithTag("parent_invoices")
+        list.performScrollToNode(hasText("Online Öde"))
+        compose.onNodeWithText("Online Öde").performScrollTo().performClick()
+        val dialog = compose.onNodeWithTag("hosted_payment")
+        for ((label, value) in listOf(
+            "Kimlik / pasaport numarası" to "TEST-001", "Telefon" to "5555555555",
+            "Fatura adresi" to "Synthetic test address", "Şehir" to "Test", "Ülke" to "TR",
+        )) {
+            dialog.performScrollToNode(hasText(label))
+            compose.onNode(hasText(label) and hasSetTextAction()).performTextInput(value)
+        }
+        dialog.performScrollToNode(hasTestTag("hosted_prepare"))
+        compose.onNodeWithTag("hosted_prepare").performScrollTo().assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
+        try {
+            compose.waitUntil(20_000) { state.parentInvoiceSnapshots[child.id]?.rows?.single()?.paymentInProgress == true }
+        } catch (failure: ComposeTimeoutException) {
+            val dialogState = runCatching { dialog.printToString(maxDepth = 6) }.getOrDefault("Dialog closed")
+            throw AssertionError("Checkout reload timed out. Calls: $calls. Reloaded: $refreshed. $dialogState", failure)
+        }
+        compose.onNodeWithTag("hosted_payment").assertDoesNotExist()
+        list.performScrollToNode(hasText("Bu borç için açık bir ödeme işlemi var."))
+        compose.onNodeWithText("Online Öde").assertDoesNotExist()
+        compose.onNodeWithText("Ödeme sonucunu kontrol et").assertDoesNotExist()
+        assertEquals(listOf(child.id), refreshed)
+        val refreshedRow = state.parentInvoiceSnapshots[child.id]!!.rows.single()
+        assertEquals(snapshot.rows.single().remaining, refreshedRow.remaining)
+        assertNull(refreshedRow.openCheckout)
+        assertEquals(listOf("POST /api/parent/payments/initialize"), calls.filter { it.startsWith("POST") })
+        assertTrue(calls.none { it.contains("/checkouts/") })
+        assertTrue(preferences.all.isEmpty())
     }
 
     @Test fun parentCanReadSavedCheckoutWhileOnlinePaymentIsUnavailable() {

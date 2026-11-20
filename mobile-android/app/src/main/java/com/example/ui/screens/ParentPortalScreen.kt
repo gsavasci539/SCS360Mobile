@@ -727,14 +727,16 @@ internal fun ParentPaymentsTab(
                     val openCheckout = row.openCheckout
                     val alreadySaved = canCheckPayment &&
                         SchoolCheckout.hasSavedAttempt(context, state.currentUser.id, invoice.id, openCheckout)
-                    if (canMakePayment && row.isPayable && (openCheckout == null || alreadySaved)) {
+                    if (canMakePayment && row.isPayable && (!row.paymentInProgress || openCheckout != null && alreadySaved)) {
                         Button(
                             onClick = { onPayClicked(invoice) }, modifier = Modifier.heightIn(min = 48.dp)
                         ) { Text(if (openCheckout == null) "Online Öde" else "Ödeme işlemine dön") }
-                    } else if (canCheckPayment && (openCheckout != null || alreadySaved)) {
+                    } else if (canCheckPayment && (openCheckout != null || !row.paymentInProgress && alreadySaved)) {
                         OutlinedButton(
                             onClick = { onRecoverCheckout(invoice, row.openCheckout) }, modifier = Modifier.heightIn(min = 48.dp)
                         ) { Text("Ödeme sonucunu kontrol et") }
+                    } else if (canCheckPayment && row.paymentInProgress) {
+                        Text("Bu borç için açık bir ödeme işlemi var.")
                     }
                 }
             }

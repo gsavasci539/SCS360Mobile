@@ -12,6 +12,8 @@ import java.util.UUID
 
 internal const val SCHOOL_CHECKOUT_COMPLETED = "COMPLETED"
 
+internal class SchoolCheckoutInProgress : IllegalStateException("Bu borç için açık bir ödeme işlemi var.")
+
 data class SchoolCheckoutReference(val requestId: UUID, val debtId: UUID, val amount: BigDecimal)
 
 class SchoolCheckout(context: Context, private val debtId: String, private val parentStudentId: String? = null) {
@@ -51,6 +53,12 @@ class SchoolCheckout(context: Context, private val debtId: String, private val p
             if (body != null) post(body.toString().toRequestBody("application/json".toMediaType()))
         }.build()
         client.newCall(request).execute().use { response ->
+            if (path == "parent/payments/initialize" && response.code == 409) {
+                val code = runCatching {
+                    JSONObject(response.peekBody(4096).string()).optJSONArray("errors")?.optJSONObject(0)?.optString("code")
+                }.getOrNull()
+                if (code == "SCHOOL_CHECKOUT_IN_PROGRESS") throw SchoolCheckoutInProgress()
+            }
             check(response.isSuccessful) { "Ödeme isteği tamamlanamadı (HTTP ${response.code}); yeni işlem açmadan sonucu kontrol edin" }
             val parsed = JSONObject(response.body?.string() ?: "{}")
             sameSession()
@@ -91,7 +99,16 @@ class SchoolCheckout(context: Context, private val debtId: String, private val p
         }
         check(previous.getString("amount") == amount) { "Önceki ödemenin sonucunu kontrol edin" }
         if (pending == null) pending = JSONObject(previous.toString()).put("buyer", buyer).put("currency", "TRY").put("payment_channel", "MOBILE")
-        return validate(call("$paymentsPath/initialize", pending))
+        return try {
+            validate(call("$paymentsPath/initialize", pending))
+        } catch (conflict: SchoolCheckoutInProgress) {
+            sameSession()
+            if (saved()?.optString("request_id") == previous.getString("request_id")) {
+                prefs.edit().remove(fingerprint).commit()
+            }
+            pending = null
+            throw conflict
+        }
     }
     suspend fun refresh(): JSONObject? = saved()?.let { validate(call("$paymentsPath/checkouts/${it.getString("request_id")}/refresh", JSONObject())) }
     suspend fun clearFailed() {
