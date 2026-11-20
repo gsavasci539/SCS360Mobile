@@ -358,6 +358,10 @@ private fun InfirmaryMedicationSection(client: NativeInfirmaryClient, student: I
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         dose.name?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
                         dose.scheduledDate?.let { Text(it.toString()) }
+                        if (dose.scheduledDate == null) {
+                            Text("Eski kayıtta doz günü ayrı tutulmamış.")
+                            dose.createdAt?.let { Text("Kayıt zamanı · $it") }
+                        }
                         Text(dose.scheduledTime.format(visitTimeFormat))
                         Text(doseStatuses[dose.status] ?: if (dose.status == "SCHEDULED") "Planlandı" else dose.status)
                         dose.givenTime?.let { Text("Uygulama zamanı · $it") }

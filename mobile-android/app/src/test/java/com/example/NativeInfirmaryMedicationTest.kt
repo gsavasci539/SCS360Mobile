@@ -27,11 +27,18 @@ import java.util.concurrent.atomic.AtomicReference
 class NativeInfirmaryMedicationTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun parentRequestDecisionAndDoseUseTheSameScopedServerRecord() {
+    @Test fun parentRequestDecisionAndDoseUseTheSameScopedServerRecord() = verifyMedicationWorkflow()
+
+    @Test fun legacyDoseIsReloadedWithoutClaimingANewWrite() = verifyMedicationWorkflow(legacyDose = true)
+
+    @Test fun createsMedicationProgramAndReadsBackItsPersistedFields() = verifyMedicationWorkflow(createProgram = true)
+
+    private fun verifyMedicationWorkflow(legacyDose: Boolean = false, createProgram: Boolean = false) {
         fun id(suffix: Long) = UUID(84, suffix).toString()
         val requests = CopyOnWriteArrayList<String>()
         val status = AtomicReference("PENDING")
         val dose = AtomicReference<JSONObject>()
+        val created = AtomicReference<JSONObject>()
         val previousBase = ApiClientProvider.activeBaseUrl
         val previousToken = ApiClientProvider.interceptor.authToken
         val previousFont = RuntimeEnvironment.getFontScale()
@@ -40,7 +47,9 @@ class NativeInfirmaryMedicationTest {
             .put("dosage", "Test doz talimatı").put("time_to_give", "10:30").put("status", status.get())
             .put("start_date", "2026-11-20").put("updated_by", id(4))
         fun storedDose(payload: JSONObject) = JSONObject(payload.toString()).put("id", id(6))
-            .put("given_by", id(4)).put("medication_name", "İzole ilaç kaydı")
+            .put("given_by", id(4)).put("medication_name", "İzole ilaç kaydı").apply {
+                if (legacyDose) put("scheduled_date", JSONObject.NULL).put("created_at", "2026-11-20T07:30:00Z")
+            }
         server.createContext("/") { exchange ->
             val uri = exchange.requestURI
             val method = exchange.requestMethod
@@ -51,7 +60,17 @@ class NativeInfirmaryMedicationTest {
                     .put("today", "2026-11-20").put("time", "10:30").put("more_students", false)
                 uri.path == "/api/infirmary/infirmary-visits" -> JSONArray()
                 uri.path == "/api/infirmary/medicine-requests" && uri.query?.contains("student_id=${id(3)}") == true ->
-                    JSONArray().put(program())
+                    if (!createProgram) JSONArray().put(program()) else JSONArray().apply {
+                        created.get()?.let {
+                            put(JSONObject(it.toString()).put("time_to_give", it.getString("frequency"))
+                                .put("medicine_name", it.getString("medication_name")))
+                        }
+                    }
+                uri.path == "/api/infirmary/medication-schedules" && method == "POST" -> {
+                    val payload = JSONObject(exchange.requestBody.use { it.readBytes().decodeToString() })
+                    JSONObject(payload.toString()).put("id", id(7)).put("created_by", id(4)).put("status", "APPROVED")
+                        .also(created::set)
+                }
                 uri.path == "/api/infirmary/medicine-requests/${id(5)}" && method == "PUT" -> {
                     status.set(JSONObject(exchange.requestBody.use { it.readBytes().decodeToString() }).getString("status"))
                     program()
@@ -85,6 +104,22 @@ class NativeInfirmaryMedicationTest {
             node("infirmary_visits", "İlaç programları ve talepler").performClick()
             node("infirmary_visits", "Öğrenci seç", waitEnabled = true).performClick()
             node("infirmary_students", "İlaç Test Öğrencisi").performClick()
+            if (createProgram) {
+                node("infirmary_visits", "İlaç programı ekle").performClick()
+                node("infirmary_medication", "Program ilaç adı", field = true).performTextInput("İzole program")
+                node("infirmary_medication", "Kayıtlı doz", field = true).performTextInput("Mevcut test talimatı")
+                node("infirmary_medication", "Saat / sıklık talimatı", field = true).performTextInput("10:30")
+                node("infirmary_medication", "Program ek notu", field = true).performTextInput("İzole ek not")
+                node("infirmary_medication", "İlaç programını kaydet").assertIsEnabled().performClick()
+                node("infirmary_visits", "İzole program").assertIsDisplayed()
+                val saved = requireNotNull(created.get())
+                assertEquals(id(3), saved.getString("student_id"))
+                assertEquals("NOT_SPECIFIED", saved.getString("instruction"))
+                assertEquals("2026-11-20", saved.getString("start_date"))
+                assertEquals("İzole ek not", saved.getString("parent_notes"))
+                assertEquals(listOf("POST /api/infirmary/medication-schedules"), requests.filterNot { it.startsWith("GET ") })
+                return
+            }
             node("infirmary_visits", "İlaç kaydını incele").performClick()
             node("infirmary_medication_detail", "Talebi onayla").performClick()
             node("infirmary_visits", "Onaylı").assertIsDisplayed()
@@ -93,6 +128,11 @@ class NativeInfirmaryMedicationTest {
             node("infirmary_medication_detail", "Atlandı").performClick()
             node("infirmary_medication_detail", "Doz kayıt notu", field = true).performTextInput("İzole doz sonucu")
             node("infirmary_medication_detail", "Doz sonucunu kaydet").performClick()
+            if (legacyDose) {
+                node("infirmary_visits", "Sunucudaki mevcut doz kaydı yeniden okundu.").assertIsDisplayed()
+                node("infirmary_visits", "Eski kayıtta doz günü ayrı tutulmamış.").assertIsDisplayed()
+                compose.onNodeWithText("Doz kaydı kaydedildi.").assertDoesNotExist()
+            }
             node("infirmary_visits", "İzole doz sonucu").assertIsDisplayed()
             val actualDose = requireNotNull(dose.get())
             assertEquals("SKIPPED", actualDose.getString("status"))

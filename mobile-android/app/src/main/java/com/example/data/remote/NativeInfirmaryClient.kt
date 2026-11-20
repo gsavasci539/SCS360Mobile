@@ -43,7 +43,7 @@ internal data class InfirmaryMedicationDraft(
 )
 internal data class InfirmaryDose(
     val id: String, val name: String?, val scheduledDate: LocalDate?, val scheduledTime: LocalTime,
-    val givenTime: String?, val status: String, val notes: String?, val recorder: String?,
+    val givenTime: String?, val createdAt: String?, val status: String, val notes: String?, val recorder: String?,
 )
 
 internal class NativeInfirmaryClient(selectedBranch: String, private val actorId: String) {
@@ -169,6 +169,7 @@ internal class NativeInfirmaryClient(selectedBranch: String, private val actorId
         check(saved.getString("student_id") == student.id && saved.getString("created_by") == id(actorId) &&
             saved.getString("status") == "APPROVED" && saved.getString("medication_name") == draft.name &&
             saved.getString("dosage") == draft.dosage && saved.getString("frequency") == draft.frequency &&
+            saved.getString("instruction") == draft.instruction && saved.text("parent_notes").orEmpty() == draft.note &&
             saved.getString("start_date") == draft.start.toString() && saved.text("end_date") == draft.end?.toString()) {
             "Sunucudaki ilaç programı gönderilen kayıtla eşleşmiyor."
         }
@@ -189,7 +190,7 @@ internal class NativeInfirmaryClient(selectedBranch: String, private val actorId
                 "Doz kaydı seçili öğrenci veya günle eşleşmiyor."
             }
             InfirmaryDose(id(row.getString("id")), row.text("medication_name"), scheduledDay, LocalTime.parse(row.getString("scheduled_time")),
-                row.text("given_time"), row.getString("status"), row.text("notes"), row.text("given_by_name"))
+                row.text("given_time"), row.text("created_at"), row.getString("status"), row.text("notes"), row.text("given_by_name"))
         }
     }
 
@@ -199,9 +200,10 @@ internal class NativeInfirmaryClient(selectedBranch: String, private val actorId
             .put("notes", notes.ifBlank { null })
         val saved = call("medication/mark-given", body = body) as JSONObject
         id(saved.getString("id"))
+        val savedDay = saved.text("scheduled_date")
         check(saved.getString("student_id") == program.studentId && saved.getString("schedule_id") == program.id &&
-            saved.getString("scheduled_date") == day.toString() && LocalTime.parse(saved.getString("scheduled_time")) == time &&
+            (savedDay == null || savedDay == day.toString()) && LocalTime.parse(saved.getString("scheduled_time")) == time &&
             saved.getString("status") == status) { "Sunucudaki doz kaydı seçili öğrenci ve programla eşleşmiyor." }
-        return saved.text("given_by") == id(actorId) && saved.text("notes").orEmpty() == notes
+        return savedDay != null && saved.text("given_by") == id(actorId) && saved.text("notes").orEmpty() == notes
     }
 }
