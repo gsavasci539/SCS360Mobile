@@ -3,6 +3,7 @@ package com.example
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -11,6 +12,7 @@ import com.example.data.model.RecordedFinanceSummary
 import com.example.data.model.User
 import com.example.data.remote.ApiClientProvider
 import com.example.ui.components.DashboardApprovalsWidget
+import com.example.ui.components.DashboardReceivablesWidget
 import com.example.ui.theme.Okul360Theme
 import com.example.ui.viewmodel.Okul360UiState
 import com.sun.net.httpserver.HttpServer
@@ -33,6 +35,23 @@ import java.util.concurrent.atomic.AtomicReference
 @Config(sdk = [36], qualifiers = "w360dp-h640dp-port-mdpi")
 class NativeDashboardApprovalsUiTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun staleBranchAmountsAndLegacyEstimateDoNotAppearInTheReceivablesCard() {
+        val current = User(id = "finance-reader", permissions = listOf("finance.read"))
+        val amount = BigDecimal("123.45")
+        val recorded = RecordedFinanceSummary("2026-11-21", "branch-one", null, null, amount, null, amount, null,
+            1, 1, false, listOf(RecordedCollectionMonth("2026-11", amount, 1)))
+        val view = mutableStateOf(Okul360UiState(isLoggedIn = true, currentUser = current,
+            selectedBranchId = "branch-two", recordedFinanceSummary = recorded))
+        compose.setContent { Okul360Theme { DashboardReceivablesWidget(view.value, {}, {}, { _, _ -> }, {}) } }
+        compose.onNodeWithText("Finans özeti alınamadı.").assertIsDisplayed()
+        compose.onNodeWithText("123,45", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("185.000", substring = true).assertDoesNotExist()
+        compose.runOnIdle { view.value = view.value.copy(selectedBranchId = "branch-one") }
+        compose.onNodeWithText("Kalan borç", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("2026-11", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Hızlı tahsilatı aç").assertDoesNotExist()
+    }
 
     @Test fun pendingExcuseUsesBranchAndPersistsBeforeReadingTheListAgain() {
         fun id(suffix: Long) = UUID(87, suffix).toString()

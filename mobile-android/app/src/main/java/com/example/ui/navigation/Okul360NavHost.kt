@@ -227,8 +227,8 @@ fun Okul360NavHost(
         composable(Screen.Reports.route) {
             ReportsScreen(
                 state = state,
-                onSendReminder = { invId, stdName ->
-                    viewModel.sendPaymentReminder(invId, stdName)
+                onSendReminder = { invId, _ ->
+                    viewModel.sendPaymentReminder(invId)
                 }
             )
         }

@@ -983,9 +983,6 @@ interface Okul360ApiService {
     @POST("payments/finances/invoices/generate-plan")
     suspend fun generateInstallmentPlan(@Body req: InstallmentPlanRequest): Map<String, Any>
 
-    @POST("payments/finances/reminders/send")
-    suspend fun sendPaymentReminder(@Body body: Map<String, String>): Map<String, Any>
-
     @POST("payments/iyzico/initialize")
     suspend fun initializeIyzicoPayment(@Body body: Map<String, Any>): Map<String, Any>
 

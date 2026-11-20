@@ -1529,22 +1529,35 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun sendPaymentReminder(invoiceId: String, studentName: String) {
+    private val pendingPaymentReminderIds = mutableSetOf<String>()
+
+    fun sendPaymentReminder(invoiceId: String) {
+        val state = _uiState.value
+        val actor = state.currentUser
+        if (!state.isLoggedIn || (actor.is_super_admin == true && state.workspaceOrganizationId.isNullOrBlank()) ||
+            !com.example.ui.navigation.NativeNavigationPolicy.has(actor, "finance.write")) return
+        val studentId = state.invoices.find { it.id == invoiceId }?.student_id
+            ?: state.debts.find { it.id == invoiceId }?.student_id
+            ?: state.reportsData?.overdue_debts?.find { it.id == invoiceId }?.student_id
+        if (studentId.isNullOrBlank()) {
+            _uiState.update { it.copy(toastMessage = "Seçili borç doğrulanamadı. Finans kayıtlarını yeniden açın.") }
+            return
+        }
+        if (!pendingPaymentReminderIds.add(invoiceId)) return
+        val scope = com.example.data.remote.ApiClientProvider.interceptor.captureScope()
         viewModelScope.launch(requestFailures) {
-            val invoice = _uiState.value.invoices.find { it.id == invoiceId }
-            val amount = invoice?.amount ?: 4500.0
-            val dueDate = invoice?.due_date ?: "25 Mart 2026"
-            repository.sendNotification(studentName, "Aylık taksit ödeme hatırlatması", "SMS")
-            repository.sendPaymentReminder(invoiceId, studentName)
-            // Send Push Notification
-            NotificationHelper.sendPaymentReminderPush(
-                context = getApplication(),
-                studentName = studentName,
-                amount = amount,
-                dueDate = dueDate
-            )
-            _uiState.update { it.copy(toastMessage = "$studentName velisine Push ve SMS ödeme hatırlatması gönderildi.") }
-            loadOutboxLogs()
+            try {
+                val result = com.example.data.remote.NativePaymentReminderClient(scope).queueSms(invoiceId, studentId)
+                scope.ensureCurrent()
+                val message = when (result) {
+                    is com.example.data.remote.PaymentReminderResult.Queued ->
+                        "SMS hatırlatması ${result.recipients} alıcı için kuyruğa alındı."
+                    is com.example.data.remote.PaymentReminderResult.Skipped -> result.reason
+                }
+                _uiState.update { it.copy(toastMessage = message) }
+            } finally {
+                pendingPaymentReminderIds.remove(invoiceId)
+            }
         }
     }
 

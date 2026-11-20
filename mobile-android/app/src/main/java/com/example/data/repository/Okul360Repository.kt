@@ -1236,15 +1236,8 @@ class Okul360Repository(private val context: Context) {
     }
 
     // ==========================================
-    // Ödeme Hatırlatması ve iyzico Sanal POS
+    // iyzico Sanal POS
     // ==========================================
-    suspend fun sendPaymentReminder(invoiceId: String, studentName: String): Boolean = requestContext {
-        try {
-            apiService.sendPaymentReminder(mapOf("invoice_id" to invoiceId, "student_name" to studentName))
-        } catch (failure: Exception) { throw failure }
-        true
-    }
-
     suspend fun initializeIyzicoPayment(invoiceId: String, amount: Double, cardNumber: String, holderName: String): Map<String, Any> = requestContext {
         throw IllegalStateException("Kart bilgileri bu yoldan gönderilemez; güvenli sağlayıcı ödeme sayfasını kullanın")
     }

@@ -98,6 +98,8 @@ fun FinanceScreen(
     var isFabExpanded by remember { mutableStateOf(false) }
     val tableModeState = rememberResolvedTableMode()
     val isCardMode = isCompactCardMode(tableModeState.value)
+    val canQueueReminder = state.isLoggedIn && (state.currentUser.is_super_admin != true || !state.workspaceOrganizationId.isNullOrBlank()) &&
+        com.example.ui.navigation.NativeNavigationPolicy.has(state.currentUser, "finance.write")
 
     val expenseRowsKnown = !state.isFinanceLoading && !state.isFinanceRowsLoading && state.financeRowsError == null && state.financeSummaryError == null
     val totalExpenses = remember(state.expenses) { state.expenses.sumOf { it.amount } }
@@ -455,7 +457,10 @@ fun FinanceScreen(
                                 onDeleteClick = { invoiceToDelete = invoice },
                                 onViewReceiptClick = { onViewReceipt(invoice) },
                                 onIyzicoPayClick = { invoiceForIyzicoPayment = invoice },
-                                onSendReminderClick = { onSendPaymentReminder(invoice.id, invoice.student_name) },
+                                onSendReminderClick = if (canQueueReminder && invoice.amount > invoice.paid_amount &&
+                                    !invoice.status.equals("CANCELLED", ignoreCase = true)) {
+                                    { onSendPaymentReminder(invoice.id, invoice.student_name) }
+                                } else null,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp)
                             )
                         } else {
@@ -626,13 +631,15 @@ fun FinanceScreen(
                                                 Text("Kalan: ₺${String.format("%,.2f", remaining)}", fontSize = 10.sp, color = Color(0xFFDC2626), fontWeight = FontWeight.SemiBold)
                                             }
                                         }
-                                        CompactRowActionIcon(
-                                            icon = Icons.Default.Send,
-                                            contentDescription = "Hatırlat",
-                                            tint = PrimaryBlue,
-                                            containerColor = PrimaryBlue.copy(alpha = 0.1f),
-                                            onClick = { onSendPaymentReminder(debt.id, debt.student_name) }
-                                        )
+                                        if (canQueueReminder && !isPaid && remaining > 0 && !debt.status.equals("CANCELLED", ignoreCase = true)) {
+                                            CompactRowActionIcon(
+                                                icon = Icons.Default.Send,
+                                                contentDescription = "SMS hatırlatmasını kuyruğa al",
+                                                tint = PrimaryBlue,
+                                                containerColor = PrimaryBlue.copy(alpha = 0.1f),
+                                                onClick = { onSendPaymentReminder(debt.id, debt.student_name) }
+                                            )
+                                        }
                                         if (!isPaid) {
                                             CompactRowActionIcon(
                                                 icon = Icons.Default.Check,
@@ -1415,7 +1422,7 @@ fun InvoiceCard(
                     if (onSendReminderClick != null) {
                         CompactRowActionIcon(
                             icon = Icons.Default.Send,
-                            contentDescription = "SMS Hatırlat",
+                            contentDescription = "SMS hatırlatmasını kuyruğa al",
                             tint = PrimaryBlue,
                             containerColor = PrimaryBlue.copy(alpha = 0.1f),
                             onClick = onSendReminderClick

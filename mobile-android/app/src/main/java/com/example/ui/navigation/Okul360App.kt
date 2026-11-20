@@ -331,7 +331,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 state = state,
                                 onRecordPayment = { invId, amt, method -> viewModel.recordPayment(invId, amt, method) },
                                 onCreateInvoice = { stdId, title, amt, due, desc -> viewModel.createInvoice(stdId, title, amt, due, desc) },
-                                onSendReminder = { invId, stdName -> viewModel.sendPaymentReminder(invId, stdName) },
+                                onSendReminder = { invId, _ -> viewModel.sendPaymentReminder(invId) },
                                 onRoleSelected = { role -> viewModel.switchRole(role) },
                                 onOpenChatbot = { showChatbotDialog = true },
                                 onLogout = { viewModel.logout() }
@@ -982,8 +982,8 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             )
                             SubScreen.REPORTS -> ReportsScreen(
                                 state = state,
-                                onSendReminder = { invId, stdName ->
-                                    viewModel.sendPaymentReminder(invId, stdName)
+                                onSendReminder = { invId, _ ->
+                                    viewModel.sendPaymentReminder(invId)
                                 },
                                 onPrintClassReportCards = { clsName ->
                                     viewModel.printClassReportCards(context, clsName)
@@ -1424,7 +1424,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onOpenQuickAttendance = { showQuickAttendanceSheet = true },
                                 onOpenQuickPayment = { showQuickPaymentSheet = true },
                                 onSelectInvoiceForPayment = { viewModel.selectInvoiceForPayment(it) },
-                                onSendPaymentReminder = { id, name -> viewModel.sendPaymentReminder(id, name) },
+                                onSendPaymentReminder = { id, _ -> viewModel.sendPaymentReminder(id) },
                                 onNavigateToInfirmary = { currentSubScreen = SubScreen.INFIRMARY },
                                 onNavigateToConsents = { currentSubScreen = SubScreen.CONSENTS },
                                 onNavigateToDismissal = { currentSubScreen = SubScreen.DISMISSAL },
@@ -1476,8 +1476,8 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onDeleteExpense = { expenseId ->
                                     viewModel.deleteExpense(expenseId)
                                 },
-                                onSendPaymentReminder = { id, name ->
-                                    viewModel.sendPaymentReminder(id, name)
+                                onSendPaymentReminder = { id, _ ->
+                                    viewModel.sendPaymentReminder(id)
                                 },
                                 onPayWithIyzico = { id, amt, card, name ->
                                     viewModel.payInvoiceWithIyzico(id, amt, card, name)
