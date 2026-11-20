@@ -12,6 +12,8 @@ internal data class TeacherDayClass(val id: String, val name: String, val studen
 internal data class TeacherDayLesson(val subject: String, val time: String, val location: String)
 internal data class TeacherDayTask(val classroom: String, val kind: String, val remaining: Int, val date: LocalDate)
 internal data class TeacherWeekDay(val name: String, val lessons: List<TeacherDayLesson>)
+internal data class TeacherMedicineRequest(val id: String, val studentName: String, val classroom: String,
+    val name: String, val dose: String, val timing: String, val instructions: String?, val status: String)
 
 internal class NativeTeacherDayClient {
     private val scope = NativeRequestScope.bound() ?: ApiClientProvider.interceptor.captureScope()
@@ -64,6 +66,18 @@ internal class NativeTeacherDayClient {
                     optionalText(row, "room_number").orEmpty())
             }
             TeacherWeekDay(day.getString("day"), lessons)
+        }
+    }
+
+    suspend fun medicines(selectedBranch: String, offset: Int, limit: Int): List<TeacherMedicineRequest> {
+        val branch = selectedBranch.takeUnless { it.isBlank() || it == "all" }?.let { UUID.fromString(it).toString() }
+        val path = "teacher/medicine-requests?offset=$offset&limit=$limit" + (branch?.let { "&branch_id=$it" }.orEmpty())
+        return rows(get(path) as JSONArray).map { row ->
+            check(branch == null || row.getString("branch_id") == branch) { "İlaç talebi seçili şubeyle eşleşmiyor." }
+            UUID.fromString(row.getString("student_id"))
+            TeacherMedicineRequest(UUID.fromString(row.getString("id")).toString(), row.getString("student_name"),
+                row.getString("class_name"), row.getString("medicine_name"), row.getString("dosage"),
+                row.getString("time_to_give"), optionalText(row, "instructions"), row.getString("status"))
         }
     }
 

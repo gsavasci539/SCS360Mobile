@@ -32,8 +32,10 @@ import com.example.ui.navigation.NativeNavigationPolicy
 import com.example.ui.viewmodel.Okul360UiState
 import kotlinx.coroutines.CancellationException
 
+private const val TEACHER_MEDICINE_PAGE_SIZE = 20
+private val teacherMedicineStatuses = mapOf("PENDING" to "Bekliyor", "APPROVED" to "Onaylı", "REJECTED" to "Reddedildi", "COMPLETED" to "Tamamlandı")
 private enum class TeacherDayView(val title: String) {
-    WEEK("Haftalık Ders Çizelgesi"), TODAY("Bugünkü Program"), CLASSES("Sınıflarım"), TASKS("Görevler")
+    WEEK("Haftalık Ders Çizelgesi"), TODAY("Bugünkü Program"), CLASSES("Sınıflarım"), TASKS("Görevler"), MEDICINE("İlaç talepleri")
 }
 
 @Composable
@@ -42,11 +44,13 @@ internal fun TeacherDayPane(state: Okul360UiState) {
     val canReadClasses = NativeNavigationPolicy.has(user, "teacher.view_classes")
     val canReadSchedule = NativeNavigationPolicy.has(user, "teacher.view_schedule")
     val canReadTasks = NativeNavigationPolicy.has(user, "teacher.manage_tasks")
+    val canReadMedicine = NativeNavigationPolicy.has(user, "health.read", "teacher.view_medicine_requests")
     val canReadWeek = canReadSchedule && canReadClasses && NativeNavigationPolicy.has(user, "classes.read", "class.read")
     key(user.id, user.resolvedTenantId, user.branch_ids, state.workspaceOrganizationId, state.selectedBranchId,
-        state.serverBaseUrl, canReadSchedule, canReadClasses, canReadTasks, canReadWeek) {
+        state.serverBaseUrl, canReadSchedule, canReadClasses, canReadTasks, canReadWeek, canReadMedicine) {
         val views = listOfNotNull(TeacherDayView.WEEK.takeIf { canReadWeek }, TeacherDayView.TODAY.takeIf { canReadSchedule },
-            TeacherDayView.CLASSES.takeIf { canReadClasses }, TeacherDayView.TASKS.takeIf { canReadTasks })
+            TeacherDayView.CLASSES.takeIf { canReadClasses }, TeacherDayView.TASKS.takeIf { canReadTasks },
+            TeacherDayView.MEDICINE.takeIf { canReadMedicine })
         var view by remember { mutableStateOf(views.firstOrNull()) }
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
@@ -68,8 +72,23 @@ internal fun TeacherDayPane(state: Okul360UiState) {
                 TeacherDayView.TASKS -> TeacherDayRows("Bekleyen görev yok.", { pending() }) { task ->
                     TeacherDayCard(task.classroom, "${task.kind} bekleyen öğrenci sayısı ${task.remaining}", task.date.toString())
                 }
-                null -> Text("Program, sınıf veya görevleri görüntüleme yetkiniz bulunmuyor.")
+                TeacherDayView.MEDICINE -> TeacherMedicineRequests(state.selectedBranchId)
+                null -> Text("Bu ekrandaki kayıtları görüntüleme yetkiniz bulunmuyor.")
             }
+        }
+    }
+}
+
+@Composable
+private fun TeacherMedicineRequests(branch: String) {
+    var page by remember { mutableIntStateOf(0) }
+    TeacherDayRows("Bu kapsamda ilaç talebi bulunamadı.",
+        { medicines(branch, page * TEACHER_MEDICINE_PAGE_SIZE, TEACHER_MEDICINE_PAGE_SIZE + 1) },
+        page, { page = it }) { request ->
+        val status = teacherMedicineStatuses[request.status] ?: request.status
+        key(request.id) {
+            TeacherDayCard(request.name, listOf(request.studentName, request.classroom, request.dose, request.timing, status).joinToString(" · "),
+                request.instructions.orEmpty())
         }
     }
 }
@@ -93,9 +112,9 @@ private fun TeacherWeek() {
 
 @Composable
 private fun <T> TeacherDayRows(emptyLabel: String, load: suspend NativeTeacherDayClient.() -> List<T>,
-    row: @Composable (T) -> Unit) {
+    page: Int = 0, onPage: ((Int) -> Unit)? = null, row: @Composable (T) -> Unit) {
     var attempt by remember { mutableIntStateOf(0) }
-    val result by produceState<Result<List<T>>?>(initialValue = null, key1 = attempt) {
+    val result by produceState<Result<List<T>>?>(initialValue = null, key1 = attempt, key2 = page) {
         value = null
         try {
             value = Result.success(NativeTeacherDayClient().load())
@@ -114,7 +133,16 @@ private fun <T> TeacherDayRows(emptyLabel: String, load: suspend NativeTeacherDa
     } else {
         val rows = reply.getOrThrow()
         if (rows.isEmpty()) Text(emptyLabel)
-        rows.forEach { row(it) }
+        if (onPage == null) {
+            rows.forEach { row(it) }
+        } else {
+            rows.take(TEACHER_MEDICINE_PAGE_SIZE).forEach { row(it) }
+            if (page > 0 || rows.size > TEACHER_MEDICINE_PAGE_SIZE) {
+                Text("Sayfa ${page + 1}")
+                TextButton(enabled = page > 0, onClick = { onPage(page - 1) }) { Text("Önceki") }
+                TextButton(enabled = rows.size > TEACHER_MEDICINE_PAGE_SIZE, onClick = { onPage(page + 1) }) { Text("Sonraki") }
+            }
+        }
     }
 }
 
