@@ -1428,41 +1428,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(selectedStudentForFullProfile = student) }
     }
 
-    fun createAnnouncement(title: String, content: String, category: String, target: String) {
-        viewModelScope.launch(requestFailures) {
-            val req = CreateAnnouncementRequest(
-                title = title,
-                content = content,
-                category = category,
-                target_audience = target,
-                is_pinned = false
-            )
-            repository.createAnnouncement(req)
-            // Send Android Push Notification
-            NotificationHelper.sendAnnouncementPush(
-                context = getApplication(),
-                title = title,
-                content = content,
-                author = "Okul Yönetimi"
-            )
-            _uiState.update {
-                it.copy(
-                    showCreateAnnouncementDialog = false,
-                    toastMessage = "Duyuru paylaşıldı ve Android push bildirimi gönderildi."
-                )
-            }
-            loadAnnouncements()
-            loadDashboard()
-        }
-    }
-
-    fun deleteAnnouncement(announcementId: String) {
-        viewModelScope.launch(requestFailures) {
-            repository.deleteAnnouncement(announcementId)
-            _uiState.update { it.copy(toastMessage = "Duyuru silindi.") }
-            loadAnnouncements()
-        }
-    }
 
     fun sendNotification(title: String, message: String, targetRole: String, channel: String) {
         viewModelScope.launch(requestFailures) {
@@ -2175,88 +2140,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(selectedConversationId = conversationId) }
     }
 
-    // Announcement Drafts Management
-    fun saveAnnouncementDraft(
-        id: String? = null,
-        title: String,
-        content: String,
-        category: String,
-        target: String,
-        isUrgent: Boolean = false
-    ) {
-        val nowTime = SimpleDateFormat("d MMMM HH:mm", Locale("tr")).format(Date())
-        val draftId = id ?: "draft-${System.currentTimeMillis()}"
-        val draft = Announcement(
-            id = draftId,
-            title = title,
-            content = content,
-            category = category,
-            target_audience = target,
-            author_name = _uiState.value.currentUser.full_name,
-            author_role = "Yönetici",
-            created_at = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()),
-            is_pinned = isUrgent,
-            is_draft = true,
-            draft_last_modified = "Düzenlendi: $nowTime"
-        )
-
-        _uiState.update { current ->
-            val existing = current.announcementDrafts.filter { it.id != draftId }
-            current.copy(
-                announcementDrafts = listOf(draft) + existing,
-                toastMessage = "Duyuru taslak olarak kaydedildi."
-            )
-        }
-    }
-
-    fun saveAnnouncementDraft(
-        title: String,
-        content: String,
-        category: String,
-        target: String
-    ) {
-        saveAnnouncementDraft(id = null, title = title, content = content, category = category, target = target, isUrgent = false)
-    }
-
-    fun publishAnnouncementDraft(draftId: String, sendPush: Boolean = true) {
-        val draft = _uiState.value.announcementDrafts.find { it.id == draftId } ?: return
-        val publishedAnnouncement = draft.copy(
-            id = "ann-${System.currentTimeMillis()}",
-            is_draft = false,
-            draft_last_modified = null,
-            created_at = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-        )
-
-        _uiState.update { current ->
-            current.copy(
-                announcementDrafts = current.announcementDrafts.filter { it.id != draftId },
-                announcements = listOf(publishedAnnouncement) + current.announcements,
-                toastMessage = "'${publishedAnnouncement.title}' başlıklı taslak başarıyla yayınlandı!"
-            )
-        }
-
-        if (sendPush) {
-            NotificationHelper.sendAnnouncementPush(
-                context = getApplication(),
-                title = publishedAnnouncement.title,
-                content = publishedAnnouncement.content,
-                author = publishedAnnouncement.author_name
-            )
-        }
-    }
-
-    fun publishAnnouncementDraft(draft: Announcement) {
-        publishAnnouncementDraft(draft.id)
-    }
-
-    fun deleteAnnouncementDraft(draftId: String) {
-        _uiState.update { current ->
-            current.copy(
-                announcementDrafts = current.announcementDrafts.filter { it.id != draftId },
-                toastMessage = "Taslak duyuru silindi."
-            )
-        }
-    }
 
     // Teacher Term Subject Grade & Attendance PDF Export
     fun exportTeacherTermSubjectReport(

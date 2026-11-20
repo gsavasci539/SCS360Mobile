@@ -136,12 +136,6 @@ fun Okul360NavHost(
         composable(Screen.Announcements.route) {
             CommunicationScreen(
                 state = state,
-                onCreateAnnouncement = { title, content, cat, tgt ->
-                    viewModel.createAnnouncement(title, content, cat, tgt)
-                },
-                onDeleteAnnouncement = { id ->
-                    viewModel.deleteAnnouncement(id)
-                },
                 onSendNotification = { title, msg, tgt, chan ->
                     viewModel.sendNotification(title, msg, tgt, chan)
                 },
@@ -170,12 +164,6 @@ fun Okul360NavHost(
         composable(Screen.Communication.route) {
             CommunicationScreen(
                 state = state,
-                onCreateAnnouncement = { title, content, cat, tgt ->
-                    viewModel.createAnnouncement(title, content, cat, tgt)
-                },
-                onDeleteAnnouncement = { id ->
-                    viewModel.deleteAnnouncement(id)
-                },
                 onSendNotification = { title, msg, tgt, chan ->
                     viewModel.sendNotification(title, msg, tgt, chan)
                 },

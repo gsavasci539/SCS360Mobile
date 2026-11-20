@@ -342,8 +342,6 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 state = state,
                                 onAddStudent = { std -> viewModel.addStudent(std) },
                                 onAddClass = { viewModel.addClass(it) },
-                                onCreateAnnouncement = { title, content, cat, tgt -> viewModel.createAnnouncement(title, content, cat, tgt) },
-                                onDeleteAnnouncement = { id -> viewModel.deleteAnnouncement(id) },
                                 onRoleSelected = { role -> viewModel.switchRole(role) },
                                 onOpenChatbot = { showChatbotDialog = true },
                                 onLogout = { viewModel.logout() }
@@ -940,21 +938,6 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             )
                             SubScreen.COMMUNICATION -> CommunicationScreen(
                                 state = state,
-                                onCreateAnnouncement = { title, content, cat, tgt ->
-                                    viewModel.createAnnouncement(title, content, cat, tgt)
-                                },
-                                onDeleteAnnouncement = { id ->
-                                    viewModel.deleteAnnouncement(id)
-                                },
-                                onSaveAnnouncementDraft = { title, content, cat, tgt ->
-                                    viewModel.saveAnnouncementDraft(title, content, cat, tgt)
-                                },
-                                onDeleteAnnouncementDraft = { id ->
-                                    viewModel.deleteAnnouncementDraft(id)
-                                },
-                                onPublishAnnouncementDraft = { id ->
-                                    viewModel.publishAnnouncementDraft(id)
-                                },
                                 onSendNotification = { title, msg, tgt, chan ->
                                     viewModel.sendNotification(title, msg, tgt, chan)
                                 },
@@ -975,9 +958,6 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 },
                                 onOpenNotificationSettings = {
                                     viewModel.openDeviceNotificationSettings()
-                                },
-                                onAnnouncementClick = { ann ->
-                                    viewModel.selectAnnouncementDetail(ann)
                                 }
                             )
                             SubScreen.REPORTS -> ReportsScreen(
@@ -1640,12 +1620,10 @@ fun Okul360App(viewModel: Okul360ViewModel) {
             }
 
             if (state.showCreateAnnouncementDialog) {
-                CreateAnnouncementDialog(
-                    onDismiss = { viewModel.openCreateAnnouncement(false) },
-                    onConfirm = { title, content, cat, tgt ->
-                        viewModel.createAnnouncement(title, content, cat, tgt)
-                    }
-                )
+                NativeAnnouncementDraftDialog(state, onClose = { viewModel.openCreateAnnouncement(false) }) {
+                    viewModel.openCreateAnnouncement(false)
+                    currentSubScreen = SubScreen.COMMUNICATION
+                }
             }
 
             state.selectedStudent?.let { student ->

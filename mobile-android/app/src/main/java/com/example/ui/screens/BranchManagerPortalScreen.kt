@@ -52,13 +52,12 @@ fun BranchManagerPortalScreen(
     state: Okul360UiState,
     onAddStudent: (Student) -> Unit,
     onAddClass: (com.example.data.model.ClassGroup) -> Unit,
-    onCreateAnnouncement: (title: String, content: String, cat: String, tgt: String) -> Unit,
-    onDeleteAnnouncement: (String) -> Unit = {},
     onRoleSelected: (UserRole) -> Unit = {},
     onOpenChatbot: (() -> Unit)? = null,
     onLogout: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(ManagerNavTab.OVERVIEW) }
+    var announcementRevision by remember { mutableIntStateOf(0) }
     var showAddStudentModal by remember { mutableStateOf(false) }
     var showAddClassModal by remember { mutableStateOf(false) }
     var showNewAnnouncementModal by remember { mutableStateOf(false) }
@@ -274,11 +273,7 @@ fun BranchManagerPortalScreen(
                     state = state,
                     onOpenAddStudent = { showAddStudentModal = true }
                 )
-                ManagerNavTab.ANNOUNCEMENTS -> AdminAnnouncementManagementScreen(
-                    state = state,
-                    onCreateAnnouncement = onCreateAnnouncement,
-                    onDeleteAnnouncement = onDeleteAnnouncement
-                )
+                ManagerNavTab.ANNOUNCEMENTS -> key(announcementRevision) { NativeAnnouncementManagementPane(state) }
                 ManagerNavTab.PROFILE -> ManagerProfileTab(
                     state = state,
                     onLogout = onLogout
@@ -305,50 +300,11 @@ fun BranchManagerPortalScreen(
     if (showAddClassModal) AddClassDialog(state = state, onDismiss = { showAddClassModal = false }, onConfirm = onAddClass)
 
     if (showNewAnnouncementModal) {
-        var title by remember { mutableStateOf("") }
-        var content by remember { mutableStateOf("") }
-        var category by remember { mutableStateOf("Genel") }
-        var target by remember { mutableStateOf("ALL") }
-
-        AlertDialog(
-            onDismissRequest = { showNewAnnouncementModal = false },
-            title = { Text("📢 Şube Duyurusu Yayınla", fontWeight = FontWeight.Bold, color = BrandNavy) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
-                        label = { Text("Duyuru Başlığı") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = content,
-                        onValueChange = { content = it },
-                        label = { Text("Duyuru Metni") },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 3
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (title.isNotBlank() && content.isNotBlank()) {
-                            onCreateAnnouncement(title, content, category, target)
-                            showNewAnnouncementModal = false
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
-                ) {
-                    Text("Yayınla")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNewAnnouncementModal = false }) {
-                    Text("İptal")
-                }
-            }
-        )
+        NativeAnnouncementDraftDialog(state, onClose = { showNewAnnouncementModal = false }) {
+            showNewAnnouncementModal = false
+            announcementRevision++
+            selectedTab = ManagerNavTab.ANNOUNCEMENTS
+        }
     }
 }
 

@@ -19,15 +19,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.model.Announcement
 import com.example.data.model.CommunicationTemplate
 import com.example.data.model.NotificationItem
-import com.example.ui.components.AnnouncementEmptyState
 import com.example.ui.components.EmptyStateView
-import com.example.ui.components.Okul360CircularLoadingIndicator
-import com.example.ui.components.RoleContextualAiCard
 import com.example.ui.dialogs.ConfirmDeleteDialog
-import com.example.ui.dialogs.CreateAnnouncementDialog
 import com.example.ui.theme.BrandNavy
 import com.example.ui.theme.PrimaryBlue
 import com.example.ui.viewmodel.Okul360UiState
@@ -36,11 +31,6 @@ import com.example.ui.viewmodel.Okul360UiState
 @Composable
 fun CommunicationScreen(
     state: Okul360UiState,
-    onCreateAnnouncement: (title: String, content: String, category: String, target: String) -> Unit,
-    onDeleteAnnouncement: (String) -> Unit,
-    onSaveAnnouncementDraft: ((title: String, content: String, category: String, target: String) -> Unit)? = null,
-    onDeleteAnnouncementDraft: ((String) -> Unit)? = null,
-    onPublishAnnouncementDraft: ((String) -> Unit)? = null,
     onSendNotification: (title: String, message: String, targetRole: String, channel: String) -> Unit,
     onDeleteNotification: (String) -> Unit,
     onCreateTemplate: (title: String, type: String, content: String) -> Unit,
@@ -48,16 +38,9 @@ fun CommunicationScreen(
     onTriggerPushTest: ((title: String, message: String, channel: String) -> Unit)? = null,
     onTriggerDelayedPushTest: ((delaySeconds: Int, title: String, message: String, channel: String) -> Unit)? = null,
     onOpenNotificationSettings: (() -> Unit)? = null,
-    onAnnouncementClick: ((Announcement) -> Unit)? = null
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Duyurular", "Giden Bildirimler", "Mesaj Şablonları", "Push Bildirim Testi")
-
-    var announcementViewMode by remember { mutableIntStateOf(0) } // 0: Published, 1: Drafts
-    var showCreateAnnouncementDialog by remember { mutableStateOf(false) }
-    var editingDraft by remember { mutableStateOf<Announcement?>(null) }
-    var announcementToDelete by remember { mutableStateOf<Announcement?>(null) }
-    var draftToDelete by remember { mutableStateOf<Announcement?>(null) }
 
     var showSendNotificationDialog by remember { mutableStateOf(false) }
     var notificationToDelete by remember { mutableStateOf<NotificationItem?>(null) }
@@ -71,7 +54,7 @@ fun CommunicationScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         // Tab Row
-        TabRow(
+        ScrollableTabRow(
             selectedTabIndex = selectedTab,
             containerColor = MaterialTheme.colorScheme.surface,
             contentColor = PrimaryBlue
@@ -92,242 +75,7 @@ fun CommunicationScreen(
         }
 
         when (selectedTab) {
-            0 -> {
-                // ANNOUNCEMENTS TAB
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // Compact Header with Sub-filter & Actions
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            FilterChip(
-                                selected = announcementViewMode == 0,
-                                onClick = { announcementViewMode = 0 },
-                                label = { Text("Yayınlananlar (${state.announcements.size})", fontSize = 11.5.sp, fontWeight = if (announcementViewMode == 0) FontWeight.Bold else FontWeight.Normal) },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Campaign, contentDescription = null, modifier = Modifier.size(15.dp))
-                                }
-                            )
-                            FilterChip(
-                                selected = announcementViewMode == 1,
-                                onClick = { announcementViewMode = 1 },
-                                label = { Text("Taslaklar (${state.announcementDrafts.size})", fontSize = 11.5.sp, fontWeight = if (announcementViewMode == 1) FontWeight.Bold else FontWeight.Normal) },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Drafts, contentDescription = null, modifier = Modifier.size(15.dp))
-                                }
-                            )
-                        }
-
-                        Button(
-                            onClick = {
-                                editingDraft = null
-                                showCreateAnnouncementDialog = true
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                            modifier = Modifier.height(34.dp)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Duyuru Oluştur", fontSize = 11.5.sp)
-                        }
-                    }
-
-                    if (state.isDataLoading) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Okul360CircularLoadingIndicator(
-                                size = 52.dp,
-                                label = "Duyurular yükleniyor..."
-                            )
-                        }
-                    } else if (announcementViewMode == 0) {
-                        // PUBLISHED ANNOUNCEMENTS
-                        if (state.announcements.isEmpty()) {
-                            AnnouncementEmptyState(
-                                isSearchingOrFiltering = false,
-                                onResetFilters = {},
-                                onCreateAnnouncement = {
-                                    editingDraft = null
-                                    showCreateAnnouncementDialog = true
-                                }
-                            )
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                item {
-                                    RoleContextualAiCard(
-                                        screenName = "COMMUNICATION",
-                                        state = state
-                                    )
-                                }
-                                items(state.announcements) { item ->
-                                    Card(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .then(if (onAnnouncementClick != null) Modifier.clickable { onAnnouncementClick(item) } else Modifier),
-                                        shape = RoundedCornerShape(14.dp),
-                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                                    ) {
-                                        Column(modifier = Modifier.padding(14.dp)) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.Top
-                                            ) {
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Text(text = item.title, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = BrandNavy)
-                                                    Text(text = "${item.created_at} • ${item.author_name}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                }
-                                                IconButton(
-                                                    onClick = { announcementToDelete = item },
-                                                    modifier = Modifier.size(32.dp)
-                                                ) {
-                                                    Icon(Icons.Default.Delete, contentDescription = "Sil", tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
-                                                }
-                                            }
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            Text(text = item.content, fontSize = 13.sp, color = Color(0xFF334155))
-                                            Spacer(modifier = Modifier.height(10.dp))
-                                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                                Surface(color = Color(0xFFEFF6FF), shape = RoundedCornerShape(6.dp)) {
-                                                    Text(text = item.category, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 10.sp, color = PrimaryBlue, fontWeight = FontWeight.Bold)
-                                                }
-                                                Surface(color = Color(0xFFF1F5F9), shape = RoundedCornerShape(6.dp)) {
-                                                    Text(text = "Hedef: ${item.target_audience}", modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 10.sp, color = Color(0xFF64748B))
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        // ANNOUNCEMENT DRAFTS
-                        if (state.announcementDrafts.isEmpty()) {
-                            EmptyStateView(
-                                icon = Icons.Outlined.Drafts,
-                                title = "Kayıtlı Taslak Yok",
-                                description = "Duyuru hazırlarken 'Taslak Olarak Kaydet' butonunu kullanarak daha sonra yayınlamak üzere taslak oluşturabilirsiniz.",
-                                primaryActionLabel = "Taslak Duyuru Yaz",
-                                onPrimaryAction = {
-                                    editingDraft = null
-                                    showCreateAnnouncementDialog = true
-                                }
-                            )
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                items(state.announcementDrafts) { draft ->
-                                    Card(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(14.dp),
-                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                                    ) {
-                                        Column(modifier = Modifier.padding(14.dp)) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.Top
-                                            ) {
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        Surface(
-                                                            color = Color(0xFFFEF3C7),
-                                                            shape = RoundedCornerShape(4.dp)
-                                                        ) {
-                                                            Text(
-                                                                text = "TASLAK",
-                                                                fontSize = 9.sp,
-                                                                fontWeight = FontWeight.Bold,
-                                                                color = Color(0xFFB45309),
-                                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                                                            )
-                                                        }
-                                                        Spacer(modifier = Modifier.width(6.dp))
-                                                        Text(text = draft.title, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = BrandNavy)
-                                                    }
-                                                    Text(text = "Son Düzenleme: ${draft.created_at} • ${draft.author_name}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                }
-                                                IconButton(
-                                                    onClick = { draftToDelete = draft },
-                                                    modifier = Modifier.size(32.dp)
-                                                ) {
-                                                    Icon(Icons.Default.Delete, contentDescription = "Taslağı Sil", tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
-                                                }
-                                            }
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            Text(text = draft.content, fontSize = 13.sp, color = Color(0xFF475569))
-                                            Spacer(modifier = Modifier.height(10.dp))
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                                    Surface(color = Color(0xFFEFF6FF), shape = RoundedCornerShape(6.dp)) {
-                                                        Text(text = draft.category, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 10.sp, color = PrimaryBlue, fontWeight = FontWeight.Bold)
-                                                    }
-                                                    Surface(color = Color(0xFFF1F5F9), shape = RoundedCornerShape(6.dp)) {
-                                                        Text(text = "Hedef: ${draft.target_audience}", modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 10.sp, color = Color(0xFF64748B))
-                                                    }
-                                                }
-
-                                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                    OutlinedButton(
-                                                        onClick = {
-                                                            editingDraft = draft
-                                                            showCreateAnnouncementDialog = true
-                                                        },
-                                                        shape = RoundedCornerShape(10.dp),
-                                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                                        modifier = Modifier.height(40.dp)
-                                                    ) {
-                                                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
-                                                        Spacer(modifier = Modifier.width(5.dp))
-                                                        Text("Düzenle", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                                    }
-
-                                                    Button(
-                                                        onClick = {
-                                                            onPublishAnnouncementDraft?.invoke(draft.id)
-                                                        },
-                                                        shape = RoundedCornerShape(10.dp),
-                                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                                                        modifier = Modifier.height(40.dp)
-                                                    ) {
-                                                        Icon(Icons.Default.Publish, contentDescription = null, modifier = Modifier.size(15.dp))
-                                                        Spacer(modifier = Modifier.width(5.dp))
-                                                        Text("Şimdi Yayınla", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            0 -> NativeAnnouncementManagementPane(state)
             1 -> {
                 // NOTIFICATIONS OUTBOX TAB
                 Row(
@@ -829,60 +577,6 @@ fun CommunicationScreen(
     }
 
     // Dialogs
-    if (showCreateAnnouncementDialog) {
-        CreateAnnouncementDialog(
-            initialTitle = editingDraft?.title ?: "",
-            initialContent = editingDraft?.content ?: "",
-            initialCategory = editingDraft?.category ?: "GENERAL",
-            initialTarget = editingDraft?.target_audience ?: "ALL",
-            onDismiss = {
-                showCreateAnnouncementDialog = false
-                editingDraft = null
-            },
-            onConfirm = { title, content, cat, tgt ->
-                val draft = editingDraft
-                if (draft != null) {
-                    onDeleteAnnouncementDraft?.invoke(draft.id)
-                }
-                onCreateAnnouncement(title, content, cat, tgt)
-                showCreateAnnouncementDialog = false
-                editingDraft = null
-            },
-            onSaveDraft = { title, content, cat, tgt ->
-                val draft = editingDraft
-                if (draft != null) {
-                    onDeleteAnnouncementDraft?.invoke(draft.id)
-                }
-                onSaveAnnouncementDraft?.invoke(title, content, cat, tgt)
-                showCreateAnnouncementDialog = false
-                editingDraft = null
-            }
-        )
-    }
-
-    draftToDelete?.let { draft ->
-        ConfirmDeleteDialog(
-            title = "Taslağı Sil",
-            message = "\"${draft.title}\" başlıklı duyuru taslağını silmek istiyor musunuz?",
-            onDismiss = { draftToDelete = null },
-            onConfirm = {
-                onDeleteAnnouncementDraft?.invoke(draft.id)
-                draftToDelete = null
-            }
-        )
-    }
-
-    announcementToDelete?.let { ann ->
-        ConfirmDeleteDialog(
-            title = "Duyuruyu Sil",
-            message = "${ann.title} başlıklı duyuruyu silmek istiyor musunuz?",
-            onDismiss = { announcementToDelete = null },
-            onConfirm = {
-                onDeleteAnnouncement(ann.id)
-                announcementToDelete = null
-            }
-        )
-    }
 
     if (showSendNotificationDialog) {
         var notifTitle by remember { mutableStateOf("") }
