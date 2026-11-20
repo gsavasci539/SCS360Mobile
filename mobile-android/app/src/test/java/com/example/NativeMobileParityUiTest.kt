@@ -173,7 +173,9 @@ class NativeMobileParityUiTest {
 
     @Test fun anEmptyRealDebtListNeverCreatesSampleInvoices() {
         val child = Student(id = id(7), first_name = "Synthetic", last_name = "Child")
-        compose.setContent { Okul360Theme { ParentPaymentsTab(child, Okul360UiState(invoices = emptyList()), {}, {}) } }
+        val state = Okul360UiState(currentUser = User(permissions = listOf("parent.view_finances")),
+            parentInvoiceStates = mapOf(child.id to com.example.ui.viewmodel.ParentInvoiceLoadState.LOADED))
+        compose.setContent { Okul360Theme { ParentPaymentsTab(child, state, {}, {}) } }
         compose.onNodeWithText("Kayıtlı borç bulunamadı").assertExists()
         compose.onAllNodesWithText("FAT-2026", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("4500", substring = true).assertCountEquals(0)

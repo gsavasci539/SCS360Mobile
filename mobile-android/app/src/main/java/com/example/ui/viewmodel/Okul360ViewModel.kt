@@ -24,6 +24,8 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
+enum class ParentInvoiceLoadState { LOADING, LOADED, FAILED }
+
 data class Okul360UiState(
     val isLoggedIn: Boolean = false,
     val loginError: String? = null,
@@ -54,6 +56,7 @@ data class Okul360UiState(
     val parentChildren: List<Student> = emptyList(),
     val isParentPortalLoading: Boolean = false,
     val parentPortalError: String? = null,
+    val parentInvoiceStates: Map<String, ParentInvoiceLoadState> = emptyMap(),
 
     // Students State
     val students: List<Student> = emptyList(),
@@ -686,11 +689,14 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         if (!_uiState.value.isLoggedIn || _uiState.value.selectedRole != UserRole.PARENT) return
         parentPortalJob?.cancel()
         val captured = com.example.data.remote.ApiClientProvider.interceptor.captureScope()
-        _uiState.update { it.copy(parentChildren = emptyList(), invoices = emptyList(), isParentPortalLoading = true, parentPortalError = null) }
+        val user = _uiState.value.currentUser
+        _uiState.update {
+            it.copy(parentChildren = emptyList(), students = emptyList(), invoices = emptyList(),
+                parentInvoiceStates = emptyMap(), isParentPortalLoading = true, parentPortalError = null)
+        }
         parentPortalJob = viewModelScope.launch {
             try {
-                val client = com.example.data.remote.NativeParentPortalClient()
-                val user = _uiState.value.currentUser
+                val client = captured.io { com.example.data.remote.NativeParentPortalClient() }
                 val canReadFinances = NativeNavigationPolicy.canReadParentFinances(user)
                 val module = when {
                     NativeNavigationPolicy.canReadParentChildProfile(user) -> null
@@ -698,12 +704,32 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
                     canReadFinances -> ParentChildOptionsModule.FINANCES
                     else -> null
                 }
-                val children = captured.io { client.children(module) }
-                val invoices = if (canReadFinances) children.flatMap { child -> captured.io { client.invoices(child) } } else emptyList()
-                captured.ensureCurrent()
-                if (_uiState.value.selectedRole == UserRole.PARENT) _uiState.update { it.copy(parentChildren = children, students = children, invoices = invoices, isParentPortalLoading = false) }
+                client.loadPortalRecords(module, canReadFinances,
+                    onChildren = { children ->
+                        _uiState.update { state ->
+                            if (state.selectedRole != UserRole.PARENT || state.currentUser.id != user.id) state
+                            else state.copy(parentChildren = children, students = children, isParentPortalLoading = false,
+                                parentInvoiceStates = if (canReadFinances) children.associate { it.id to ParentInvoiceLoadState.LOADING } else emptyMap())
+                        }
+                    },
+                    onInvoices = { childId, result ->
+                        _uiState.update { state ->
+                            if (state.selectedRole != UserRole.PARENT || state.currentUser.id != user.id ||
+                                !NativeNavigationPolicy.canReadParentFinances(state.currentUser) ||
+                                state.parentInvoiceStates[childId] != ParentInvoiceLoadState.LOADING) state
+                            else state.copy(invoices = state.invoices + result.getOrDefault(emptyList()),
+                                parentInvoiceStates = state.parentInvoiceStates + (childId to
+                                    if (result.isSuccess) ParentInvoiceLoadState.LOADED else ParentInvoiceLoadState.FAILED))
+                        }
+                    },
+                )
             } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
-            catch (_: Exception) { if (captured.current() && _uiState.value.selectedRole == UserRole.PARENT) _uiState.update { it.copy(parentChildren = emptyList(), invoices = emptyList(), isParentPortalLoading = false, parentPortalError = "Veli kayıtları sunucudan yüklenemedi. Yeniden deneyin.") } }
+            catch (_: Exception) {
+                if (captured.current()) _uiState.update { state ->
+                    if (state.selectedRole != UserRole.PARENT || state.currentUser.id != user.id) state
+                    else state.copy(isParentPortalLoading = false, parentPortalError = "Bağlı öğrenciler sunucudan yüklenemedi. Yeniden deneyin.")
+                }
+            }
         }
     }
 

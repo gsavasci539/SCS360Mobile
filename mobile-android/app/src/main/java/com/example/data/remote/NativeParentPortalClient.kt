@@ -3,6 +3,9 @@ package com.example.data.remote
 import com.example.data.model.Invoice
 import com.example.data.model.ParentAttendanceMonth
 import com.example.data.model.Student
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import okhttp3.Request
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -48,6 +51,28 @@ class NativeParentPortalClient {
             fun text(key: String) = if (row.isNull(key)) "" else row.getString(key)
             Student(id = id, first_name = row.getString("first_name"), last_name = row.getString("last_name"),
                 student_number = text("student_number"), class_id = text("class_id"), class_name = text("class_name"), status = text("status"))
+        }
+    }
+
+    internal suspend fun loadPortalRecords(
+        module: ParentChildOptionsModule?,
+        readFinances: Boolean,
+        onChildren: (List<Student>) -> Unit,
+        onInvoices: (String, Result<List<Invoice>>) -> Unit,
+    ) = coroutineScope {
+        val children = children(module)
+        scope.ensureCurrent()
+        onChildren(children)
+        if (readFinances) for (child in children) launch {
+            val result = try {
+                Result.success(invoices(child))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                Result.failure(failure)
+            }
+            scope.ensureCurrent()
+            onInvoices(child.id, result)
         }
     }
     suspend fun section(studentId: String, section: String, date: LocalDate? = null): Any {

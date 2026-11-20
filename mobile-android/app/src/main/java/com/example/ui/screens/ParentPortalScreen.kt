@@ -53,6 +53,7 @@ import com.example.ui.dialogs.iyzico.IyzicoPaymentDialog
 import com.example.ui.navigation.NativeNavigationPolicy
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.Okul360UiState
+import com.example.ui.viewmodel.ParentInvoiceLoadState
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -628,11 +629,22 @@ internal fun ParentPaymentsTab(
     onPayClicked: (Invoice) -> Unit,
     onReceiptClicked: (Invoice) -> Unit
 ) {
-    // Strictly isolate invoices to THIS student only
+    val loadMessage = if (!NativeNavigationPolicy.canReadParentFinances(state.currentUser)) {
+        "Borçları görüntüleme yetkiniz yok."
+    } else when (state.parentInvoiceStates[student.id]) {
+        ParentInvoiceLoadState.LOADING -> "Borçlar yükleniyor."
+        ParentInvoiceLoadState.FAILED -> "Borçlar yüklenemedi. Yeniden deneyin."
+        ParentInvoiceLoadState.LOADED -> null
+        null -> "Borçlar henüz doğrulanmadı."
+    }
+    if (loadMessage != null) {
+        Text(loadMessage, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 48.dp))
+        return
+    }
+
     val canMakePayment = NativeNavigationPolicy.has(state.currentUser, "parent.make_payment")
     val studentInvoices = remember(state.invoices, student.id) {
         state.invoices.filter { it.student_id == student.id }
-
     }
 
     val totalPaid = studentInvoices.sumOf { it.paid_amount }
@@ -643,7 +655,7 @@ internal fun ParentPaymentsTab(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        if (studentInvoices.isEmpty()) item { Text(state.parentPortalError ?: if (state.isParentPortalLoading) "Borçlar yükleniyor" else "Kayıtlı borç bulunamadı") }
+        if (studentInvoices.isEmpty()) item { Text("Kayıtlı borç bulunamadı") }
         item {
             Text(
                 text = "💳 Ödemeler & Aidat Takibi",

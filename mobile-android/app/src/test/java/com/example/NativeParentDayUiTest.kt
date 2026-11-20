@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.Density
 import com.example.data.model.Student
+import com.example.data.model.Invoice
 import com.example.data.model.User
 import com.example.data.model.UserRole
 import com.example.data.remote.ApiClientProvider
@@ -20,8 +21,10 @@ import com.example.data.remote.ParentChildOptionsModule
 import com.example.ui.screens.ParentVerifiedRecordsPane
 import com.example.ui.screens.ParentDiaryAndGrowthTab
 import com.example.ui.screens.ParentPortalScreen
+import com.example.ui.screens.ParentPaymentsTab
 import com.example.ui.theme.Okul360Theme
 import com.example.ui.viewmodel.Okul360UiState
+import com.example.ui.viewmodel.ParentInvoiceLoadState
 import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.runBlocking
 import org.junit.Rule
@@ -42,6 +45,59 @@ import java.util.concurrent.TimeUnit
 @Config(sdk = [36], qualifiers = "w360dp-h620dp-mdpi")
 class NativeParentDayUiTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun oneInvoiceFailureKeepsVerifiedChildrenAndTheOtherInvoiceResult() {
+        val first = UUID(43, 1).toString()
+        val second = UUID(43, 2).toString()
+        val debt = UUID(43, 3).toString()
+        val base = ApiClientProvider.activeBaseUrl
+        val interceptor = ApiClientProvider.interceptor
+        val previous = listOf(interceptor.authToken, interceptor.tenantId, interceptor.branchId, interceptor.workspaceOrganizationId)
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/api/parent/") { exchange ->
+            val data = when (exchange.requestURI.path) {
+                "/api/parent/my-children" ->
+                    """[{"student_id":"$first","first_name":"Deniz","last_name":"Test"},{"student_id":"$second","first_name":"Ada","last_name":"Test"}]"""
+                "/api/parent/child/$second/financial-invoices" ->
+                    """{"student_id":"$second","invoices":[{"debt_id":"$debt","amount":"25.00","paid_amount":"0.00","remaining_amount":"25.00","status":"UNPAID"}]}"""
+                else -> null
+            }
+            val bytes = """{"success":${data != null},"data":$data}""".toByteArray()
+            exchange.responseHeaders.add("Content-Type", "application/json")
+            exchange.sendResponseHeaders(if (data != null) 200 else 503, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+        server.start()
+        ApiClientProvider.createService("http://127.0.0.1:${server.address.port}/api/")
+        interceptor.setSession("synthetic-parent")
+        try {
+            var children = emptyList<Student>()
+            val results = mutableMapOf<String, Result<List<Invoice>>>()
+            runBlocking {
+                NativeParentPortalClient().loadPortalRecords(null, readFinances = true, onChildren = { children = it }) { id, result ->
+                    assertEquals(listOf(first, second), children.map { it.id })
+                    results[id] = result
+                }
+            }
+            assertEquals(listOf(first, second), children.map { it.id })
+            assertEquals(true, results.getValue(first).isFailure)
+            assertEquals(debt, results.getValue(second).getOrThrow().single().id)
+
+            val invoiceStates = results.mapValues { (_, result) ->
+                if (result.isSuccess) ParentInvoiceLoadState.LOADED else ParentInvoiceLoadState.FAILED
+            }
+            val state = Okul360UiState(currentUser = User(permissions = listOf("parent.view_finances")),
+                parentChildren = children, invoices = results.getValue(second).getOrThrow(), parentInvoiceStates = invoiceStates)
+            compose.setContent { Okul360Theme { ParentPaymentsTab(children.first(), state, {}, {}) } }
+            compose.onNodeWithText("Borçlar yüklenemedi. Yeniden deneyin.").assertIsDisplayed()
+            compose.onNodeWithText("Kayıtlı borç bulunamadı").assertDoesNotExist()
+            compose.onNodeWithText("Taksit & Fatura Listesi").assertDoesNotExist()
+        } finally {
+            server.stop(0)
+            ApiClientProvider.createService(base)
+            interceptor.setSession(previous[0], previous[1], previous[2], previous[3])
+        }
+    }
 
     @Test fun limitedParentUsesModuleChildOptionsAndShowsOnlyAuthorizedTabs() {
         val child = UUID(42, 3).toString()
