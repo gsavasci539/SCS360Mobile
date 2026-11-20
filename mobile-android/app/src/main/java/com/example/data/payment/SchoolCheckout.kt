@@ -118,6 +118,22 @@ class SchoolCheckout(context: Context, private val debtId: String, private val p
         check(prefs.edit().remove(fingerprint).commit()) { "Ödeme kaydı güncellenemedi" }
         pending = null
     }
+    internal suspend fun prepareRemainingPayment(): JSONObject {
+        check(parentStudentId != null) { "Seçili öğrenci doğrulanamadı" }
+        val previous = saved() ?: error("Ödeme kaydı bulunamadı")
+        val requestId = previous.getString("request_id")
+        val recorded = validate(call("$paymentsPath/checkouts/$requestId"), requestId, BigDecimal(previous.getString("amount")))
+        check(recorded.getString("status") == SCHOOL_CHECKOUT_COMPLETED) { "Önceki tahsilat henüz doğrulanmadı" }
+        val balance = debt()
+        check(balance.optBoolean("online_payment_available") && !balance.optBoolean("payment_in_progress") &&
+            balance.isNull("open_checkout") && balance.optString("status") in setOf("PARTIALLY_PAID", "OVERDUE", "UNPAID") &&
+            balance.optString("remaining_amount").toBigDecimalOrNull()?.signum() == 1) { "Bu borç için yeni online ödeme açılamıyor" }
+        sameSession()
+        check(saved()?.optString("request_id") == requestId) { "Önceki ödeme kaydı değişti" }
+        check(prefs.edit().remove(fingerprint).commit()) { "Ödeme kaydı güncellenemedi" }
+        pending = null
+        return balance
+    }
     internal suspend fun resume(): SchoolCheckoutLaunch? {
         val previous = saved() ?: return null
         val requestId = previous.getString("request_id")

@@ -13,6 +13,7 @@ import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.data.local.SessionManager
 import com.example.data.model.*
+import com.example.data.payment.SchoolCheckout
 import com.example.data.remote.ApiClientProvider
 import com.example.data.remote.NativeParentPortalClient
 import com.example.data.remote.ParentInvoiceSnapshot
@@ -59,6 +60,7 @@ class NativeMobileParityUiTest {
     private val releaseBrowserStatus = CountDownLatch(1)
     @Volatile private var holdBrowserStatus = false
     @Volatile private var failBrowserStatus = false
+    @Volatile private var nextCheckout: JSONObject? = null
     @Before fun start() {
         oldFont = RuntimeEnvironment.getFontScale(); RuntimeEnvironment.setFontScale(2f)
         base = ApiClientProvider.activeBaseUrl; token = ApiClientProvider.interceptor.authToken
@@ -98,6 +100,12 @@ class NativeMobileParityUiTest {
                         .put("amount", "100.00").put("paid_amount", if (paid) "100.00" else "0.00")
                         .put("remaining_amount", if (paid) "0.00" else "100.00").put("status", if (paid) "PAID" else "UNPAID")))
                 e.requestURI.path.contains("/online/debts/") -> JSONObject().put("id", id(2)).put("remaining_amount", if (paid) "0.00" else "100.00").put("online_payment_available", false)
+                e.requestURI.path == "/api/parent/payments/initialize" -> {
+                    val request = JSONObject(e.requestBody.use { it.readBytes().decodeToString() })
+                    nextCheckout = request
+                    JSONObject().put("id", request.getString("request_id")).put("debt_id", request.getString("debt_id"))
+                        .put("amount", request.getString("amount")).put("status", "PENDING")
+                }
                 e.requestURI.path.contains("/checkouts/") -> {
                     if (holdBrowserStatus && e.requestMethod == "GET") releaseBrowserStatus.await(30, TimeUnit.SECONDS)
                     JSONObject().put("id", id(3)).put("debt_id", id(2)).put("amount", "100.00")
@@ -219,6 +227,30 @@ class NativeMobileParityUiTest {
         assertTrue(calls.any { it == "POST /api/parent/payments/checkouts/${id(3)}/refresh" })
         assertTrue(calls.none { it.contains("/payments/online/") || it.contains("/my-children") || it.contains(sibling.id) })
         assertTrue(calls.none { it.startsWith("POST") && !it.endsWith("/refresh") })
+    }
+
+    @Test fun parentCanStartRemainingPaymentOnlyAfterVerifyingTheCompletedCheckout() = runBlocking {
+        val context = RuntimeEnvironment.getApplication()
+        val service = SchoolCheckout(context, id(2), id(7))
+        paid = true
+        assertTrue(runCatching { service.prepareRemainingPayment() }.isFailure)
+        assertEquals(id(3), service.saved()?.getString("request_id"))
+        parentInvoiceResponse = JSONObject("""{
+            "student_id":"${id(7)}","online_payment_available":true,"invoices":[
+                {"debt_id":"${id(2)}","amount":"100.00","paid_amount":"25.00","remaining_amount":"75.00","status":"PARTIALLY_PAID"}]
+        }""")
+        omitPaymentId = true
+        assertTrue(runCatching { service.prepareRemainingPayment() }.isFailure)
+        assertEquals(id(3), service.saved()?.getString("request_id"))
+        omitPaymentId = false
+        val balance = service.prepareRemainingPayment()
+        assertNull(service.saved())
+        assertTrue(calls.none { it.startsWith("POST") })
+        service.start(balance.getString("remaining_amount"), JSONObject())
+        val request = requireNotNull(nextCheckout)
+        assertEquals("75.00", request.getString("amount"))
+        assertNotEquals(id(3), request.getString("request_id"))
+        assertEquals(listOf("POST /api/parent/payments/initialize"), calls.filter { it.startsWith("POST") })
     }
 
     @Test fun parentBrowserReturnChecksTheSameCheckoutOnce() {

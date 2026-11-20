@@ -135,6 +135,16 @@ fun HostedPaymentDialog(
                             modifier = Modifier.heightIn(min = 48.dp)) { Text("Ödeme durumunu yeniden sorgula") }
                     }
                 }
+                if (paid && !recoveryOnly && parentStudentId != null &&
+                    (shownResult?.optString("remaining_amount").orEmpty().toBigDecimalOrNull()
+                        ?: debt?.optString("remaining_amount")?.toBigDecimalOrNull())?.signum() == 1) {
+                    item(key = "remaining_payment") {
+                        Button(enabled = !busy, onClick = { run { service ->
+                            debt = service.prepareRemainingPayment()
+                            result = null
+                        } }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Kalan borcu kontrol et") }
+                    }
+                }
                 if (!paid && !recoveryOnly && browserRetry == null) {
                     item(key = "identity") { OutlinedTextField(identity, { identity = it }, enabled = !busy, label = { Text("Kimlik / pasaport numarası") }, modifier = Modifier.fillMaxWidth()) }
                     item(key = "phone") { OutlinedTextField(phone, { phone = it }, enabled = !busy, label = { Text("Telefon") }, modifier = Modifier.fillMaxWidth()) }
