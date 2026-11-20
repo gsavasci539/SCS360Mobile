@@ -10,7 +10,7 @@ import org.json.JSONObject
 import java.math.BigDecimal
 import java.util.UUID
 
-class SchoolCheckout(context: Context, private val debtId: String) {
+class SchoolCheckout(context: Context, private val debtId: String, private val parentStudentId: String? = null) {
     private val scope = NativeRequestScope.bound() ?: ApiClientProvider.interceptor.captureScope()
     private val prefs = context.getSharedPreferences("school_checkout_v1", Context.MODE_PRIVATE)
     private val userId = com.example.data.local.SessionManager(context).getUser()?.id ?: error("Oturum gerekli")
@@ -22,7 +22,13 @@ class SchoolCheckout(context: Context, private val debtId: String) {
         .digest("$baseUrl|$userId|$tenant|$workspace|$debtId".toByteArray()).joinToString("") { "%02x".format(it) }
     private var pending: JSONObject? = null
     private val client = ApiClientProvider.createOkHttpClient()
-    init { UUID.fromString(debtId); UUID.fromString(userId); require(actor.isNotBlank()) { "Oturum gerekli" } }
+    private val paymentsPath = if (parentStudentId == null) "payments/online" else "parent/payments"
+    init {
+        UUID.fromString(debtId)
+        UUID.fromString(userId)
+        parentStudentId?.let { UUID.fromString(it) }
+        require(actor.isNotBlank()) { "Oturum gerekli" }
+    }
     fun saved(): JSONObject? = prefs.getString(fingerprint, null)?.let { JSONObject(it) }
     private fun sameSession() = scope.ensureCurrent()
     private suspend fun call(path: String, body: JSONObject? = null): JSONObject = scope.io {
@@ -37,7 +43,15 @@ class SchoolCheckout(context: Context, private val debtId: String) {
             parsed.optJSONObject("data") ?: parsed
         }
     }
-    suspend fun debt() = call("payments/online/debts/$debtId")
+    suspend fun debt(): JSONObject {
+        val studentId = parentStudentId ?: return call("$paymentsPath/debts/$debtId")
+        val summary = call("parent/child/$studentId/financial-invoices")
+        check(summary.getString("student_id") == studentId) { "Borçlar seçili öğrenciyle eşleşmiyor" }
+        val invoices = summary.getJSONArray("invoices")
+        val debt = (0 until invoices.length()).map(invoices::getJSONObject).singleOrNull { it.getString("debt_id") == debtId }
+            ?: error("Seçili borç sunucuda doğrulanamadı")
+        return debt.put("online_payment_available", summary.optBoolean("online_payment_available"))
+    }
     private fun validate(result: JSONObject): JSONObject {
         val previous = saved() ?: error("Ödeme kaydı bulunamadı")
         check(result.optString("id", result.optString("conversation_id")) == previous.getString("request_id") && result.getString("debt_id") == debtId &&
@@ -54,19 +68,19 @@ class SchoolCheckout(context: Context, private val debtId: String) {
         }
         check(previous.getString("amount") == amount) { "Önceki ödemenin sonucunu kontrol edin" }
         if (pending == null) pending = JSONObject(previous.toString()).put("buyer", buyer).put("currency", "TRY").put("payment_channel", "MOBILE")
-        return validate(call("payments/online/initialize", pending))
+        return validate(call("$paymentsPath/initialize", pending))
     }
-    suspend fun refresh(): JSONObject? = saved()?.let { validate(call("payments/online/checkouts/${it.getString("request_id")}/refresh", JSONObject())) }
+    suspend fun refresh(): JSONObject? = saved()?.let { validate(call("$paymentsPath/checkouts/${it.getString("request_id")}/refresh", JSONObject())) }
     suspend fun clearFailed() {
         val previous = saved() ?: return
-        val result = validate(call("payments/online/checkouts/${previous.getString("request_id")}"))
+        val result = validate(call("$paymentsPath/checkouts/${previous.getString("request_id")}"))
         check(result.optString("status") in listOf("FAILED", "REFUNDED")) { "Önceki ödeme hâlâ kontrol edilmeli" }
         check(prefs.edit().remove(fingerprint).commit()) { "Ödeme kaydı güncellenemedi" }
         pending = null
     }
     suspend fun resume(): String? {
         val previous = saved() ?: return null
-        val result = validate(call("payments/online/checkouts/${previous.getString("request_id")}/resume", JSONObject()))
+        val result = validate(call("$paymentsPath/checkouts/${previous.getString("request_id")}/resume", JSONObject()))
         if (!result.optBoolean("can_resume")) return null
         val url = result.optString("checkout_url", result.optString("payment_page_url"))
         val parsed = java.net.URI(url)

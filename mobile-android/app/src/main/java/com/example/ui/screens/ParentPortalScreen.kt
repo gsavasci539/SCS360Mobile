@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -92,6 +93,7 @@ fun ParentPortalScreen(
     onOpenTransport: () -> Unit = {},
     onOpenDismissal: () -> Unit = {},
     onRefresh: () -> Unit = {},
+    onRefreshInvoices: (String) -> Unit = {},
     chatbotTab: ParentNavTab? = null,
     chatbotStudentId: String? = null,
     onChatbotDestinationOpened: () -> Unit = {},
@@ -508,7 +510,8 @@ fun ParentPortalScreen(
             showPaymentDialogForInvoice?.takeIf { NativeNavigationPolicy.has(state.currentUser, "parent.make_payment") }?.let { invoice ->
                 if (invoice.student_id == currentChild?.id && state.parentChildren.any { it.id == invoice.student_id }) {
                     com.example.ui.dialogs.iyzico.HostedPaymentDialog(invoice.id,
-                        onDismiss = { showPaymentDialogForInvoice = null }, onReconciled = onRefresh)
+                        onDismiss = { showPaymentDialogForInvoice = null },
+                        onReconciled = { onRefreshInvoices(invoice.student_id) }, parentStudentId = invoice.student_id)
                 }
             }
 
@@ -629,6 +632,7 @@ internal fun ParentPaymentsTab(
     onPayClicked: (Invoice) -> Unit,
     onReceiptClicked: (Invoice) -> Unit
 ) {
+    val invoiceListState = key(student.id) { rememberLazyListState() }
     val loadMessage = if (!NativeNavigationPolicy.canReadParentFinances(state.currentUser)) {
         "Borçları görüntüleme yetkiniz yok."
     } else when (state.parentInvoiceStates[student.id]) {
@@ -651,8 +655,9 @@ internal fun ParentPaymentsTab(
     val totalPending = studentInvoices.sumOf { it.amount - it.paid_amount }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        modifier = Modifier.fillMaxSize().testTag("parent_invoices"),
+        state = invoiceListState,
+        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 88.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         if (studentInvoices.isEmpty()) item { Text("Kayıtlı borç bulunamadı") }

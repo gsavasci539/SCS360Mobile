@@ -26,6 +26,15 @@ import java.util.*
 
 enum class ParentInvoiceLoadState { LOADING, LOADED, FAILED }
 
+internal fun Okul360UiState.withParentInvoiceResult(childId: String, result: Result<List<Invoice>>): Okul360UiState {
+    if (parentInvoiceStates[childId] != ParentInvoiceLoadState.LOADING) return this
+    val status = if (result.isSuccess) ParentInvoiceLoadState.LOADED else ParentInvoiceLoadState.FAILED
+    return copy(
+        invoices = invoices.filterNot { it.student_id == childId } + result.getOrDefault(emptyList()),
+        parentInvoiceStates = parentInvoiceStates + (childId to status),
+    )
+}
+
 data class Okul360UiState(
     val isLoggedIn: Boolean = false,
     val loginError: String? = null,
@@ -685,9 +694,17 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private var parentPortalJob: kotlinx.coroutines.Job? = null
+    private val parentInvoiceRefreshJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
+
+    private fun cancelParentPortalRequests() {
+        parentPortalJob?.cancel()
+        parentInvoiceRefreshJobs.values.toList().forEach { it.cancel() }
+        parentInvoiceRefreshJobs.clear()
+    }
+
     fun loadParentPortal() {
         if (!_uiState.value.isLoggedIn || _uiState.value.selectedRole != UserRole.PARENT) return
-        parentPortalJob?.cancel()
+        cancelParentPortalRequests()
         val captured = com.example.data.remote.ApiClientProvider.interceptor.captureScope()
         val user = _uiState.value.currentUser
         _uiState.update {
@@ -715,11 +732,8 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
                     onInvoices = { childId, result ->
                         _uiState.update { state ->
                             if (state.selectedRole != UserRole.PARENT || state.currentUser.id != user.id ||
-                                !NativeNavigationPolicy.canReadParentFinances(state.currentUser) ||
-                                state.parentInvoiceStates[childId] != ParentInvoiceLoadState.LOADING) state
-                            else state.copy(invoices = state.invoices + result.getOrDefault(emptyList()),
-                                parentInvoiceStates = state.parentInvoiceStates + (childId to
-                                    if (result.isSuccess) ParentInvoiceLoadState.LOADED else ParentInvoiceLoadState.FAILED))
+                                !NativeNavigationPolicy.canReadParentFinances(state.currentUser)) state
+                            else state.withParentInvoiceResult(childId, result)
                         }
                     },
                 )
@@ -731,6 +745,41 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
         }
+    }
+
+    fun refreshParentInvoices(studentId: String) {
+        val previous = _uiState.value
+        if (!previous.isLoggedIn || previous.selectedRole != UserRole.PARENT ||
+            !NativeNavigationPolicy.canReadParentFinances(previous.currentUser)) return
+        val student = previous.parentChildren.find { it.id == studentId } ?: return
+        val pending = parentInvoiceRefreshJobs[studentId]
+        if (previous.parentInvoiceStates[studentId] == ParentInvoiceLoadState.LOADING && pending == null) return
+        pending?.cancel()
+        val captured = com.example.data.remote.ApiClientProvider.interceptor.captureScope()
+        _uiState.update { it.copy(parentInvoiceStates = it.parentInvoiceStates + (studentId to ParentInvoiceLoadState.LOADING)) }
+        val job = viewModelScope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+            try {
+                val result = try {
+                    Result.success(captured.io { com.example.data.remote.NativeParentPortalClient().invoices(student) })
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    Result.failure(failure)
+                }
+                captured.ensureCurrent()
+                _uiState.update { state ->
+                    if (state.selectedRole != UserRole.PARENT || state.currentUser.id != previous.currentUser.id ||
+                        !NativeNavigationPolicy.canReadParentFinances(state.currentUser)) state
+                    else state.withParentInvoiceResult(studentId, result)
+                }
+            } finally {
+                if (parentInvoiceRefreshJobs[studentId] === coroutineContext[kotlinx.coroutines.Job]) {
+                    parentInvoiceRefreshJobs.remove(studentId)
+                }
+            }
+        }
+        parentInvoiceRefreshJobs[studentId] = job
+        job.start()
     }
 
     // Authentication Actions
@@ -801,6 +850,7 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
 
     fun logout() {
         com.example.data.remote.ApiClientProvider.interceptor.setSession(null)
+        cancelParentPortalRequests()
         sessionManager.clearSession()
         _uiState.update { Okul360UiState(selectedThemeName = it.selectedThemeName, toastMessage = "Oturum kapatıldı.") }
     }
@@ -815,7 +865,7 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         // Change only the presentation mode. JWT actor, profile, organization,
         // persisted roles and identity must remain those returned by the server.
         com.example.data.remote.ApiClientProvider.interceptor.invalidateContext()
-        parentPortalJob?.cancel()
+        cancelParentPortalRequests()
         _uiState.update { freshState(it).copy(selectedRole = role, toastMessage = "${role.displayName} görünümü açıldı.") }
         loadInitialData()
     }

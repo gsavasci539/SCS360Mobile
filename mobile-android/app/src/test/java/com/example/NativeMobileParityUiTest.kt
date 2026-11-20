@@ -6,12 +6,16 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import com.example.data.local.SessionManager
 import com.example.data.model.*
 import com.example.data.remote.ApiClientProvider
+import com.example.data.remote.NativeParentPortalClient
 import com.example.ui.dialogs.iyzico.HostedPaymentDialog
 import com.example.ui.navigation.*
 import com.example.ui.screens.*
 import com.example.ui.theme.Okul360Theme
 import com.example.ui.viewmodel.Okul360UiState
+import com.example.ui.viewmodel.ParentInvoiceLoadState
+import com.example.ui.viewmodel.withParentInvoiceResult
 import com.sun.net.httpserver.HttpServer
+import kotlinx.coroutines.launch
 import org.json.*
 import org.junit.*
 import org.junit.Assert.*
@@ -44,6 +48,12 @@ class NativeMobileParityUiTest {
         server.createContext("/") { e ->
             calls.add("${e.requestMethod} ${e.requestURI.path}")
             val data: Any = when {
+                e.requestURI.path.endsWith("/financial-invoices") -> JSONObject()
+                    .put("student_id", id(7))
+                    .put("online_payment_available", false)
+                    .put("invoices", JSONArray().put(JSONObject().put("debt_id", id(2))
+                        .put("amount", "100.00").put("paid_amount", if (paid) "100.00" else "0.00")
+                        .put("remaining_amount", if (paid) "0.00" else "100.00").put("status", if (paid) "PAID" else "UNPAID")))
                 e.requestURI.path.contains("/online/debts/") -> JSONObject().put("id", id(2)).put("remaining_amount", if (paid) "0.00" else "100.00").put("online_payment_available", false)
                 e.requestURI.path.contains("/checkouts/") -> JSONObject().put("id", id(3)).put("debt_id", id(2)).put("amount", "100.00").put("status", if (paid) "PAID" else "PENDING").put("payment_id", if (paid) id(4) else JSONObject.NULL)
                 e.requestURI.path.endsWith("/medicine-requests") -> JSONObject().put("id", id(8)).put("student_id", id(7)).put("status", "PENDING")
@@ -108,6 +118,53 @@ class NativeMobileParityUiTest {
         compose.onNodeWithTag("hosted_close").assertIsDisplayed().performClick()
         assertEquals(1, closed); assertEquals(2, reloads)
         assertTrue(calls.all { it.contains("/payments/online/") })
+        assertTrue(calls.none { it.startsWith("POST") && !it.endsWith("/refresh") })
+    }
+
+    @Test fun parentCheckoutRefreshKeepsTheSelectedChildAndDialog() {
+        val sibling = Student(id = id(6), first_name = "Birinci", class_name = "A")
+        val child = Student(id = id(7), first_name = "İkinci", class_name = "A")
+        val siblingInvoice = Invoice(id = id(5), student_id = sibling.id, amount = 50.0)
+        val user = User(id = id(1), permissions = listOf("parent.view_children", "parent.view_finances", "parent.make_payment"))
+        var state by mutableStateOf(Okul360UiState(
+            isLoggedIn = true, currentUser = user, selectedRole = UserRole.PARENT, parentChildren = listOf(sibling, child),
+            invoices = listOf(siblingInvoice, Invoice(id = id(2), student_id = child.id, amount = 100.0, paid_amount = 0.0, status = "UNPAID")),
+            parentInvoiceStates = mapOf(sibling.id to ParentInvoiceLoadState.LOADED, child.id to ParentInvoiceLoadState.LOADED),
+        ))
+        var portalReloads = 0
+        val refreshedChildren = mutableListOf<String>()
+        compose.setContent {
+            val scope = rememberCoroutineScope()
+            Okul360Theme {
+                ParentPortalScreen(state, {}, { _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _ -> },
+                    chatbotTab = ParentNavTab.PAYMENTS, chatbotStudentId = child.id, onRefresh = { portalReloads++ },
+                    onRefreshInvoices = { studentId ->
+                        refreshedChildren.add(studentId)
+                        state = state.copy(parentInvoiceStates = state.parentInvoiceStates + (studentId to ParentInvoiceLoadState.LOADING))
+                        scope.launch {
+                            val invoices = NativeParentPortalClient().invoices(child)
+                            state = state.withParentInvoiceResult(studentId, Result.success(invoices))
+                        }
+                    }, onLogout = {})
+            }
+        }
+        compose.onNodeWithTag("parent_invoices").performScrollToNode(hasText("Online Öde"))
+        compose.onNodeWithTag("parent_invoices").performTouchInput { swipeUp() }
+        compose.onNodeWithText("Online Öde").assertIsDisplayed().performClick()
+        compose.onNodeWithTag("hosted_payment").assertExists()
+        compose.waitUntil(15_000) { compose.onAllNodesWithTag("hosted_status").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("hosted_status").assertTextEquals("PENDING")
+        paid = true
+        compose.onNodeWithTag("hosted_payment").performScrollToNode(hasTestTag("hosted_refresh"))
+        compose.onNodeWithTag("hosted_refresh").performScrollTo().assertIsEnabled().performClick()
+        compose.waitUntil(15_000) { state.invoices.any { it.student_id == child.id && it.status == "PAID" } }
+        compose.onNodeWithTag("hosted_status").assertTextEquals("PAID")
+        compose.onNodeWithTag("hosted_payment").assertExists()
+        assertEquals(0, portalReloads)
+        assertEquals(listOf(child.id), refreshedChildren)
+        assertTrue(siblingInvoice in state.invoices)
+        assertTrue(calls.any { it == "POST /api/parent/payments/checkouts/${id(3)}/refresh" })
+        assertTrue(calls.none { it.contains("/payments/online/") || it.contains("/my-children") || it.contains(sibling.id) })
         assertTrue(calls.none { it.startsWith("POST") && !it.endsWith("/refresh") })
     }
     @Test @Config(qualifiers = "w780dp-h360dp-land-mdpi")

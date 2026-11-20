@@ -23,10 +23,10 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 @Composable
-fun HostedPaymentDialog(debtId: String, onDismiss: () -> Unit, onReconciled: () -> Unit = {}) {
+fun HostedPaymentDialog(debtId: String, onDismiss: () -> Unit, onReconciled: () -> Unit = {}, parentStudentId: String? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val captured = remember(debtId) { ApiClientProvider.interceptor.captureScope() }
+    val captured = remember(debtId, parentStudentId) { ApiClientProvider.interceptor.captureScope() }
     val dismiss by rememberUpdatedState(onDismiss)
     val reload by rememberUpdatedState(onReconciled)
     var closed by remember(debtId) { mutableStateOf(false) }
@@ -36,7 +36,7 @@ fun HostedPaymentDialog(debtId: String, onDismiss: () -> Unit, onReconciled: () 
         if (captured.current()) reload()
         dismiss()
     }
-    val checkout = remember(debtId) { runCatching { SchoolCheckout(context, debtId) } }
+    val checkout = remember(debtId, parentStudentId) { runCatching { SchoolCheckout(context, debtId, parentStudentId) } }
     var debt by remember(debtId) { mutableStateOf<JSONObject?>(null) }
     var result by remember(debtId) { mutableStateOf<JSONObject?>(null) }
     var error by remember(debtId) { mutableStateOf("") }
@@ -56,7 +56,7 @@ fun HostedPaymentDialog(debtId: String, onDismiss: () -> Unit, onReconciled: () 
             finally { if (captured.current()) busy = false }
         }
     }
-    LaunchedEffect(debtId) { run { service -> debt = service.debt(); if (service.saved() != null) result = service.refresh() } }
+    LaunchedEffect(debtId, parentStudentId) { run { service -> debt = service.debt(); if (service.saved() != null) result = service.refresh() } }
     if (!captured.current()) { LaunchedEffect(captured) { dismiss() }; return }
     val paid = result?.optString("status") == "PAID"
     val shownResult = result

@@ -271,6 +271,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onRoleSelected = { role -> viewModel.switchRole(role) },
                                 onPayInvoice = { _, _, _ -> },
                                 onRefresh = { viewModel.loadParentPortal() },
+                                onRefreshInvoices = viewModel::refreshParentInvoices,
                                 onSubmitMedicine = { stdId, med, dose, time, note -> viewModel.submitMedicineNotice(stdId, med, dose, time, note) },
                                 onSubmitLeave = { stdId, start, end, reason, note -> viewModel.submitLeaveNotice(stdId, start, end, reason, note) },
                                 onSubmitPickup = { stdId, person, rel, phone -> viewModel.submitPickupNotice(stdId, person, rel, phone) },
