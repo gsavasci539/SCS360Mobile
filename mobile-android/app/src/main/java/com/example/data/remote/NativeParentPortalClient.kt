@@ -14,6 +14,11 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.util.UUID
 
+enum class ParentChildOptionsModule(val queryValue: String) {
+    ATTENDANCE("attendance"),
+    FINANCES("finances")
+}
+
 /** Only explicit server-side parent/child relationships; never match names or phones. */
 class NativeParentPortalClient {
     private val scope = NativeRequestScope.bound() ?: ApiClientProvider.interceptor.captureScope()
@@ -33,8 +38,9 @@ class NativeParentPortalClient {
             } else value
         }
     }
-    suspend fun children(): List<Student> {
-        val values = get("parent/my-children") as JSONArray
+    suspend fun children(module: ParentChildOptionsModule? = null): List<Student> {
+        val path = module?.let { "parent/my-children/options?module=${it.queryValue}" } ?: "parent/my-children"
+        val values = get(path) as JSONArray
         val seen = mutableSetOf<String>()
         return (0 until values.length()).map {
             val row = values.getJSONObject(it); val id = UUID.fromString(row.getString("student_id")).toString()

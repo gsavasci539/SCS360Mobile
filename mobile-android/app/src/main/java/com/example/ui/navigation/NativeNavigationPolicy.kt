@@ -9,6 +9,9 @@ object NativeNavigationPolicy {
 
     fun has(user: User, vararg codes: String) = user.is_super_admin == true ||
         (isOrganizationOwner(user) && codes.any { it != "super_admin" }) || codes.any { it in user.permissions }
+
+    fun canReadParentChildProfile(user: User) = has(user, "parent.view_children", "parent.view_daily_report")
+    fun canReadParentFinances(user: User) = has(user, "parent.view_finances", "parent.view_finance")
     fun tab(user: User, tab: MainTab): Boolean = when (tab) {
         MainTab.HOME, MainTab.OTHER -> true
         MainTab.STUDENTS -> has(user, "students.read", "student.read")

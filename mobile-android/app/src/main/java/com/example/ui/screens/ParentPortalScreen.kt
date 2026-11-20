@@ -50,6 +50,7 @@ import com.example.ui.components.UpcomingPaymentReminderBanner
 import com.example.ui.dialogs.ReceiptDialog
 import com.example.ui.dialogs.ceppos.CepPosPaymentDialog
 import com.example.ui.dialogs.iyzico.IyzicoPaymentDialog
+import com.example.ui.navigation.NativeNavigationPolicy
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.Okul360UiState
 import java.text.SimpleDateFormat
@@ -107,19 +108,27 @@ fun ParentPortalScreen(
     }
     val context = LocalContext.current
     val presentationScope = com.example.ui.components.financePresentationScope(state)
+    val canReadAttendance = NativeNavigationPolicy.has(state.currentUser, "parent.view_attendance")
+    val canReadFinances = NativeNavigationPolicy.canReadParentFinances(state.currentUser)
+    val limitedToModules = !NativeNavigationPolicy.canReadParentChildProfile(state.currentUser) &&
+        (canReadAttendance || canReadFinances)
+    val visibleTabs = if (limitedToModules) buildList {
+        if (canReadAttendance) add(ParentNavTab.DIARY)
+        if (canReadFinances) add(ParentNavTab.PAYMENTS)
+    } else ParentNavTab.entries
     // The parent portal endpoint has already authorized every relationship.
     val parentChildren = state.parentChildren
     val validShortcut = chatbotStudentId == null || parentChildren.any { it.id == chatbotStudentId }
-    var selectedTab by remember(presentationScope) {
-        mutableStateOf(chatbotTab?.takeIf { validShortcut } ?: ParentNavTab.TODAY)
+    var selectedTab by remember(presentationScope, visibleTabs) {
+        mutableStateOf(chatbotTab?.takeIf { validShortcut && it in visibleTabs } ?: visibleTabs.first())
     }
     var parentFabExpanded by remember { mutableStateOf(false) }
     var selectedChildId by remember(presentationScope) {
         mutableStateOf(chatbotStudentId?.takeIf { validShortcut } ?: parentChildren.first().id)
     }
-    LaunchedEffect(chatbotTab, chatbotStudentId, presentationScope) {
+    LaunchedEffect(chatbotTab, chatbotStudentId, presentationScope, visibleTabs) {
         if (chatbotTab != null) {
-            if (validShortcut) {
+            if (validShortcut && chatbotTab in visibleTabs) {
                 androidx.compose.runtime.snapshots.Snapshot.withMutableSnapshot {
                     if (chatbotStudentId != null) selectedChildId = chatbotStudentId
                     selectedTab = chatbotTab
@@ -312,7 +321,7 @@ fun ParentPortalScreen(
                                 onClick = { selectedChildId = child.id },
                                 label = {
                                     Text(
-                                        text = "${child.first_name} (${child.class_name.take(12)})",
+                                        text = if (limitedToModules) child.full_name else "${child.first_name} (${child.class_name.take(12)})",
                                         fontSize = 11.5.sp,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                         maxLines = 1,
@@ -344,7 +353,8 @@ fun ParentPortalScreen(
                     containerColor = MaterialTheme.colorScheme.surface,
                     tonalElevation = 3.dp
                 ) {
-                    ParentNavTab.values().forEach { tab ->
+                    visibleTabs.forEach { tab ->
+                        val label = if (limitedToModules && tab == ParentNavTab.DIARY) "Yoklama" else tab.title
                         val isSelected = selectedTab == tab && tab != ParentNavTab.AI_CHATBOT
                         NavigationBarItem(
                             selected = isSelected,
@@ -369,21 +379,21 @@ fun ParentPortalScreen(
                                     ) {
                                         Icon(
                                             imageVector = if (isSelected) tab.selectedIcon else tab.unselectedIcon,
-                                            contentDescription = tab.title,
+                                            contentDescription = label,
                                             modifier = Modifier.size(21.dp)
                                         )
                                     }
                                 } else {
                                     Icon(
                                         imageVector = if (isSelected) tab.selectedIcon else tab.unselectedIcon,
-                                        contentDescription = tab.title,
+                                        contentDescription = label,
                                         modifier = Modifier.size(21.dp)
                                     )
                                 }
                             },
                             label = {
                                 Text(
-                                    text = tab.title,
+                                    text = label,
                                     fontSize = 9.5.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                     softWrap = false,
@@ -482,6 +492,7 @@ fun ParentPortalScreen(
                         state = state,
                         currentUser = state.currentUser,
                         onOpenAiWeeklyDigest = onOpenAiWeeklyDigest,
+                        showChildDetails = !limitedToModules,
                         onLogout = onLogout
                     )
                     ParentNavTab.AI_CHATBOT -> {}
@@ -493,7 +504,7 @@ fun ParentPortalScreen(
             if (showLeaveDialog && currentChild != null) com.example.ui.dialogs.NativeParentRequestDialog(currentChild.id, state.currentUser, "EXCUSE", { showLeaveDialog = false }, onRefresh)
             if (showPickupDialog && currentChild != null) com.example.ui.dialogs.NativeParentRequestDialog(currentChild.id, state.currentUser, "PICKUP", { showPickupDialog = false }, onRefresh)
 
-            showPaymentDialogForInvoice?.let { invoice ->
+            showPaymentDialogForInvoice?.takeIf { NativeNavigationPolicy.has(state.currentUser, "parent.make_payment") }?.let { invoice ->
                 if (invoice.student_id == currentChild?.id && state.parentChildren.any { it.id == invoice.student_id }) {
                     com.example.ui.dialogs.iyzico.HostedPaymentDialog(invoice.id,
                         onDismiss = { showPaymentDialogForInvoice = null }, onReconciled = onRefresh)
@@ -510,7 +521,7 @@ fun ParentPortalScreen(
             TextButton(onClick = onRefresh, enabled = !state.isParentPortalLoading, modifier = Modifier.align(Alignment.TopEnd)) { Text("Yenile") }
 
             // Role-specific Floating Action Button for Parent
-            RoleSpeedDialFab(
+            if (!limitedToModules) RoleSpeedDialFab(
                 actions = parentActions,
                 expanded = parentFabExpanded,
                 onExpandedChange = { parentFabExpanded = it },
@@ -569,26 +580,28 @@ internal fun ParentDiaryAndGrowthTab(
     state: Okul360UiState,
     currentUser: User,
     onOpenAiWeeklyDigest: ((Student) -> Unit)? = null,
+    showChildDetails: Boolean = true,
     onLogout: () -> Unit
 ) {
 
     val scope = com.example.ui.components.financePresentationScope(state)
     val canReadAttendance = com.example.ui.navigation.NativeNavigationPolicy.has(currentUser, "parent.view_attendance")
+    if (!showChildDetails && !canReadAttendance) return
     key(scope, student.id) {
         var selected by remember { mutableStateOf("timeline") }
         var attendanceDate by remember { mutableStateOf<LocalDate?>(null) }
         val timelineState = rememberSaveableStateHolder()
         val sections = buildList {
-            add("Günlük kayıtlar" to "timeline")
+            if (showChildDetails) add("Günlük kayıtlar" to "timeline")
             if (canReadAttendance) add("Yoklama" to "attendance")
-            addAll(listOf("Notlar" to "grades", "Program" to "schedule", "Ödevler" to "homework", "Ders materyalleri" to "materials",
+            if (showChildDetails) addAll(listOf("Notlar" to "grades", "Program" to "schedule", "Ödevler" to "homework", "Ders materyalleri" to "materials",
                 "Duyurular" to "announcements", "Mesajlar" to "communications", "İlaç talepleri" to "medicine-requests",
                 "Mazeret talepleri" to "excuse-requests", "Profil" to "profile"))
         }
         val index = sections.indexOfFirst { it.second == selected }.coerceAtLeast(0)
         val section = sections[index].second
         Column(Modifier.fillMaxSize()) {
-            ScrollableTabRow(selectedTabIndex = index) {
+            if (showChildDetails) ScrollableTabRow(selectedTabIndex = index) {
                 sections.forEach { (label, value) -> Tab(section == value, onClick = { selected = value }, text = { Text(label) }) }
             }
             when (section) {
@@ -616,6 +629,7 @@ internal fun ParentPaymentsTab(
     onReceiptClicked: (Invoice) -> Unit
 ) {
     // Strictly isolate invoices to THIS student only
+    val canMakePayment = NativeNavigationPolicy.has(state.currentUser, "parent.make_payment")
     val studentInvoices = remember(state.invoices, student.id) {
         state.invoices.filter { it.student_id == student.id }
 
@@ -645,7 +659,7 @@ internal fun ParentPaymentsTab(
         }
 
         // Upcoming / Overdue Payment In-App Alert Banner
-        if (studentInvoices.any { !it.status.equals("PAID", ignoreCase = true) && !it.status.equals("ODENDI", ignoreCase = true) }) {
+        if (canMakePayment && studentInvoices.any { !it.status.equals("PAID", ignoreCase = true) && !it.status.equals("ODENDI", ignoreCase = true) }) {
             item {
                 UpcomingPaymentReminderBanner(
                     upcomingInvoices = studentInvoices,
@@ -661,7 +675,7 @@ internal fun ParentPaymentsTab(
                 invoices = studentInvoices,
                 financeSummary = state.financeSummary,
                 isParentView = true,
-                onPayClick = onPayClicked,
+                onPayClick = onPayClicked.takeIf { canMakePayment },
                 onViewReceipts = {
                     studentInvoices.firstOrNull { it.status.equals("PAID", ignoreCase = true) || it.status.equals("ODENDI", ignoreCase = true) }?.let { onReceiptClicked(it) }
                 }
@@ -748,7 +762,7 @@ internal fun ParentPaymentsTab(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("Makbuz İncele", fontSize = 12.sp)
                             }
-                        } else {
+                        } else if (canMakePayment) {
                             Button(
                                 onClick = { onPayClicked(inv) },
                                 shape = RoundedCornerShape(10.dp),

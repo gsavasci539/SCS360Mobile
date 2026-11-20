@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.model.*
 import com.example.data.payment.iyzico.IyzicoPaymentResult
 import com.example.data.repository.Okul360Repository
+import com.example.data.remote.ParentChildOptionsModule
+import com.example.ui.navigation.NativeNavigationPolicy
 import android.content.Context
 import com.example.util.NetworkMonitor
 import com.example.util.ReportCardPrintHelper
@@ -688,8 +690,16 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         parentPortalJob = viewModelScope.launch {
             try {
                 val client = com.example.data.remote.NativeParentPortalClient()
-                val children = captured.io { client.children() }
-                val invoices = if ("parent.view_finances" in _uiState.value.currentUser.permissions) children.flatMap { child -> captured.io { client.invoices(child) } } else emptyList()
+                val user = _uiState.value.currentUser
+                val canReadFinances = NativeNavigationPolicy.canReadParentFinances(user)
+                val module = when {
+                    NativeNavigationPolicy.canReadParentChildProfile(user) -> null
+                    NativeNavigationPolicy.has(user, "parent.view_attendance") -> ParentChildOptionsModule.ATTENDANCE
+                    canReadFinances -> ParentChildOptionsModule.FINANCES
+                    else -> null
+                }
+                val children = captured.io { client.children(module) }
+                val invoices = if (canReadFinances) children.flatMap { child -> captured.io { client.invoices(child) } } else emptyList()
                 captured.ensureCurrent()
                 if (_uiState.value.selectedRole == UserRole.PARENT) _uiState.update { it.copy(parentChildren = children, students = children, invoices = invoices, isParentPortalLoading = false) }
             } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }

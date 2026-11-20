@@ -13,14 +13,20 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.Density
 import com.example.data.model.Student
 import com.example.data.model.User
+import com.example.data.model.UserRole
 import com.example.data.remote.ApiClientProvider
+import com.example.data.remote.NativeParentPortalClient
+import com.example.data.remote.ParentChildOptionsModule
 import com.example.ui.screens.ParentVerifiedRecordsPane
 import com.example.ui.screens.ParentDiaryAndGrowthTab
+import com.example.ui.screens.ParentPortalScreen
 import com.example.ui.theme.Okul360Theme
 import com.example.ui.viewmodel.Okul360UiState
 import com.sun.net.httpserver.HttpServer
+import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -36,6 +42,68 @@ import java.util.concurrent.TimeUnit
 @Config(sdk = [36], qualifiers = "w360dp-h620dp-mdpi")
 class NativeParentDayUiTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun limitedParentUsesModuleChildOptionsAndShowsOnlyAuthorizedTabs() {
+        val child = UUID(42, 3).toString()
+        val requests = ConcurrentLinkedQueue<String>()
+        val base = ApiClientProvider.activeBaseUrl
+        val interceptor = ApiClientProvider.interceptor
+        val previous = listOf(interceptor.authToken, interceptor.tenantId, interceptor.branchId, interceptor.workspaceOrganizationId)
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/api/parent/") { exchange ->
+            val uri = exchange.requestURI
+            requests.add(uri.toString())
+            val data = when {
+                uri.path.endsWith("/my-children/options") ->
+                    """[{"student_id":"$child","first_name":"Deniz","last_name":"Test"}]"""
+                uri.path.endsWith("/attendance") -> {
+                    val params = uri.rawQuery.split("&").associate { it.substringBefore("=") to it.substringAfter("=") }
+                    """{"student_id":"$child","year":${params.getValue("year")},"month":${params.getValue("month")},"calendar":{},"summary":{"present":0,"absent":0,"late":0,"excused":0,"total":0}}"""
+                }
+                else -> null
+            }
+            val bytes = """{"success":${data != null},"data":$data}""".toByteArray()
+            exchange.responseHeaders.add("Content-Type", "application/json")
+            exchange.sendResponseHeaders(if (data != null) 200 else 403, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+        server.start()
+        ApiClientProvider.createService("http://127.0.0.1:${server.address.port}/api/")
+        interceptor.setSession("synthetic-parent")
+        try {
+            val attendanceChildren = runBlocking { NativeParentPortalClient().children(ParentChildOptionsModule.ATTENDANCE) }
+            val financeChildren = runBlocking { NativeParentPortalClient().children(ParentChildOptionsModule.FINANCES) }
+            assertEquals(child, attendanceChildren.single().id)
+            assertEquals("", financeChildren.single().student_number)
+            val state = mutableStateOf(Okul360UiState(isLoggedIn = true, selectedRole = UserRole.PARENT,
+                currentUser = User(id = "parent", permissions = listOf("parent.view_attendance")), parentChildren = attendanceChildren))
+            compose.setContent {
+                Okul360Theme {
+                    ParentPortalScreen(state.value, {}, { _, _, _ -> }, { _, _, _, _, _ -> },
+                        { _, _, _, _, _ -> }, { _, _, _, _ -> }, onLogout = {})
+                }
+            }
+            compose.waitUntil(10_000) { compose.onAllNodesWithText("Bu ay için yoklama kaydı yok.").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("Ödemeler").assertDoesNotExist()
+            compose.onNodeWithText("Günlük kayıtlar").assertDoesNotExist()
+            compose.runOnIdle {
+                state.value = state.value.copy(
+                    currentUser = state.value.currentUser.copy(permissions = listOf("parent.view_finances")),
+                    parentChildren = financeChildren,
+                )
+            }
+            compose.onNodeWithText("Ödemeler").assertIsDisplayed()
+            compose.onNodeWithText("Yoklama").assertDoesNotExist()
+            compose.onNodeWithText("Bugün").assertDoesNotExist()
+            assertEquals(listOf("/api/parent/my-children/options?module=attendance", "/api/parent/my-children/options?module=finances"),
+                requests.filter { it.contains("my-children") })
+            assertFalse(requests.any { it.contains("/timeline") || it.contains("/today-status") })
+        } finally {
+            server.stop(0)
+            ApiClientProvider.createService(base)
+            interceptor.setSession(previous[0], previous[1], previous[2], previous[3])
+        }
+    }
 
     @Test fun attendanceUsesTheAuthorizedChildAndMonthFromTheTimeline() {
         val child = UUID(42, 1).toString()
