@@ -205,7 +205,6 @@ data class Okul360UiState(
 
     // 7. Okul360 Ek Modüller State
     val consents: List<StudentConsent> = emptyList(),
-    val infirmaryVisits: List<InfirmaryVisit> = emptyList(),
     val schoolClubs: List<SchoolClub> = emptyList(),
     val surveys: List<SchoolSurvey> = emptyList(),
     val tutoringSessions: List<TutoringSession> = emptyList(),
@@ -683,7 +682,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             if (allowed("users.read")) { loadRoles(); loadUsers() }
             if (allowed("settings.read")) { loadRfidCards(); loadHardwareDevices(); checkSystemHealth() }
             if (actor.is_super_admin == true) loadAiAnalyticsData()
-            if (allowed("health.read")) loadInfirmaryVisits()
             if (allowed("clubs.read")) loadClubs()
             if (allowed("surveys.read", "surveys.respond")) loadSurveys()
             if (allowed("tutoring.read")) loadTutoringSessions()
@@ -2924,22 +2922,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     // ==========================================
     // Okul360 Yeni Modül Metotları
     // ==========================================
-
-    // 3. Infirmary (Revir & Sağlık)
-    fun loadInfirmaryVisits(studentId: String? = null) {
-        viewModelScope.launch(requestFailures) {
-            val list = repository.getInfirmaryVisits(studentId)
-            _uiState.update { it.copy(infirmaryVisits = list) }
-        }
-    }
-
-    fun createInfirmaryVisit(visit: InfirmaryVisit) {
-        viewModelScope.launch(requestFailures) {
-            repository.createInfirmaryVisit(visit)
-            loadInfirmaryVisits()
-            _uiState.update { it.copy(toastMessage = "Revir muayene kaydı oluşturuldu ve veliye bildirim iletildi.") }
-        }
-    }
 
     // 4. Clubs (Kulüpler)
     fun loadClubs() {

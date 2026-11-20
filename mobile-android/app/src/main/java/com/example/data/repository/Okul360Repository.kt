@@ -134,7 +134,6 @@ class Okul360Repository(private val context: Context) {
     private val localAnnouncements = mutableListOf<Announcement>()
     private val localConsents = mutableListOf<StudentConsent>()
     private val localGuidance = mutableListOf<GuidanceRecord>()
-    private val localInfirmary = mutableListOf<InfirmaryVisit>()
     private val localClubs = mutableListOf<SchoolClub>()
     private val localSurveys = mutableListOf<SchoolSurvey>()
     private val localTutoring = mutableListOf<TutoringSession>()
@@ -923,24 +922,6 @@ class Okul360Repository(private val context: Context) {
         try { apiService.deleteGuidanceRecord(id) } catch (failure: Exception) { throw failure }
         localGuidance.removeAll { it.id == id }
         true
-    }
-
-    // 3. Revir & Sağlık (Infirmary)
-    suspend fun getInfirmaryVisits(studentId: String? = null): List<InfirmaryVisit> = requestContext {
-        try {
-            val remote = apiService.getInfirmaryVisits(studentId)
-            localInfirmary.clear()
-            localInfirmary.addAll(remote)
-            localInfirmary.toList()
-        } catch (failure: Exception) { throw failure }
-    }
-
-    suspend fun createInfirmaryVisit(visit: InfirmaryVisit): InfirmaryVisit = requestContext {
-        try {
-            val res = apiService.createInfirmaryVisit(visit)
-            localInfirmary.add(0, res)
-            res
-        } catch (failure: Exception) { throw failure }
     }
 
     // 4. Öğrenci Kulüpleri (Clubs)

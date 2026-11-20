@@ -172,7 +172,6 @@ class NativeApiScopeTest {
                 { repo.getConsents("synthetic-student") },
                 { repo.createGuidanceRecord(GuidanceRecord()) },
                 { repo.approveConsent("synthetic-consent", "Synthetic parent") },
-                { repo.createInfirmaryVisit(InfirmaryVisit()) },
                 { repo.participateSurvey("synthetic-survey", emptyMap()) },
                 { repo.forgotPassword("user@example.test") }
             )

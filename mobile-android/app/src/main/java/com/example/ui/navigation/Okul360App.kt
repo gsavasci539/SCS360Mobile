@@ -1260,8 +1260,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             )
                             SubScreen.INFIRMARY -> InfirmaryScreen(
                                 state = state,
-                                onNavigateBack = { currentSubScreen = SubScreen.NONE },
-                                onCreateVisit = { visit -> viewModel.createInfirmaryVisit(visit) }
+                                onNavigateBack = { currentSubScreen = SubScreen.NONE }
                             )
                             SubScreen.CLUBS -> ClubsScreen(
                                 state = state,

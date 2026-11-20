@@ -1,734 +1,330 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.data.model.*
-import com.example.ui.theme.*
+import com.example.data.remote.InfirmaryOptions
+import com.example.data.remote.InfirmaryStudent
+import com.example.data.remote.InfirmaryVisitDraft
+import com.example.data.remote.NativeInfirmaryClient
+import com.example.data.remote.NativeInfirmaryVisit
+import com.example.ui.components.financePresentationScope
+import com.example.ui.navigation.NativeNavigationPolicy
 import com.example.ui.viewmodel.Okul360UiState
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
+
+private const val VISIT_PAGE_SIZE = 20
+private val visitSeverities = linkedMapOf("LOW" to "Düşük", "MEDIUM" to "Orta", "HIGH" to "Yüksek", "EMERGENCY" to "Acil")
+private val visitTimeFormat = DateTimeFormatter.ofPattern("HH:mm")
+private enum class InfirmarySection(val label: String) {
+    VISITS("Revir ziyaretleri"), FILES("Sağlık dosyaları"),
+    PROGRAMS("İlaç programları ve talepler"), DOSES("Günlük doz kayıtları"),
+}
 
 @Composable
-fun InfirmaryScreen(
-    state: Okul360UiState,
-    onNavigateBack: () -> Unit = {},
-    onCreateVisit: (InfirmaryVisit) -> Unit = {}
-) {
-    val visits = state.infirmaryVisits
-    val students = state.students
-    var selectedTab by remember { mutableIntStateOf(0) }
-    var searchQuery by remember { mutableStateOf("") }
-    var showAddVisitDialog by remember { mutableStateOf(false) }
-    var showUpsertHealthFileDialog by remember { mutableStateOf(false) }
-    var showAddScheduleDialog by remember { mutableStateOf(false) }
-    var showRecordDoseDialog by remember { mutableStateOf(false) }
-
-    var closedFollowUpVisitIds by remember { mutableStateOf(setOf<String>()) }
-    var healthFiles by remember {
-        mutableStateOf(
-            listOf(
-                StudentHealthFile(
-                    id = "hf-1",
-                    student_id = "std-1",
-                    student_name = "Ali Demir",
-                    class_name = "8-A",
-                    blood_type = "A Rh+",
-                    chronic_conditions = "Mevsimsel alerjik rinit",
-                    allergies = "Penisilin, Fıstık",
-                    emergency_contact_name = "Mehmet Demir",
-                    emergency_contact_phone = "+90 532 111 2233",
-                    insurance_info = "SGK + Özel Tamamlayıcı Sağlık",
-                    updated_at = "2026-10-12"
-                ),
-                StudentHealthFile(
-                    id = "hf-2",
-                    student_id = "std-2",
-                    student_name = "Zeynep Yılmaz",
-                    class_name = "10-B",
-                    blood_type = "0 Rh+",
-                    chronic_conditions = "Astım başlangıcı",
-                    allergies = "Toz poleni",
-                    emergency_contact_name = "Fatma Yılmaz",
-                    emergency_contact_phone = "+90 533 222 3344",
-                    insurance_info = "SGK Genel Sağlık Sigortası",
-                    updated_at = "2026-10-18"
-                )
-            )
-        )
-    }
-    var medicationSchedules by remember {
-        mutableStateOf(
-            listOf(
-                MedicationSchedule(
-                    id = "msched-1",
-                    student_id = "std-1",
-                    student_name = "Ali Demir",
-                    class_name = "8-A",
-                    medication_name = "Ventolin İnhaler / Şurup",
-                    dosage = "1 Ölçek (5 ml)",
-                    planned_times = listOf("12:45"),
-                    start_date = "2026-11-01",
-                    end_date = "2026-11-15",
-                    approval_status = "APPROVED",
-                    approved_by = "Hemşire Seda Yılmaz",
-                    parent_notes = "Öğle yemeği sonrası tok karnına."
-                ),
-                MedicationSchedule(
-                    id = "msched-2",
-                    student_id = "std-2",
-                    student_name = "Zeynep Yılmaz",
-                    class_name = "10-B",
-                    medication_name = "Aerius 2.5mg Şurup",
-                    dosage = "1 Kaşık (5 ml)",
-                    planned_times = listOf("10:30", "15:30"),
-                    start_date = "2026-11-03",
-                    end_date = "2026-11-10",
-                    approval_status = "PENDING",
-                    approved_by = null,
-                    parent_notes = "Veli portalından yeni talep edildi."
-                )
-            )
-        )
-    }
-    var doseLogs by remember {
-        mutableStateOf(
-            listOf(
-                MedicationDoseLog(
-                    id = "mdose-1",
-                    schedule_id = "msched-1",
-                    student_id = "std-1",
-                    student_name = "Ali Demir",
-                    medication_name = "Ventolin İnhaler / Şurup",
-                    scheduled_date = "2026-11-03",
-                    planned_time = "12:45",
-                    status = "ADMINISTERED",
-                    administered_by = "Hemşire Seda Yılmaz",
-                    administered_at_utc = "2026-11-03 09:47 UTC",
-                    note = "Sorunsuz içildi, veli bilgi notu işlendi."
-                )
-            )
-        )
-    }
-
-    val filteredVisits = remember(visits, searchQuery) {
-        visits.filter {
-            searchQuery.isBlank() ||
-                it.student_name.contains(searchQuery, ignoreCase = true) ||
-                it.complaint.contains(searchQuery, ignoreCase = true) ||
-                it.class_name.contains(searchQuery, ignoreCase = true)
+fun InfirmaryScreen(state: Okul360UiState, onNavigateBack: () -> Unit = {}) {
+    val user = state.currentUser
+    key(financePresentationScope(state), state.serverBaseUrl) {
+        when {
+            !state.isLoggedIn || !NativeNavigationPolicy.has(user, "health.read") ->
+                Text("Revir kayıtlarını görüntüleme yetkiniz yok.", Modifier.padding(16.dp))
+            user.is_super_admin == true && state.workspaceOrganizationId.isNullOrBlank() ->
+                Text("Revir kayıtları için bir kurum çalışma alanı seçin.", Modifier.padding(16.dp))
+            else -> InfirmaryWorkspace(state.selectedBranchId, user.id, NativeNavigationPolicy.has(user, "health.write"), onNavigateBack)
         }
-    }
-
-    Scaffold(
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = {
-                    when (selectedTab) {
-                        0 -> showAddVisitDialog = true
-                        1 -> showUpsertHealthFileDialog = true
-                        2 -> showAddScheduleDialog = true
-                        3 -> showRecordDoseDialog = true
-                    }
-                },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = Color.White,
-                icon = { Icon(Icons.Default.MedicalServices, contentDescription = null) },
-                text = {
-                    Text(
-                        when (selectedTab) {
-                            0 -> "Revir Ziyareti Ekle"
-                            1 -> "Sağlık Dosyası Güncelle"
-                            2 -> "İlaç Programı Ekle"
-                            else -> "Günlük Doz İşle"
-                        },
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                modifier = Modifier.testTag("add_infirmary_visit_fab")
-            )
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(NeutralLightBackground)
-                .padding(paddingValues)
-        ) {
-            Surface(color = Color.White, shadowElevation = 1.dp) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        InfirmarySummaryBox("Ziyaret", "${visits.size}", StatusError, Modifier.weight(1f))
-                        InfirmarySummaryBox("Sağlık Dosyası", "${healthFiles.size}", PrimaryBlue, Modifier.weight(1f))
-                        InfirmarySummaryBox("İlaç Programı", "${medicationSchedules.size}", AccentAmber, Modifier.weight(1f))
-                        InfirmarySummaryBox("Doz Kaydı", "${doseLogs.size}", StatusSuccess, Modifier.weight(1f))
-                    }
-                    Spacer(modifier = Modifier.height(10.dp))
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Öğrenci, sınıf veya şikayet ara...") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        shape = RoundedCornerShape(12.dp),
-                        singleLine = true
-                    )
-                }
-            }
-
-            TabRow(selectedTabIndex = selectedTab, containerColor = Color.White) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    text = { Text("Ziyaretler (${visits.size})", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
-                )
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    text = { Text("Sağlık Dosyası (${healthFiles.size})", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
-                )
-                Tab(
-                    selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 },
-                    text = { Text("İlaç Programı (${medicationSchedules.size})", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
-                )
-                Tab(
-                    selected = selectedTab == 3,
-                    onClick = { selectedTab = 3 },
-                    text = { Text("Doz Kaydı (${doseLogs.size})", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
-                )
-            }
-
-            when (selectedTab) {
-                0 -> {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(filteredVisits, key = { it.id }) { visit ->
-                            val followUpClosed = closedFollowUpVisitIds.contains(visit.id)
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color.White),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(42.dp)
-                                                    .clip(CircleShape)
-                                                    .background(StatusError.copy(alpha = 0.12f)),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.LocalHospital,
-                                                    contentDescription = null,
-                                                    tint = StatusError,
-                                                    modifier = Modifier.size(22.dp)
-                                                )
-                                            }
-                                            Spacer(modifier = Modifier.width(12.dp))
-                                            Column {
-                                                Text(
-                                                    text = "${visit.student_name} (${visit.class_name})",
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    fontWeight = FontWeight.Bold,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                                Text(
-                                                    text = "${visit.visit_time} • Çıkış: ${visit.discharged_to}",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = NeutralTextSecondary
-                                                )
-                                            }
-                                        }
-                                        Surface(
-                                            color = StatusError.copy(alpha = 0.12f),
-                                            shape = RoundedCornerShape(8.dp)
-                                        ) {
-                                            Text(
-                                                text = "${visit.fever_temperature}°C",
-                                                color = StatusError,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 12.sp,
-                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    Text(
-                                        text = "Şikayet: ${visit.complaint}",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = NeutralTextPrimary
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = "Müdahale: ${visit.intervention_treatment}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = NeutralTextSecondary
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = if (visit.parent_notified) "Veli Bilgilendirildi (Manuel Not)" else "Veli Bilgilendirme Bekliyor",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = if (visit.parent_notified) StatusSuccess else AccentAmber,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        if (followUpClosed) {
-                                            Surface(color = StatusSuccessContainer, shape = RoundedCornerShape(6.dp)) {
-                                                Text(
-                                                    "TAKİP KAPATILDI",
-                                                    color = StatusSuccess,
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontSize = 10.sp,
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                                )
-                                            }
-                                        } else {
-                                            OutlinedButton(
-                                                onClick = { closedFollowUpVisitIds = closedFollowUpVisitIds + visit.id },
-                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                                            ) {
-                                                Text("Takibi Kapat", fontSize = 11.sp)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                1 -> {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        item {
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = ScsContainerLight),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    "Sağlık dosyası oluşturma/güncelleme sırasında sigorta bilgisi ve mevcut alanlar boş bırakılsa dahi önceki veriler korunur.",
-                                    fontSize = 12.sp,
-                                    color = OnScsContainer,
-                                    modifier = Modifier.padding(12.dp)
-                                )
-                            }
-                        }
-                        items(healthFiles, key = { it.id }) { hf ->
-                            Card(
-                                shape = RoundedCornerShape(14.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color.White),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text("${hf.student_name} (${hf.class_name})", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                        Surface(color = StatusErrorContainer, shape = RoundedCornerShape(6.dp)) {
-                                            Text(
-                                                hf.blood_type,
-                                                color = StatusError,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 11.sp,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                            )
-                                        }
-                                    }
-                                    Text("Kronik Durum: ${hf.chronic_conditions}", fontSize = 12.sp)
-                                    Text("Alerjiler: ${hf.allergies}", fontSize = 12.sp, color = StatusError)
-                                    Text("Sigorta Bilgisi: ${hf.insurance_info}", fontSize = 12.sp, color = NeutralTextSecondary)
-                                    Text("Acil İletişim: ${hf.emergency_contact_name} (${hf.emergency_contact_phone})", fontSize = 11.sp, color = NeutralTextSecondary)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                2 -> {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(medicationSchedules, key = { it.id }) { sched ->
-                            Card(
-                                shape = RoundedCornerShape(14.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color.White),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(modifier = Modifier.padding(14.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text("${sched.student_name} • ${sched.medication_name}", fontWeight = FontWeight.Bold)
-                                            Text(
-                                                "Doz: ${sched.dosage} • Saatler: ${sched.planned_times.joinToString(", ")} • ${sched.start_date} → ${sched.end_date}",
-                                                fontSize = 12.sp,
-                                                color = NeutralTextSecondary
-                                            )
-                                        }
-                                        Surface(
-                                            color = when (sched.approval_status) {
-                                                "APPROVED" -> StatusSuccessContainer
-                                                "REJECTED" -> StatusErrorContainer
-                                                else -> StatusWarningContainer
-                                            },
-                                            shape = RoundedCornerShape(8.dp)
-                                        ) {
-                                            Text(
-                                                sched.approval_status,
-                                                color = when (sched.approval_status) {
-                                                    "APPROVED" -> StatusSuccess
-                                                    "REJECTED" -> StatusError
-                                                    else -> StatusWarning
-                                                },
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 11.sp,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Text("Veli Notu: ${sched.parent_notes}", fontSize = 12.sp)
-                                    if (sched.approval_status == "PENDING") {
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Button(
-                                                onClick = {
-                                                    medicationSchedules = medicationSchedules.map {
-                                                        if (it.id == sched.id) it.copy(approval_status = "APPROVED", approved_by = "Hemşire Seda Yılmaz") else it
-                                                    }
-                                                },
-                                                colors = ButtonDefaults.buttonColors(containerColor = StatusSuccess)
-                                            ) {
-                                                Text("Veli İlaç Talebini Onayla", fontSize = 12.sp)
-                                            }
-                                            OutlinedButton(
-                                                onClick = {
-                                                    medicationSchedules = medicationSchedules.map {
-                                                        if (it.id == sched.id) it.copy(approval_status = "REJECTED", approved_by = "Hemşire Seda Yılmaz") else it
-                                                    }
-                                                }
-                                            ) {
-                                                Text("Reddet", fontSize = 12.sp, color = StatusError)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                3 -> {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        item {
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = StatusInfoContainer),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    "İlaç doz kayıtları (scheduled_date + planned_time) anahtarıyla tutulur; farklı günlerdeki dozlar birbirinin üzerine yazmaz.",
-                                    fontSize = 12.sp,
-                                    color = NeutralTextPrimary,
-                                    modifier = Modifier.padding(12.dp)
-                                )
-                            }
-                        }
-                        items(doseLogs, key = { it.id }) { dose ->
-                            Card(
-                                shape = RoundedCornerShape(14.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color.White),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(modifier = Modifier.padding(14.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text("${dose.student_name} • ${dose.medication_name}", fontWeight = FontWeight.Bold)
-                                        Text("${dose.scheduled_date} (${dose.planned_time})", fontWeight = FontWeight.Bold, color = ScsPetrolGreen, fontSize = 12.sp)
-                                    }
-                                    Text(
-                                        "Durum: ${dose.status} • Uygulayan: ${dose.administered_by} • ${dose.administered_at_utc}",
-                                        fontSize = 12.sp,
-                                        color = NeutralTextSecondary
-                                    )
-                                    if (dose.note.isNotBlank()) {
-                                        Text(dose.note, fontSize = 12.sp)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if (showAddVisitDialog) {
-        val std = students.firstOrNull()
-        var complaint by remember { mutableStateOf("") }
-        var treatment by remember { mutableStateOf("") }
-        var temperature by remember { mutableStateOf("36.8") }
-        var notifyParentNote by remember { mutableStateOf(true) }
-
-        AlertDialog(
-            onDismissRequest = { showAddVisitDialog = false },
-            title = { Text("Yeni Revir Muayene Kaydı", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = complaint,
-                        onValueChange = { complaint = it },
-                        label = { Text("Şikayet / Belirti (Örn: Baş ağrısı)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = treatment,
-                        onValueChange = { treatment = it },
-                        label = { Text("Uygulanan Müdahale / İlaç") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = temperature,
-                        onValueChange = { temperature = it },
-                        label = { Text("Ateş Ölçümü (°C)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = notifyParentNote, onCheckedChange = { notifyParentNote = it })
-                        Text("Veli telefonla bilgilendirildi notu düş (Sahte SMS gönderilmez)", fontSize = 12.sp)
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (complaint.isNotBlank()) {
-                            onCreateVisit(
-                                InfirmaryVisit(
-                                    id = "inf-${System.currentTimeMillis()}",
-                                    student_id = std?.id ?: "std-1",
-                                    student_name = std?.full_name ?: "Ali Demir",
-                                    class_name = std?.class_name ?: "8-A",
-                                    visit_time = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date()),
-                                    complaint = complaint.trim(),
-                                    fever_temperature = temperature.toDoubleOrNull() ?: 36.8,
-                                    intervention_treatment = treatment.ifBlank { "İstirahat ve gözlem" },
-                                    parent_notified = notifyParentNote,
-                                    discharged_to = "CLASSROOM"
-                                )
-                            )
-                            showAddVisitDialog = false
-                        }
-                    }
-                ) {
-                    Text("Kaydet")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddVisitDialog = false }) {
-                    Text("İptal")
-                }
-            }
-        )
-    }
-
-    if (showUpsertHealthFileDialog) {
-        var bloodType by remember { mutableStateOf("A Rh+") }
-        var chronic by remember { mutableStateOf("") }
-        var allergies by remember { mutableStateOf("") }
-        var insurance by remember { mutableStateOf("") }
-
-        AlertDialog(
-            onDismissRequest = { showUpsertHealthFileDialog = false },
-            title = { Text("Öğrenci Sağlık Dosyası Güncelle", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = bloodType, onValueChange = { bloodType = it }, label = { Text("Kan Grubu") }, singleLine = true)
-                    OutlinedTextField(value = chronic, onValueChange = { chronic = it }, label = { Text("Kronik Rahatsızlık") }, singleLine = true)
-                    OutlinedTextField(value = allergies, onValueChange = { allergies = it }, label = { Text("Alerjiler") }, singleLine = true)
-                    OutlinedTextField(value = insurance, onValueChange = { insurance = it }, label = { Text("Sigorta Bilgisi (Boşsa mevcut korunur)") }, singleLine = true)
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val existing = healthFiles.firstOrNull()
-                        val updated = StudentHealthFile(
-                            id = existing?.id ?: "hf-${System.currentTimeMillis()}",
-                            student_id = existing?.student_id ?: "std-1",
-                            student_name = existing?.student_name ?: "Ali Demir",
-                            class_name = existing?.class_name ?: "8-A",
-                            blood_type = bloodType.ifBlank { existing?.blood_type ?: "A Rh+" },
-                            chronic_conditions = chronic.ifBlank { existing?.chronic_conditions ?: "Yok" },
-                            allergies = allergies.ifBlank { existing?.allergies ?: "Yok" },
-                            insurance_info = insurance.ifBlank { existing?.insurance_info ?: "SGK" },
-                            updated_at = "2026-11-03"
-                        )
-                        healthFiles = listOf(updated) + healthFiles.drop(1)
-                        showUpsertHealthFileDialog = false
-                    }
-                ) {
-                    Text("Dosyayı Kaydet")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showUpsertHealthFileDialog = false }) { Text("İptal") }
-            }
-        )
-    }
-
-    if (showAddScheduleDialog) {
-        var medName by remember { mutableStateOf("") }
-        var dosage by remember { mutableStateOf("1 Ölçek (5 ml)") }
-        var plannedTime by remember { mutableStateOf("13:00") }
-
-        AlertDialog(
-            onDismissRequest = { showAddScheduleDialog = false },
-            title = { Text("Yeni İlaç Programı Tanımla", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = medName, onValueChange = { medName = it }, label = { Text("İlaç Adı") }, singleLine = true)
-                    OutlinedTextField(value = dosage, onValueChange = { dosage = it }, label = { Text("Dozaj") }, singleLine = true)
-                    OutlinedTextField(value = plannedTime, onValueChange = { plannedTime = it }, label = { Text("Planlanan Saat (SS:DD)") }, singleLine = true)
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (medName.isNotBlank()) {
-                            medicationSchedules = listOf(
-                                MedicationSchedule(
-                                    id = "msched-${System.currentTimeMillis()}",
-                                    medication_name = medName.trim(),
-                                    dosage = dosage.trim(),
-                                    planned_times = listOf(plannedTime.trim()),
-                                    approval_status = "APPROVED"
-                                )
-                            ) + medicationSchedules
-                            showAddScheduleDialog = false
-                        }
-                    }
-                ) {
-                    Text("Programı Ekle")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddScheduleDialog = false }) { Text("İptal") }
-            }
-        )
-    }
-
-    if (showRecordDoseDialog) {
-        var scheduledDate by remember { mutableStateOf("2026-11-03") }
-        var plannedTime by remember { mutableStateOf("12:45") }
-        var note by remember { mutableStateOf("Zamanında uygulandı.") }
-
-        AlertDialog(
-            onDismissRequest = { showRecordDoseDialog = false },
-            title = { Text("Günlük İlaç Dozu İşle", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = scheduledDate, onValueChange = { scheduledDate = it }, label = { Text("Planlanan Tarih (YYYY-MM-DD)") }, singleLine = true)
-                    OutlinedTextField(value = plannedTime, onValueChange = { plannedTime = it }, label = { Text("Planlanan Saat (SS:DD)") }, singleLine = true)
-                    OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Hemşire Notu") }, singleLine = true)
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val sched = medicationSchedules.firstOrNull()
-                        doseLogs = listOf(
-                            MedicationDoseLog(
-                                id = "mdose-${System.currentTimeMillis()}",
-                                schedule_id = sched?.id ?: "msched-1",
-                                student_id = sched?.student_id ?: "std-1",
-                                student_name = sched?.student_name ?: "Ali Demir",
-                                medication_name = sched?.medication_name ?: "Ventolin Şurup",
-                                scheduled_date = scheduledDate.trim(),
-                                planned_time = plannedTime.trim(),
-                                status = "ADMINISTERED",
-                                administered_by = "Hemşire Seda Yılmaz",
-                                administered_at_utc = "2026-11-03 10:00 UTC",
-                                note = note.trim()
-                            )
-                        ) + doseLogs
-                        showRecordDoseDialog = false
-                    }
-                ) {
-                    Text("Dozu Kaydet")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRecordDoseDialog = false }) { Text("İptal") }
-            }
-        )
     }
 }
 
 @Composable
-private fun InfirmarySummaryBox(title: String, value: String, color: Color, modifier: Modifier = Modifier) {
-    Surface(
-        color = color.copy(alpha = 0.08f),
-        shape = RoundedCornerShape(10.dp),
-        modifier = modifier
-    ) {
-        Column(modifier = Modifier.padding(10.dp)) {
-            Text(title, fontSize = 10.sp, color = NeutralTextSecondary, maxLines = 1)
-            Text(value, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp, color = color)
+private fun InfirmaryWorkspace(branch: String, actor: String, canWrite: Boolean, onBack: () -> Unit) {
+    val client = remember { NativeInfirmaryClient(branch, actor) }
+    var section by remember { mutableStateOf(InfirmarySection.VISITS) }
+    var options by remember { mutableStateOf<InfirmaryOptions?>(null) }
+    var optionsError by remember { mutableStateOf<String?>(null) }
+    var optionsRevision by remember { mutableIntStateOf(0) }
+    var student by remember { mutableStateOf<InfirmaryStudent?>(null) }
+    var dayText by remember { mutableStateOf("") }
+    var day by remember { mutableStateOf<LocalDate?>(null) }
+    var page by remember { mutableIntStateOf(0) }
+    var revision by remember { mutableIntStateOf(0) }
+    var visits by remember { mutableStateOf<List<NativeInfirmaryVisit>?>(null) }
+    var visitsError by remember { mutableStateOf<String?>(null) }
+    var choosing by remember { mutableStateOf(false) }
+    var creating by remember { mutableStateOf(false) }
+    var details by remember { mutableStateOf<NativeInfirmaryVisit?>(null) }
+    var feedback by remember { mutableStateOf<String?>(null) }
+
+    fun reload(targetPage: Int) {
+        page = targetPage
+        details = null
+        visits = null
+        visitsError = null
+        revision++
+    }
+
+    LaunchedEffect(optionsRevision) {
+        infirmaryRequest({ client.options() }, { data ->
+            options = data
+            if (day == null) {
+                day = data.today
+                dayText = data.today.toString()
+            }
+        }, { optionsError = it })
+    }
+    LaunchedEffect(student, day, revision) {
+        val selectedDate = day ?: return@LaunchedEffect
+        infirmaryRequest({ client.visits(student, selectedDate, page * VISIT_PAGE_SIZE, VISIT_PAGE_SIZE + 1) },
+            { visits = it }, { visitsError = it })
+    }
+
+    LazyColumn(Modifier.fillMaxSize().testTag("infirmary_visits"),
+        contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item {
+            TextButton(onClick = onBack) { Text("Geri") }
+            Text("Revir ve sağlık", style = MaterialTheme.typography.headlineSmall)
+        }
+        item {
+            Column {
+                InfirmarySection.entries.forEach { item ->
+                    FilterChip(section == item, onClick = { section = item }, label = { Text(item.label) })
+                }
+            }
+        }
+        if (section == InfirmarySection.VISITS) {
+            item {
+                Text(student?.name ?: "Tüm öğrenciler")
+                OutlinedButton(enabled = options != null, onClick = { choosing = true }) { Text("Öğrenci seç") }
+                if (student != null) TextButton(onClick = { student = null; feedback = null; reload(0) }) { Text("Öğrenci filtresini temizle") }
+                val parsed = visitDate(dayText)
+                OutlinedTextField(dayText, { dayText = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    label = { Text("Ziyaret günü (YYYY-AA-GG)") }, isError = dayText.isNotBlank() && parsed == null)
+                OutlinedButton(enabled = parsed != null && parsed != day, onClick = {
+                    day = parsed
+                    feedback = null
+                    reload(0)
+                }) { Text("Günü uygula") }
+                if (canWrite && student != null && day != null && options != null) {
+                    Button(onClick = { creating = true; feedback = null }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Revir ziyareti ekle") }
+                }
+                feedback?.let { Text(it) }
+            }
+            val rows = visits
+            when {
+                optionsError != null -> item {
+                    Text(optionsError.orEmpty())
+                    OutlinedButton(onClick = { optionsError = null; optionsRevision++ }) { Text("Seçenekleri yeniden yükle") }
+                }
+                visitsError != null -> item {
+                    Text(visitsError.orEmpty())
+                    OutlinedButton(onClick = { reload(page) }) { Text("Ziyaretleri yeniden yükle") }
+                }
+                rows == null -> item { Text("Revir ziyaretleri yükleniyor…") }
+                rows.isEmpty() -> item { Text("Bu tarih ve kapsamda revir ziyareti bulunamadı.") }
+                else -> items(rows.take(VISIT_PAGE_SIZE), key = { it.id }) { visit ->
+                    OutlinedCard(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            visit.studentName?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
+                            Text("${visit.date} · ${visit.time.format(visitTimeFormat)}")
+                            Text(visitSeverities[visit.severity] ?: visit.severity)
+                            visit.complaint?.let { Text(it) }
+                            if (visit.followUpRequired) Text("Takip gerekli")
+                            TextButton(onClick = { details = visit }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Ziyareti incele") }
+                        }
+                    }
+                }
+            }
+            if (rows != null && (page > 0 || rows.size > VISIT_PAGE_SIZE)) item {
+                Text("Sayfa ${page + 1}")
+                OutlinedButton(enabled = page > 0, onClick = { reload(page - 1) }) { Text("Önceki") }
+                OutlinedButton(enabled = rows.size > VISIT_PAGE_SIZE, onClick = { reload(page + 1) }) { Text("Sonraki") }
+            }
+        } else item {
+            Text("${section.label} için Web revir ekranını kullanın.")
         }
     }
+    if (choosing) options?.let { initial ->
+        InfirmaryStudentPicker(client, initial, { choosing = false }) { selected, clock ->
+            student = selected
+            options = initial.copy(today = clock.today, time = clock.time)
+            feedback = null
+            choosing = false
+            reload(0)
+        }
+    }
+    val currentStudent = student
+    val currentDate = day
+    val clock = options?.time
+    if (creating && canWrite && currentStudent != null && currentDate != null && clock != null) {
+        InfirmaryVisitEditor(client, currentStudent, currentDate, clock, { creating = false }) { date ->
+            creating = false
+            day = date
+            dayText = date.toString()
+            feedback = "Revir ziyareti kaydedildi."
+            reload(0)
+        }
+    }
+    details?.let { visit ->
+        InfirmaryVisitDetails(client, visit, canWrite, { details = null }) { matches ->
+            feedback = if (matches) "Ziyaret takibi kaydedildi." else "Sunucudaki takip notu farklı. Kayıt yeniden yüklendi."
+            reload(page)
+        }
+    }
+}
+
+@Composable
+private fun InfirmaryStudentPicker(client: NativeInfirmaryClient, initial: InfirmaryOptions, onClose: () -> Unit,
+    onSelect: (InfirmaryStudent, InfirmaryOptions) -> Unit) {
+    var search by remember { mutableStateOf("") }
+    var retry by remember { mutableIntStateOf(0) }
+    var options by remember { mutableStateOf<InfirmaryOptions?>(initial) }
+    var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(search, retry) {
+        if (search.isNotBlank()) delay(250)
+        if (options == null) infirmaryRequest({ client.options(search.trim()) }, { options = it }, { error = it })
+    }
+    ConsentFormDialog("Öğrenci seç", "infirmary_students", false, onClose, {
+        item {
+            OutlinedTextField(search, { search = it.take(100); options = null; error = null },
+                label = { Text("Öğrenci ara") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        }
+        val result = options
+        when {
+            error != null -> item {
+                Text(error.orEmpty())
+                OutlinedButton(onClick = { error = null; retry++ }) { Text("Yeniden yükle") }
+            }
+            result == null -> item { Text("Öğrenciler yükleniyor…") }
+            result.students.isEmpty() -> item { Text("Bu kapsamda öğrenci bulunamadı.") }
+            else -> items(result.students, key = { it.id }) { student ->
+                OutlinedButton(onClick = { onSelect(student, result) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(student.name) }
+            }
+        }
+        if (result?.more == true) item { Text("Diğer öğrencileri adla arayın.") }
+    }) {}
+}
+
+@Composable
+private fun InfirmaryVisitEditor(client: NativeInfirmaryClient, student: InfirmaryStudent, initialDate: LocalDate, initialTime: LocalTime,
+    onClose: () -> Unit, onSaved: (LocalDate) -> Unit) {
+    var dateText by remember { mutableStateOf(initialDate.toString()) }
+    var timeText by remember { mutableStateOf(initialTime.format(visitTimeFormat)) }
+    var complaint by remember { mutableStateOf("") }
+    var severity by remember { mutableStateOf("LOW") }
+    var temperature by remember { mutableStateOf("") }
+    var treatment by remember { mutableStateOf("") }
+    var followUp by remember { mutableStateOf(false) }
+    var followUpNotes by remember { mutableStateOf("") }
+    var notification by remember { mutableStateOf(false) }
+    var method by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val date = visitDate(dateText)
+    val time = runCatching { LocalTime.parse(timeText) }.getOrNull()?.takeIf { timeText.length == 5 }
+    val degrees = temperature.trim().replace(',', '.').toDoubleOrNull()
+    val validTemperature = temperature.isBlank() || (degrees != null && degrees in 35.0..42.0)
+    ConsentFormDialog("Revir ziyareti ekle", "infirmary_create", busy, onClose, {
+        item { Text(student.name) }
+        item { VisitField(dateText, { dateText = it }, "Ziyaret tarihi", busy, 10) }
+        item { VisitField(timeText, { timeText = it }, "Ziyaret saati", busy, 5) }
+        item { VisitField(complaint, { complaint = it }, "Şikâyet", busy, 1000) }
+        item {
+            Column {
+                Text("Öncelik")
+                visitSeverities.forEach { (value, label) ->
+                    FilterChip(severity == value, onClick = { severity = value }, enabled = !busy, label = { Text(label) })
+                }
+            }
+        }
+        item { VisitField(temperature, { temperature = it }, "Ateş (35–42 °C)", busy, 8) }
+        item { VisitField(treatment, { treatment = it }, "Kaydedilen işlem", busy, 1000) }
+        item { VisitCheckbox("Takip gerekli", followUp, { followUp = it }, busy) }
+        item { VisitField(followUpNotes, { followUpNotes = it }, "Takip notu", busy, 1000) }
+        item { VisitCheckbox("Veliye daha önce bilgi verildi", notification, { notification = it }, busy) }
+        if (notification) item { VisitField(method, { method = it }, "Manuel bilgilendirme yöntemi", busy, 50) }
+        error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
+    }) {
+        Button(enabled = !busy && date != null && time != null && complaint.isNotBlank() && validTemperature && (!notification || method.isNotBlank()),
+            onClick = {
+                val draft = InfirmaryVisitDraft(student, requireNotNull(date), requireNotNull(time), severity, complaint.trim(),
+                    degrees, treatment.trim(), followUp, followUpNotes.trim(), notification, method.trim())
+                busy = true
+                error = null
+                scope.launch {
+                    infirmaryRequest({ client.create(draft) }, { onSaved(draft.date) }, { error = it })
+                    busy = false
+                }
+            }) { Text("Revir ziyaretini kaydet") }
+    }
+}
+
+@Composable
+private fun InfirmaryVisitDetails(client: NativeInfirmaryClient, visit: NativeInfirmaryVisit, canWrite: Boolean,
+    onClose: () -> Unit, onCompleted: (Boolean) -> Unit) {
+    var note by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val editable = visit.followUpRequired && canWrite
+    ConsentFormDialog("Revir ziyareti", "infirmary_detail", busy, onClose, {
+        visit.studentName?.let { item { Text(it) } }
+        visit.complaint?.let { item { Text(it) } }
+        visit.examiner?.let { item { Text("Muayene eden · $it") } }
+        visit.temperature?.let { item { Text("Ateş · $it °C") } }
+        visit.treatment?.let { item { Text("Kaydedilen işlem · $it") } }
+        visit.followUpNotes?.let { item { Text("Takip notu · $it") } }
+        if (visit.parentNotified) item { Text("Manuel veli bilgilendirmesi · ${visit.notificationMethod.orEmpty()}") }
+        if (editable) item { VisitField(note, { note = it }, "Takip sonuç notu", busy, 1000) }
+        error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
+    }) {
+        if (editable) Button(enabled = !busy && note.isNotBlank(), onClick = {
+            busy = true
+            error = null
+            scope.launch {
+                infirmaryRequest({ client.complete(visit, note.trim()) }, onCompleted, { error = it })
+                busy = false
+            }
+        }) { Text("Takibi tamamla") }
+    }
+}
+
+@Composable
+private fun VisitField(value: String, onChange: (String) -> Unit, label: String, busy: Boolean, max: Int) {
+    OutlinedTextField(value, { onChange(it.take(max)) }, label = { Text(label) }, enabled = !busy, modifier = Modifier.fillMaxWidth(),
+        singleLine = max < 1000)
+}
+
+@Composable
+private fun VisitCheckbox(label: String, checked: Boolean, onChange: (Boolean) -> Unit, busy: Boolean) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(checked, enabled = !busy, role = Role.Checkbox, onValueChange = onChange),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Checkbox(checked, null, modifier = Modifier.padding(end = 12.dp), enabled = !busy)
+        Text(label)
+    }
+}
+
+private fun visitDate(value: String): LocalDate? = runCatching { LocalDate.parse(value) }.getOrNull()
+
+private suspend fun <T> infirmaryRequest(request: suspend () -> T, onResult: (T) -> Unit, onError: (String) -> Unit) {
+    val result = try {
+        request()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: Exception) {
+        onError(failure.message ?: "Revir isteği tamamlanamadı.")
+        return
+    }
+    onResult(result)
 }

@@ -886,13 +886,6 @@ interface Okul360ApiService {
     @DELETE("guidance/{id}")
     suspend fun deleteGuidanceRecord(@Path("id") id: String): Map<String, Any>
 
-    // 3. Revir & Sağlık (Infirmary)
-    @GET("infirmary")
-    suspend fun getInfirmaryVisits(@Query("student_id") studentId: String? = null): List<InfirmaryVisit>
-
-    @POST("infirmary")
-    suspend fun createInfirmaryVisit(@Body visit: InfirmaryVisit): InfirmaryVisit
-
     // 4. Öğrenci Kulüpleri (Clubs)
     @GET("clubs")
     suspend fun getClubs(): List<SchoolClub>
