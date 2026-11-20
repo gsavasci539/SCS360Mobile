@@ -33,6 +33,18 @@ internal enum class HealthFileField(val key: String, val label: String, val maxL
     CHECKUP_DATE("last_checkup_date", "Son kontrol tarihi (YYYY-AA-GG)", 10),
 }
 internal data class InfirmaryHealthFile(val id: String, val values: Map<HealthFileField, String>)
+internal data class InfirmaryMedication(
+    val id: String, val studentId: String, val name: String, val dosage: String, val frequency: String, val status: String,
+    val start: LocalDate, val end: LocalDate?, val instructions: String?, val reviewer: String?,
+)
+internal data class InfirmaryMedicationDraft(
+    val name: String, val dosage: String, val frequency: String, val instruction: String,
+    val start: LocalDate, val end: LocalDate?, val note: String,
+)
+internal data class InfirmaryDose(
+    val id: String, val name: String?, val scheduledDate: LocalDate?, val scheduledTime: LocalTime,
+    val givenTime: String?, val status: String, val notes: String?, val recorder: String?,
+)
 
 internal class NativeInfirmaryClient(selectedBranch: String, private val actorId: String) {
     private val scope = ApiClientProvider.interceptor.captureScope()
@@ -134,5 +146,62 @@ internal class NativeInfirmaryClient(selectedBranch: String, private val actorId
             (existing == null || savedId == existing.id) && changes.all { (field, value) ->
                 saved.has(field.key) && saved.text(field.key).orEmpty() == value
             }) { "Sunucudaki sağlık dosyası gönderilen değişikliklerle eşleşmiyor." }
+    }
+
+    suspend fun medications(student: InfirmaryStudent, offset: Int, limit: Int): List<InfirmaryMedication> {
+        val query = mapOf("student_id" to id(student.id), "offset" to offset.toString(), "limit" to limit.toString())
+        return (call("medicine-requests", query) as JSONArray).rows().map { row ->
+            val studentId = id(row.getString("student_id"))
+            check(studentId == student.id) { "İlaç programı seçili öğrenciyle eşleşmiyor." }
+            InfirmaryMedication(id(row.getString("id")), studentId, row.getString("medicine_name"), row.getString("dosage"),
+                row.getString("time_to_give"), row.getString("status"), LocalDate.parse(row.getString("start_date")),
+                row.text("end_date")?.let(LocalDate::parse), row.text("instructions"), row.text("updated_by_name"))
+        }
+    }
+
+    suspend fun createMedication(student: InfirmaryStudent, draft: InfirmaryMedicationDraft) {
+        val body = JSONObject().put("student_id", id(student.id)).put("medication_name", draft.name)
+            .put("dosage", draft.dosage).put("frequency", draft.frequency).put("instruction", draft.instruction)
+            .put("start_date", draft.start.toString()).put("end_date", draft.end?.toString())
+            .put("parent_notes", draft.note.ifBlank { null })
+        val saved = call("medication-schedules", body = body) as JSONObject
+        id(saved.getString("id"))
+        check(saved.getString("student_id") == student.id && saved.getString("created_by") == id(actorId) &&
+            saved.getString("status") == "APPROVED" && saved.getString("medication_name") == draft.name &&
+            saved.getString("dosage") == draft.dosage && saved.getString("frequency") == draft.frequency &&
+            saved.getString("start_date") == draft.start.toString() && saved.text("end_date") == draft.end?.toString()) {
+            "Sunucudaki ilaç programı gönderilen kayıtla eşleşmiyor."
+        }
+    }
+
+    suspend fun decideMedication(program: InfirmaryMedication, status: String): Boolean {
+        val saved = call("medicine-requests/${id(program.id)}", body = JSONObject().put("status", status), method = "PUT") as JSONObject
+        check(saved.getString("id") == program.id && saved.getString("student_id") == program.studentId &&
+            saved.getString("status") == status) { "Sunucudaki karar seçili ilaç talebiyle eşleşmiyor." }
+        return saved.text("updated_by") == id(actorId)
+    }
+
+    suspend fun doses(student: InfirmaryStudent, day: LocalDate, offset: Int, limit: Int): List<InfirmaryDose> {
+        val query = mapOf("student_id" to id(student.id), "date" to day.toString(), "offset" to offset.toString(), "limit" to limit.toString())
+        return (call("medication-logs", query) as JSONArray).rows().map { row ->
+            val scheduledDay = row.text("scheduled_date")?.let(LocalDate::parse)
+            check(row.getString("student_id") == student.id && (scheduledDay == null || scheduledDay == day)) {
+                "Doz kaydı seçili öğrenci veya günle eşleşmiyor."
+            }
+            InfirmaryDose(id(row.getString("id")), row.text("medication_name"), scheduledDay, LocalTime.parse(row.getString("scheduled_time")),
+                row.text("given_time"), row.getString("status"), row.text("notes"), row.text("given_by_name"))
+        }
+    }
+
+    suspend fun recordDose(program: InfirmaryMedication, day: LocalDate, time: LocalTime, status: String, notes: String): Boolean {
+        val body = JSONObject().put("student_id", id(program.studentId)).put("schedule_id", id(program.id))
+            .put("scheduled_date", day.toString()).put("scheduled_time", time.toString()).put("status", status)
+            .put("notes", notes.ifBlank { null })
+        val saved = call("medication/mark-given", body = body) as JSONObject
+        id(saved.getString("id"))
+        check(saved.getString("student_id") == program.studentId && saved.getString("schedule_id") == program.id &&
+            saved.getString("scheduled_date") == day.toString() && LocalTime.parse(saved.getString("scheduled_time")) == time &&
+            saved.getString("status") == status) { "Sunucudaki doz kaydı seçili öğrenci ve programla eşleşmiyor." }
+        return saved.text("given_by") == id(actorId) && saved.text("notes").orEmpty() == notes
     }
 }

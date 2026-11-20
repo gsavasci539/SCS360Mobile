@@ -14,6 +14,9 @@ import androidx.compose.ui.unit.dp
 import com.example.data.remote.InfirmaryOptions
 import com.example.data.remote.HealthFileField
 import com.example.data.remote.InfirmaryHealthFile
+import com.example.data.remote.InfirmaryDose
+import com.example.data.remote.InfirmaryMedication
+import com.example.data.remote.InfirmaryMedicationDraft
 import com.example.data.remote.InfirmaryStudent
 import com.example.data.remote.InfirmaryVisitDraft
 import com.example.data.remote.NativeInfirmaryClient
@@ -31,6 +34,10 @@ import java.time.format.DateTimeFormatter
 private const val VISIT_PAGE_SIZE = 20
 private val visitSeverities = linkedMapOf("LOW" to "Düşük", "MEDIUM" to "Orta", "HIGH" to "Yüksek", "EMERGENCY" to "Acil")
 private val visitTimeFormat = DateTimeFormatter.ofPattern("HH:mm")
+private val medicationStatuses = mapOf("PENDING" to "Bekliyor", "APPROVED" to "Onaylı", "REJECTED" to "Reddedildi", "COMPLETED" to "Kapandı")
+private val doseStatuses = linkedMapOf("GIVEN" to "Uygulandı", "SKIPPED" to "Atlandı", "CANCELLED" to "İptal edildi")
+private val mealInstructions = linkedMapOf("NOT_SPECIFIED" to "Belirtilmedi", "BEFORE_MEAL" to "Yemekten önce",
+    "AFTER_MEAL" to "Yemekten sonra", "WITH_MEAL" to "Yemekle birlikte", "EMPTY_STOMACH" to "Aç karnına")
 private enum class InfirmarySection(val label: String) {
     VISITS("Revir ziyaretleri"), FILES("Sağlık dosyaları"),
     PROGRAMS("İlaç programları ve talepler"), DOSES("Günlük doz kayıtları"),
@@ -90,8 +97,11 @@ private fun InfirmaryWorkspace(branch: String, actor: String, canWrite: Boolean,
             }
         }, { optionsError = it })
     }
-    LaunchedEffect(student, day, revision) {
+    LaunchedEffect(section, student, day, revision) {
+        if (section != InfirmarySection.VISITS) return@LaunchedEffect
         val selectedDate = day ?: return@LaunchedEffect
+        visits = null
+        visitsError = null
         infirmaryRequest({ client.visits(student, selectedDate, page * VISIT_PAGE_SIZE, VISIT_PAGE_SIZE + 1) },
             { visits = it }, { visitsError = it })
     }
@@ -104,8 +114,7 @@ private fun InfirmaryWorkspace(branch: String, actor: String, canWrite: Boolean,
         }
     }
 
-    LazyColumn(Modifier.fillMaxSize().testTag("infirmary_visits"),
-        contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    val header: LazyListScope.() -> Unit = {
         item {
             TextButton(onClick = onBack) { Text("Geri") }
             Text("Revir ve sağlık", style = MaterialTheme.typography.headlineSmall)
@@ -113,21 +122,34 @@ private fun InfirmaryWorkspace(branch: String, actor: String, canWrite: Boolean,
         item {
             Column {
                 InfirmarySection.entries.forEach { item ->
-                    FilterChip(section == item, onClick = { section = item }, label = { Text(item.label) })
+                    FilterChip(section == item, onClick = { if (section != item) { section = item; feedback = null } },
+                        label = { Text(item.label) })
                 }
             }
         }
-        if (section == InfirmarySection.VISITS || section == InfirmarySection.FILES) {
-            item {
-                Text(student?.name ?: "Tüm öğrenciler")
-                OutlinedButton(enabled = options != null, onClick = { choosing = true }) { Text("Öğrenci seç") }
-                if (student != null) TextButton(onClick = { student = null; feedback = null; reload(0) }) { Text("Öğrenci filtresini temizle") }
-                if (optionsError != null) {
-                    Text(optionsError.orEmpty())
-                    OutlinedButton(onClick = { optionsError = null; optionsRevision++ }) { Text("Seçenekleri yeniden yükle") }
-                }
+        item {
+            Text(student?.name ?: "Tüm öğrenciler")
+            OutlinedButton(enabled = options != null, onClick = { choosing = true }) { Text("Öğrenci seç") }
+            if (student != null) TextButton(onClick = { student = null; feedback = null; reload(0) }) { Text("Öğrenci filtresini temizle") }
+            if (optionsError != null) {
+                Text(optionsError.orEmpty())
+                OutlinedButton(onClick = { optionsError = null; optionsRevision++ }) { Text("Seçenekleri yeniden yükle") }
             }
         }
+    }
+    if (section == InfirmarySection.PROGRAMS || section == InfirmarySection.DOSES) {
+        key(section, currentStudent) {
+            InfirmaryMedicationSection(client, currentStudent, canWrite, section == InfirmarySection.DOSES, options?.today,
+                day, feedback, header) { message, recordedDay ->
+                day = recordedDay
+                dayText = recordedDay.toString()
+                feedback = message
+                section = InfirmarySection.DOSES
+            }
+        }
+    } else LazyColumn(Modifier.fillMaxSize().testTag("infirmary_visits"),
+        contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        header()
         if (section == InfirmarySection.VISITS) {
             item {
                 val parsed = visitDate(dayText)
@@ -170,7 +192,7 @@ private fun InfirmaryWorkspace(branch: String, actor: String, canWrite: Boolean,
                 OutlinedButton(enabled = page > 0, onClick = { reload(page - 1) }) { Text("Önceki") }
                 OutlinedButton(enabled = rows.size > VISIT_PAGE_SIZE, onClick = { reload(page + 1) }) { Text("Sonraki") }
             }
-        } else if (section == InfirmarySection.FILES) {
+        } else {
             healthFileRows(currentStudent, healthFile, canWrite, fileSaved, {
                 healthFile = null
                 fileRevision++
@@ -178,8 +200,6 @@ private fun InfirmaryWorkspace(branch: String, actor: String, canWrite: Boolean,
                 fileSaved = false
                 editingFile = true
             }
-        } else item {
-            Text("${section.label} için Web revir ekranını kullanın.")
         }
     }
     if (choosing) options?.let { initial ->
@@ -269,6 +289,219 @@ private fun InfirmaryHealthFileEditor(client: NativeInfirmaryClient, student: In
                 busy = false
             }
         }) { Text("Sağlık dosyasını kaydet") }
+    }
+}
+
+@Composable
+private fun InfirmaryMedicationSection(client: NativeInfirmaryClient, student: InfirmaryStudent?, canWrite: Boolean,
+    doseList: Boolean, today: LocalDate?, initialDay: LocalDate?, navigationFeedback: String?, header: LazyListScope.() -> Unit,
+    onDoseRecorded: (String, LocalDate) -> Unit) {
+    var programs by remember { mutableStateOf<List<InfirmaryMedication>?>(null) }
+    var doses by remember { mutableStateOf<List<InfirmaryDose>?>(null) }
+    var date by remember { mutableStateOf(initialDay ?: today) }
+    var dateText by remember { mutableStateOf(date?.toString().orEmpty()) }
+    var page by remember { mutableIntStateOf(0) }
+    var revision by remember { mutableIntStateOf(0) }
+    var creating by remember { mutableStateOf(false) }
+    var selected by remember { mutableStateOf<InfirmaryMedication?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var feedback by remember { mutableStateOf<String?>(navigationFeedback) }
+    fun reload(nextPage: Int) {
+        page = nextPage
+        revision++
+        error = null
+        programs = null
+        doses = null
+        selected = null
+    }
+    LaunchedEffect(student, revision, date) {
+        val child = student ?: return@LaunchedEffect
+        val offset = page * VISIT_PAGE_SIZE
+        if (doseList) {
+            val day = date ?: return@LaunchedEffect
+            infirmaryRequest({ client.doses(child, day, offset, VISIT_PAGE_SIZE + 1) }, { doses = it }, { error = it })
+        } else {
+            infirmaryRequest({ client.medications(child, offset, VISIT_PAGE_SIZE + 1) }, { programs = it }, { error = it })
+        }
+    }
+    LazyColumn(Modifier.fillMaxSize().testTag("infirmary_visits"), contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        header()
+        if (student == null) {
+            item { Text("İlaç kayıtlarını görüntülemek için öğrenci seçin.") }
+            return@LazyColumn
+        }
+        item {
+            if (doseList) {
+                val parsed = visitDate(dateText)
+                VisitField(dateText, { dateText = it }, "Doz günü (YYYY-AA-GG)", false, 10)
+                OutlinedButton(enabled = parsed != null && date != parsed, onClick = {
+                    date = parsed
+                    feedback = null
+                    reload(0)
+                }) { Text("Doz gününü uygula") }
+            } else if (canWrite && today != null) {
+                Button(onClick = { feedback = null; creating = true }) { Text("İlaç programı ekle") }
+            }
+            feedback?.let { Text(it) }
+        }
+        val count = if (doseList) doses?.size else programs?.size
+        when {
+            error != null -> item {
+                Text(error.orEmpty())
+                OutlinedButton(onClick = { reload(page) }) { Text("Kayıtları yeniden yükle") }
+            }
+            count == null -> item { Text("İlaç kayıtları yükleniyor…") }
+            count == 0 -> item { Text(if (doseList) "Bu gün için doz kaydı bulunamadı." else "Bu öğrenci için ilaç programı veya talebi bulunamadı.") }
+            doseList -> items(doses.orEmpty().take(VISIT_PAGE_SIZE), key = { it.id }) { dose ->
+                OutlinedCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        dose.name?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
+                        dose.scheduledDate?.let { Text(it.toString()) }
+                        Text(dose.scheduledTime.format(visitTimeFormat))
+                        Text(doseStatuses[dose.status] ?: if (dose.status == "SCHEDULED") "Planlandı" else dose.status)
+                        dose.givenTime?.let { Text("Uygulama zamanı · $it") }
+                        dose.notes?.let { Text(it) }
+                        dose.recorder?.let { Text("Kaydeden · $it") }
+                    }
+                }
+            }
+            else -> items(programs.orEmpty().take(VISIT_PAGE_SIZE), key = { it.id }) { program ->
+                OutlinedCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(program.name, style = MaterialTheme.typography.titleMedium)
+                        Text(medicationStatuses[program.status] ?: program.status)
+                        TextButton(onClick = { selected = program }, modifier = Modifier.heightIn(min = 48.dp)) { Text("İlaç kaydını incele") }
+                    }
+                }
+            }
+        }
+        if (count != null && (page > 0 || count > VISIT_PAGE_SIZE)) item {
+            Text("Sayfa ${page + 1}")
+            OutlinedButton(enabled = page > 0, onClick = { reload(page - 1) }) { Text("Önceki") }
+            OutlinedButton(enabled = count > VISIT_PAGE_SIZE, onClick = { reload(page + 1) }) { Text("Sonraki") }
+        }
+    }
+    if (creating && canWrite && student != null && today != null) {
+        InfirmaryMedicationEditor(client, student, today, { creating = false }) {
+            creating = false
+            feedback = "İlaç programı kaydedildi."
+            reload(0)
+        }
+    }
+    selected?.let { program ->
+        MedicationDetails(client, program, canWrite, today, { selected = null }, { message ->
+            feedback = message
+            reload(page)
+        }, onDoseRecorded)
+    }
+}
+
+@Composable
+private fun InfirmaryMedicationEditor(client: NativeInfirmaryClient, student: InfirmaryStudent, today: LocalDate,
+    onClose: () -> Unit, onSaved: () -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf("") }
+    var timing by remember { mutableStateOf("") }
+    var instruction by remember { mutableStateOf("NOT_SPECIFIED") }
+    var startText by remember { mutableStateOf(today.toString()) }
+    var endText by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val start = visitDate(startText)
+    val end = visitDate(endText)
+    ConsentFormDialog("İlaç programı ekle", "infirmary_medication", busy, onClose, {
+        item { Text(student.name) }
+        item { VisitField(name, { name = it }, "Program ilaç adı", busy, 255) }
+        item { VisitField(amount, { amount = it }, "Kayıtlı doz", busy, 100) }
+        item { VisitField(timing, { timing = it }, "Saat / sıklık talimatı", busy, 100) }
+        item { VisitField(startText, { startText = it }, "Başlangıç günü", busy, 10) }
+        item { VisitField(endText, { endText = it }, "Bitiş günü", busy, 10) }
+        item {
+            Text("Öğün talimatı")
+            mealInstructions.forEach { (value, label) ->
+                FilterChip(value == instruction, onClick = { instruction = value }, enabled = !busy, label = { Text(label) })
+            }
+        }
+        item { VisitField(note, { note = it }, "Program ek notu", busy, 1000) }
+        error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
+    }) {
+        Button(enabled = !busy && name.isNotBlank() && amount.isNotBlank() && timing.isNotBlank() &&
+            start != null && (endText.isBlank() || end != null && end >= start), onClick = {
+            busy = true
+            error = null
+            val draft = InfirmaryMedicationDraft(name.trim(), amount.trim(), timing.trim(), instruction,
+                requireNotNull(start), end, note.trim())
+            scope.launch {
+                infirmaryRequest({ client.createMedication(student, draft) }, { onSaved() }, { error = it })
+                busy = false
+            }
+        }) { Text("İlaç programını kaydet") }
+    }
+}
+
+@Composable
+private fun MedicationDetails(client: NativeInfirmaryClient, program: InfirmaryMedication, canWrite: Boolean, today: LocalDate?,
+    onClose: () -> Unit, onDecision: (String) -> Unit, onDoseRecorded: (String, LocalDate) -> Unit) {
+    var timeText by remember { mutableStateOf("") }
+    var status by remember { mutableStateOf<String?>(null) }
+    var notes by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val time = runCatching { LocalTime.parse(timeText) }.getOrNull()?.takeIf { timeText.length == 5 }
+    val canLog = canWrite && program.status == "APPROVED" && today != null && today >= program.start && (program.end == null || today <= program.end)
+    val decisions = when (program.status) {
+        "PENDING" -> listOf("APPROVED" to "Talebi onayla", "REJECTED" to "Talebi reddet")
+        "APPROVED" -> listOf("COMPLETED" to "Programı kapat")
+        else -> emptyList()
+    }
+    ConsentFormDialog("İlaç kaydı", "infirmary_medication_detail", busy, onClose, {
+        item { Text(program.name, style = MaterialTheme.typography.titleMedium) }
+        item { Text(medicationStatuses[program.status] ?: program.status) }
+        item { Text("Kayıtlı doz · ${program.dosage}") }
+        item { Text("Saat / sıklık · ${program.frequency}") }
+        item { Text("Başlangıç · ${program.start}") }
+        program.end?.let { item { Text("Bitiş · $it") } }
+        program.instructions?.let { item { Text(it) } }
+        program.reviewer?.let { item { Text("Karar veren · $it") } }
+        if (canWrite) items(decisions, key = { it.first }) { (decision, label) ->
+            OutlinedButton(enabled = !busy, onClick = {
+                busy = true
+                error = null
+                scope.launch {
+                    infirmaryRequest({ client.decideMedication(program, decision) }, { matches ->
+                        onDecision(if (matches) "İlaç durumu kaydedildi." else "Sunucudaki mevcut ilaç durumu yeniden okundu.")
+                    }, { error = it })
+                    busy = false
+                }
+            }) { Text(label) }
+        }
+        if (canLog) {
+            item { Text("Doz günü · $today") }
+            item { VisitField(timeText, { timeText = it }, "Planlanan doz saati (SS:DD)", busy, 5) }
+            item {
+                Text("Doz sonucu")
+                doseStatuses.forEach { (value, label) ->
+                    FilterChip(value == status, onClick = { status = value }, enabled = !busy, label = { Text(label) })
+                }
+            }
+            item { VisitField(notes, { notes = it }, "Doz kayıt notu", busy, 1000) }
+        }
+        error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
+    }) {
+        if (canLog && today != null) Button(enabled = !busy && time != null && status != null, onClick = {
+            busy = true
+            error = null
+            scope.launch {
+                infirmaryRequest({ client.recordDose(program, today, requireNotNull(time), requireNotNull(status), notes.trim()) }, { matches ->
+                    onDoseRecorded(if (matches) "Doz kaydı kaydedildi." else "Sunucudaki mevcut doz kaydı yeniden okundu.", today)
+                }, { error = it })
+                busy = false
+            }
+        }) { Text("Doz sonucunu kaydet") }
     }
 }
 
