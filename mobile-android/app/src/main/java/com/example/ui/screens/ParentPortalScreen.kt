@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.*
 import com.example.ui.components.AttendanceMonthlyCalendarView
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import java.time.LocalDate
 import com.example.ui.components.FinancialSummaryCard
 import com.example.ui.components.PaymentStatusPieChart
 import com.example.ui.components.ReportCardViewer
@@ -557,7 +559,7 @@ private fun ParentTodayTab(
 }
 
 @Composable
-private fun ParentDiaryAndGrowthTab(
+internal fun ParentDiaryAndGrowthTab(
     student: Student,
     state: Okul360UiState,
     currentUser: User,
@@ -565,15 +567,38 @@ private fun ParentDiaryAndGrowthTab(
     onLogout: () -> Unit
 ) {
 
-    var selected by remember(student.id) { mutableIntStateOf(0) }
-    val sections = listOf("Günlük kayıtlar" to "timeline", "Notlar" to "grades", "Program" to "schedule", "Ödevler" to "homework", "Ders materyalleri" to "materials", "Duyurular" to "announcements", "Mesajlar" to "communications", "İlaç talepleri" to "medicine-requests", "Mazeret talepleri" to "excuse-requests", "Profil" to "profile")
-    Column(Modifier.fillMaxSize()) {
-        ScrollableTabRow(selectedTabIndex = selected) {
-            sections.forEachIndexed { index, item -> Tab(selected == index, onClick = { selected = index }, text = { Text(item.first) }) }
+    val scope = com.example.ui.components.financePresentationScope(state)
+    val canReadAttendance = com.example.ui.navigation.NativeNavigationPolicy.has(currentUser, "parent.view_attendance")
+    key(scope, student.id) {
+        var selected by remember { mutableStateOf("timeline") }
+        var attendanceDate by remember { mutableStateOf<LocalDate?>(null) }
+        val timelineState = rememberSaveableStateHolder()
+        val sections = buildList {
+            add("Günlük kayıtlar" to "timeline")
+            if (canReadAttendance) add("Yoklama" to "attendance")
+            addAll(listOf("Notlar" to "grades", "Program" to "schedule", "Ödevler" to "homework", "Ders materyalleri" to "materials",
+                "Duyurular" to "announcements", "Mesajlar" to "communications", "İlaç talepleri" to "medicine-requests",
+                "Mazeret talepleri" to "excuse-requests", "Profil" to "profile"))
         }
-        if (sections[selected].second == "profile") {
-            ParentStudentProfileTab(student, currentUser, state, onLogout)
-        } else key(com.example.ui.components.financePresentationScope(state), student.id) { ParentVerifiedRecordsPane(student.id, sections[selected].second, Modifier.weight(1f)) }
+        val index = sections.indexOfFirst { it.second == selected }.coerceAtLeast(0)
+        val section = sections[index].second
+        Column(Modifier.fillMaxSize()) {
+            ScrollableTabRow(selectedTabIndex = index) {
+                sections.forEach { (label, value) -> Tab(section == value, onClick = { selected = value }, text = { Text(label) }) }
+            }
+            when (section) {
+                "profile" -> ParentStudentProfileTab(student, currentUser, state, onLogout)
+                "attendance" -> AttendanceMonthlyCalendarView(student.id, attendanceDate, Modifier.weight(1f))
+                "timeline" -> timelineState.SaveableStateProvider("timeline") {
+                    val openAttendance: ((LocalDate) -> Unit)? = if (canReadAttendance) { day ->
+                        attendanceDate = day
+                        selected = "attendance"
+                    } else null
+                    ParentVerifiedRecordsPane(student.id, section, Modifier.weight(1f), onOpenAttendance = openAttendance)
+                }
+                else -> ParentVerifiedRecordsPane(student.id, section, Modifier.weight(1f))
+            }
+        }
     }
 }
 

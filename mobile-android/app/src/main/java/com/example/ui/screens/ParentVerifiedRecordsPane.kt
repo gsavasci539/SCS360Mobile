@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -12,12 +13,14 @@ import com.example.data.remote.*
 import kotlinx.coroutines.CancellationException
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.LocalDate
 
 /** Render only records returned for this child; absence is never a synthetic score or health fact. */
 @Composable
-fun ParentVerifiedRecordsPane(studentId: String, section: String, modifier: Modifier = Modifier) {
+fun ParentVerifiedRecordsPane(studentId: String, section: String, modifier: Modifier = Modifier,
+    onOpenAttendance: ((LocalDate) -> Unit)? = null) {
     val captured = remember(studentId, section) { ApiClientProvider.interceptor.captureScope() }
-    var dateInput by remember(studentId, section) { mutableStateOf("") }
+    var dateInput by rememberSaveable(studentId, section) { mutableStateOf("") }
     val date = parseDailyReportDate(dateInput)
     val validDate = dateInput.isBlank() || date != null
     var revision by remember(studentId, section) { mutableIntStateOf(0) }
@@ -33,6 +36,7 @@ fun ParentVerifiedRecordsPane(studentId: String, section: String, modifier: Modi
     }
     if (!captured.current()) return
     val data = value
+    val timelineDate = if (section == "timeline" && data is JSONObject) parseDailyReportDate(data.text("date")) else null
     val rows: List<JSONObject> = when (data) {
         is JSONArray -> (0 until data.length()).map { data.getJSONObject(it) }
         is JSONObject -> (data.optJSONArray("events") ?: data.optJSONArray("medicine_requests") ?: data.optJSONArray("excuse_requests"))?.let { array -> (0 until array.length()).map { array.getJSONObject(it) } } ?: listOf(data)
@@ -74,6 +78,9 @@ fun ParentVerifiedRecordsPane(studentId: String, section: String, modifier: Modi
                     row.optJSONObject("details")?.let { details ->
                         for ((key, label) in listOf("meal_status" to "Yemek", "sleep_status" to "Uyku", "mood" to "Duygu durumu", "teacher_notes" to "Öğretmen notu", "medicine_name" to "İlaç", "dosage" to "Doz", "notes" to "Not", "complaint" to "Şikâyet", "treatment_given" to "Uygulama", "pickup_person_name" to "Teslim alan")) details.optional(key)?.let { Text("$label: $it") }
                         details.activitiesText()?.let { Text("Etkinlikler: $it") }
+                    }
+                    if (timelineDate != null && row.text("type") == "ATTENDANCE" && onOpenAttendance != null) {
+                        TextButton(onClick = { onOpenAttendance(timelineDate) }) { Text("Aylık yoklamayı aç") }
                     }
                 }
             } }

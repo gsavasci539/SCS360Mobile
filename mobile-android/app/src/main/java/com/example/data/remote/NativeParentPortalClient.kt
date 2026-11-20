@@ -1,6 +1,7 @@
 package com.example.data.remote
 
 import com.example.data.model.Invoice
+import com.example.data.model.ParentAttendanceMonth
 import com.example.data.model.Student
 import okhttp3.Request
 import okhttp3.MediaType.Companion.toMediaType
@@ -10,6 +11,7 @@ import org.json.JSONObject
 import org.json.JSONTokener
 import java.math.BigDecimal
 import java.time.LocalDate
+import java.time.YearMonth
 import java.util.UUID
 
 /** Only explicit server-side parent/child relationships; never match names or phones. */
@@ -43,7 +45,7 @@ class NativeParentPortalClient {
         }
     }
     suspend fun section(studentId: String, section: String, date: LocalDate? = null): Any {
-        require(section in setOf("today-status", "timeline", "grades", "schedule", "attendance", "homework", "materials", "communications", "announcements", "medicine-requests", "excuse-requests", "teachers"))
+        require(section in setOf("today-status", "timeline", "grades", "schedule", "homework", "materials", "communications", "announcements", "medicine-requests", "excuse-requests", "teachers"))
         require(date == null || section == "timeline")
         val id = UUID.fromString(studentId).toString()
         val query = date?.let { "?date=$it" }.orEmpty()
@@ -54,6 +56,21 @@ class NativeParentPortalClient {
             check(date == null || day.getString("date") == date.toString()) { "Günlük akış tarihi eşleşmiyor" }
         }
         return value
+    }
+
+    suspend fun attendance(studentId: String, period: YearMonth): ParentAttendanceMonth {
+        require(period.year in 1..9999)
+        val id = UUID.fromString(studentId).toString()
+        val raw = get("parent/child/$id/attendance?year=${period.year}&month=${period.monthValue}") as JSONObject
+        val attendance = checkNotNull(ApiClientProvider.moshi.adapter(ParentAttendanceMonth::class.java).fromJson(raw.toString()))
+        check(attendance.student_id == id && attendance.year == period.year && attendance.month == period.monthValue) {
+            "Yoklama öğrencisi veya dönemi eşleşmiyor."
+        }
+        check(attendance.calendar.all { (number, entry) ->
+            val day = LocalDate.parse(entry.date)
+            YearMonth.from(day) == period && number == day.dayOfMonth.toString()
+        }) { "Yoklama günleri doğrulanamadı." }
+        return attendance
     }
     suspend fun chat(studentId: String, teacherId: String): JSONArray =
         chat.parent(studentId, teacherId).history()

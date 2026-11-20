@@ -793,7 +793,8 @@ interface Okul360ApiService {
     suspend fun getChildTimeline(@Path("student_id") studentId: String): List<Map<String, Any>>
 
     @GET("parent/child/{student_id}/attendance")
-    suspend fun getChildAttendance(@Path("student_id") studentId: String): List<AttendanceRecord>
+    suspend fun getChildAttendance(@Path("student_id") studentId: String, @Query("year") year: Int,
+        @Query("month") month: Int): ParentAttendanceMonth
 
     @GET("parent/child/{student_id}/grades")
     suspend fun getChildGrades(@Path("student_id") studentId: String): List<Map<String, Any>>
