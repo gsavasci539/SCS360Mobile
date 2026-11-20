@@ -57,6 +57,7 @@ class NativeMobileParityUiTest {
     @Volatile private var pagedHistory = false
     @Volatile private var parentInvoiceResponse: JSONObject? = null
     @Volatile private var rejectCheckout = false
+    @Volatile private var changeBalanceOnInitialize = false
     private val releaseBrowserStatus = CountDownLatch(1)
     @Volatile private var holdBrowserStatus = false
     @Volatile private var failBrowserStatus = false
@@ -74,13 +75,19 @@ class NativeMobileParityUiTest {
                 return@createContext
             }
             if (rejectCheckout && e.requestMethod == "POST" && e.requestURI.path == "/api/parent/payments/initialize") {
-                e.requestBody.use { it.readBytes() }
+                nextCheckout = JSONObject(e.requestBody.use { it.readBytes().decodeToString() })
                 parentInvoiceResponse = JSONObject("""{
                     "student_id":"${id(7)}","online_payment_available":true,"invoices":[
                         {"debt_id":"${id(2)}","amount":"100.00","paid_amount":"0.00","remaining_amount":"100.00","status":"UNPAID",
                          "payment_in_progress":true,"open_checkout":null}]
                 }""")
-                val conflict = """{"success":false,"errors":[{"code":"SCHOOL_CHECKOUT_IN_PROGRESS"}]}""".toByteArray()
+                val row = parentInvoiceResponse!!.getJSONArray("invoices").getJSONObject(0)
+                if (changeBalanceOnInitialize) {
+                    row.put("paid_amount", "25.00").put("remaining_amount", "75.00").put("status", "PARTIALLY_PAID")
+                        .put("payment_in_progress", false)
+                }
+                val code = if (changeBalanceOnInitialize) "SCHOOL_CHECKOUT_BALANCE_CHANGED" else "SCHOOL_CHECKOUT_IN_PROGRESS"
+                val conflict = """{"success":false,"errors":[{"code":"$code"}]}""".toByteArray()
                 e.responseHeaders.add("Content-Type", "application/json")
                 e.sendResponseHeaders(409, conflict.size.toLong())
                 e.responseBody.use { it.write(conflict) }
@@ -412,11 +419,20 @@ class NativeMobileParityUiTest {
     }
 
     @Test fun parentCheckoutConflictReloadsOnlyItsDebtList() {
+        verifyParentCheckoutRejection(balanceChanged = false)
+    }
+
+    @Test fun parentCheckoutBalanceChangeShowsNoticeAndReloadsCurrentAmount() {
+        verifyParentCheckoutRejection(balanceChanged = true)
+    }
+
+    private fun verifyParentCheckoutRejection(balanceChanged: Boolean) {
         val child = Student(id = id(7), first_name = "Deniz")
         val user = User(id = id(1), permissions = listOf("parent.view_finances", "parent.make_payment"))
         val preferences = RuntimeEnvironment.getApplication().getSharedPreferences("school_checkout_v1", 0)
         assertTrue(preferences.edit().clear().commit())
         rejectCheckout = true
+        changeBalanceOnInitialize = balanceChanged
         val snapshot = runBlocking { NativeParentPortalClient().invoiceSnapshot(child) }
         var state by mutableStateOf(Okul360UiState(isLoggedIn = true, currentUser = user, selectedRole = UserRole.PARENT,
             parentChildren = listOf(child), parentInvoiceStates = mapOf(child.id to ParentInvoiceLoadState.LOADED),
@@ -449,12 +465,25 @@ class NativeMobileParityUiTest {
         dialog.performScrollToNode(hasTestTag("hosted_prepare"))
         compose.onNodeWithTag("hosted_prepare").performScrollTo().assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
         try {
-            compose.waitUntil(20_000) { state.parentInvoiceSnapshots[child.id]?.rows?.single()?.paymentInProgress == true }
+            compose.waitUntil(20_000) {
+                state.parentInvoiceSnapshots[child.id]?.rows?.single()?.let {
+                    if (balanceChanged) it.remaining.toPlainString() == "75.00" else it.paymentInProgress
+                } == true
+            }
         } catch (failure: ComposeTimeoutException) {
             val dialogState = runCatching { dialog.printToString(maxDepth = 6) }.getOrDefault("Dialog closed")
             throw AssertionError("Checkout reload timed out. Calls: $calls. Reloaded: $refreshed. $dialogState", failure)
         }
         compose.onNodeWithTag("hosted_payment").assertDoesNotExist()
+        if (balanceChanged) {
+            list.performScrollToNode(hasText("Kalan borç değişti. Güncel tutarı kontrol edin."))
+            list.performScrollToNode(hasText("Online Öde"))
+            assertEquals("100.00", nextCheckout?.optString("expected_remaining_amount"))
+            assertEquals(listOf(child.id), refreshed)
+            assertTrue(preferences.all.isEmpty())
+            assertEquals(1, calls.count { it.startsWith("POST") })
+            return
+        }
         list.performScrollToNode(hasText("Bu borç için açık bir ödeme işlemi var."))
         compose.onNodeWithText("Online Öde").assertDoesNotExist()
         compose.onNodeWithText("Ödeme sonucunu kontrol et").assertDoesNotExist()

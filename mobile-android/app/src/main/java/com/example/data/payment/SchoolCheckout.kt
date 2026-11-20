@@ -12,7 +12,9 @@ import java.util.UUID
 
 internal const val SCHOOL_CHECKOUT_COMPLETED = "COMPLETED"
 
-internal class SchoolCheckoutInProgress : IllegalStateException("Bu borç için açık bir ödeme işlemi var.")
+internal class SchoolCheckoutRejected(val balanceChanged: Boolean) : IllegalStateException(
+    if (balanceChanged) "Kalan borç değişti. Güncel tutarı kontrol edin." else "Bu borç için açık bir ödeme işlemi var.",
+)
 
 data class SchoolCheckoutReference(val requestId: UUID, val debtId: UUID, val amount: BigDecimal)
 internal data class SchoolCheckoutLaunch(val url: String, val reference: SchoolCheckoutReference)
@@ -58,7 +60,10 @@ class SchoolCheckout(context: Context, private val debtId: String, private val p
                 val code = runCatching {
                     JSONObject(response.peekBody(4096).string()).optJSONArray("errors")?.optJSONObject(0)?.optString("code")
                 }.getOrNull()
-                if (code == "SCHOOL_CHECKOUT_IN_PROGRESS") throw SchoolCheckoutInProgress()
+                when (code) {
+                    "SCHOOL_CHECKOUT_IN_PROGRESS" -> throw SchoolCheckoutRejected(balanceChanged = false)
+                    "SCHOOL_CHECKOUT_BALANCE_CHANGED" -> throw SchoolCheckoutRejected(balanceChanged = true)
+                }
             }
             check(response.isSuccessful) { "Ödeme isteği tamamlanamadı (HTTP ${response.code}); yeni işlem açmadan sonucu kontrol edin" }
             val parsed = JSONObject(response.body?.string() ?: "{}")
@@ -99,10 +104,12 @@ class SchoolCheckout(context: Context, private val debtId: String, private val p
             check(prefs.edit().putString(fingerprint, previous.toString()).commit()) { "Ödeme kimliği saklanamadı" }
         }
         check(previous.getString("amount") == amount) { "Önceki ödemenin sonucunu kontrol edin" }
-        if (pending == null) pending = JSONObject(previous.toString()).put("buyer", buyer).put("currency", "TRY").put("payment_channel", "MOBILE")
+        if (pending == null) pending = JSONObject(previous.toString()).put("buyer", buyer).put("currency", "TRY").put("payment_channel", "MOBILE").apply {
+            if (parentStudentId != null) put("expected_remaining_amount", amount)
+        }
         return try {
             validate(call("$paymentsPath/initialize", pending))
-        } catch (conflict: SchoolCheckoutInProgress) {
+        } catch (conflict: SchoolCheckoutRejected) {
             sameSession()
             if (saved()?.optString("request_id") == previous.getString("request_id")) {
                 prefs.edit().remove(fingerprint).commit()

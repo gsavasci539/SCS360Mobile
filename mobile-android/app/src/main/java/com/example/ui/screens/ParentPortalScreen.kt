@@ -154,6 +154,7 @@ fun ParentPortalScreen(
     var showPickupDialog by remember(presentationScope, selectedChildId) { mutableStateOf(false) }
     var showMessageDialog by remember(presentationScope, selectedChildId) { mutableStateOf(false) }
     var checkoutRequest by remember(presentationScope, selectedChildId) { mutableStateOf<ParentCheckoutRequest?>(null) }
+    var balanceChanged by remember(presentationScope, selectedChildId) { mutableStateOf(false) }
     var showReceiptForInvoice by remember(presentationScope, selectedChildId) { mutableStateOf<Invoice?>(null) }
 
     val parentActions = remember(presentationScope, selectedChildId) {
@@ -474,7 +475,7 @@ fun ParentPortalScreen(
                         onOpenLeave = { showLeaveDialog = true },
                         onOpenPickup = { showPickupDialog = true },
                         onOpenMessage = { selectedTab = ParentNavTab.MESSAGING },
-                        onPayClicked = { invoice -> checkoutRequest = ParentCheckoutRequest(invoice) },
+                        onPayClicked = { invoice -> balanceChanged = false; checkoutRequest = ParentCheckoutRequest(invoice) },
                         onNavigateToPayments = { selectedTab = ParentNavTab.PAYMENTS },
                         onOpenConsents = onOpenConsents,
                         onOpenClubs = onOpenClubs,
@@ -493,12 +494,16 @@ fun ParentPortalScreen(
                     ParentNavTab.PAYMENTS -> ParentPaymentsTab(
                         student = currentChild,
                         state = state,
-                        onPayClicked = { invoice -> checkoutRequest = ParentCheckoutRequest(invoice) },
+                        onPayClicked = { invoice ->
+                            balanceChanged = false
+                            checkoutRequest = ParentCheckoutRequest(invoice)
+                        },
                         onReceiptClicked = { invoice -> showReceiptForInvoice = invoice },
                         onRecoverCheckout = { invoice, reference ->
                             checkoutRequest = ParentCheckoutRequest(invoice, recoveryOnly = true, reference = reference)
                         },
                         onRefresh = { onRefreshInvoices(currentChild.id) },
+                        balanceChanged = balanceChanged,
                     )
                     ParentNavTab.DIARY -> ParentDiaryAndGrowthTab(
                         student = currentChild,
@@ -524,7 +529,7 @@ fun ParentPortalScreen(
                         onDismiss = { checkoutRequest = null },
                         onReconciled = { onRefreshInvoices(invoice.student_id) },
                         parentStudentId = invoice.student_id, recoveryOnly = request.recoveryOnly,
-                        recoveryReference = request.reference)
+                        recoveryReference = request.reference, onBalanceChanged = { balanceChanged = true })
                 }
             }
 
@@ -647,6 +652,7 @@ internal fun ParentPaymentsTab(
     onReceiptClicked: (Invoice) -> Unit,
     onRecoverCheckout: (Invoice, SchoolCheckoutReference?) -> Unit = { _, _ -> },
     onRefresh: () -> Unit = {},
+    balanceChanged: Boolean = false,
 ) {
     if (!NativeNavigationPolicy.canReadParentFinances(state.currentUser)) {
         Text("Borçları görüntüleme yetkiniz yok.", modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 48.dp))
@@ -692,6 +698,7 @@ internal fun ParentPaymentsTab(
             OutlinedButton(onClick = onRefresh, enabled = loadState != ParentInvoiceLoadState.LOADING,
                 modifier = Modifier.heightIn(min = 48.dp)) { Text("Borçları yenile") }
         }
+        if (balanceChanged) item { Text("Kalan borç değişti. Güncel tutarı kontrol edin.") }
         if (loadMessage != null || snapshot == null) {
             item { Text(loadMessage ?: "Borçlar henüz doğrulanmadı.") }
             return@LazyColumn

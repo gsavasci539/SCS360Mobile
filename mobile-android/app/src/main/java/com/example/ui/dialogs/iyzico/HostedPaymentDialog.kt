@@ -22,7 +22,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.data.payment.SchoolCheckout
-import com.example.data.payment.SchoolCheckoutInProgress
+import com.example.data.payment.SchoolCheckoutRejected
 import com.example.data.payment.SchoolCheckoutReference
 import com.example.data.payment.SCHOOL_CHECKOUT_COMPLETED
 import kotlinx.coroutines.launch
@@ -36,12 +36,14 @@ fun HostedPaymentDialog(
     parentStudentId: String? = null,
     recoveryOnly: Boolean = false,
     recoveryReference: SchoolCheckoutReference? = null,
+    onBalanceChanged: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val captured = remember(debtId, parentStudentId) { ApiClientProvider.interceptor.captureScope() }
     val dismiss by rememberUpdatedState(onDismiss)
     val reload by rememberUpdatedState(onReconciled)
+    val showBalanceChanged by rememberUpdatedState(onBalanceChanged)
     var closed by remember(debtId) { mutableStateOf(false) }
     fun close() {
         if (closed) return
@@ -67,7 +69,12 @@ fun HostedPaymentDialog(
         scope.launch {
             try { captured.ensureCurrent(); action(checkout.getOrThrow()); captured.ensureCurrent() }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: SchoolCheckoutInProgress) { if (captured.current()) close() }
+            catch (rejected: SchoolCheckoutRejected) {
+                if (captured.current()) {
+                    if (rejected.balanceChanged) showBalanceChanged()
+                    close()
+                }
+            }
             catch (e: Exception) { if (captured.current()) error = e.message ?: "Ödeme sonucu kontrol edilmeli" }
             finally { if (captured.current()) busy = false }
         }
