@@ -15,13 +15,34 @@ internal data class GuidanceOptions(
     val students: List<GuidanceChoice>, val counselors: List<GuidanceChoice>, val today: LocalDate,
     val moreStudents: Boolean, val moreCounselors: Boolean,
 )
+internal sealed interface GuidanceRow {
+    val id: String
+    val studentName: String?
+}
 internal data class GuidanceSessionRow(
-    val id: String, val studentName: String?, val counselorName: String?, val type: String, val date: String,
+    override val id: String, override val studentName: String?, val counselorName: String?, val type: String, val date: String,
     val confidentiality: String, val summary: String?, val actionPlan: String?, val followUp: String?,
-)
+) : GuidanceRow
+internal data class GuidanceNoteRow(
+    override val id: String, override val studentName: String?, val counselorName: String?, val type: String, val createdAt: String,
+    val confidentiality: String, val content: String, val tags: List<String>,
+) : GuidanceRow
+internal data class GuidanceIncidentRow(
+    override val id: String, override val studentName: String?, val studentId: String, val reporter: String?, val date: String,
+    val severity: String, val description: String, val location: String?, val parentNotified: Boolean,
+    val resolved: Boolean, val resolutionNotes: String?,
+) : GuidanceRow
 internal data class GuidanceSessionDraft(
     val student: GuidanceChoice, val counselor: GuidanceChoice, val type: String, val date: LocalDate,
     val confidentiality: String, val summary: String, val actionPlan: String, val followUp: LocalDate?,
+)
+internal data class GuidanceNoteDraft(
+    val student: GuidanceChoice, val counselor: GuidanceChoice, val type: String, val confidentiality: String,
+    val content: String, val tags: List<String>,
+)
+internal data class GuidanceIncidentDraft(
+    val student: GuidanceChoice, val date: LocalDate, val severity: String, val description: String,
+    val location: String, val parentNotified: Boolean,
 )
 
 internal class NativeGuidanceClient {
@@ -32,13 +53,15 @@ internal class NativeGuidanceClient {
     private fun JSONArray.rows() = (0 until length()).map(::getJSONObject)
     private fun JSONObject.text(key: String) = if (isNull(key)) null else getString(key)
 
-    private suspend fun call(resource: String, query: List<Pair<String, String>> = emptyList(), body: JSONObject? = null): Any =
+    private suspend fun call(
+        resource: String, query: List<Pair<String, String>> = emptyList(), body: JSONObject? = null, method: String = "POST",
+    ): Any =
         scope.io {
             val url = (base + "guidance/" + resource).toHttpUrl().newBuilder().apply {
                 query.forEach { (key, value) -> addQueryParameter(key, value) }
             }.build()
             val request = Request.Builder().url(url).tag(NativeRequestScope::class.java, scope)
-            if (body != null) request.post(body.toString().toRequestBody("application/json".toMediaType()))
+            if (body != null) request.method(method, body.toString().toRequestBody("application/json".toMediaType()))
             http.newCall(request.build()).execute().use { response ->
                 if (!response.isSuccessful) throw RegistryHttpException(response.code)
                 val result = JSONTokener(response.body?.string().orEmpty()).nextValue()
@@ -63,20 +86,40 @@ internal class NativeGuidanceClient {
             result.getBoolean("more_students"), result.getBoolean("more_counselors"))
     }
 
-    suspend fun sessions(student: GuidanceChoice?, offset: Int, limit: Int): List<GuidanceSessionRow> {
+    private suspend fun scopedRows(resource: String, student: GuidanceChoice?, offset: Int, limit: Int): List<JSONObject> {
         val query = buildList {
             add("offset" to offset.toString())
             add("limit" to limit.toString())
             student?.let { add("student_id" to id(it.id)) }
         }
-        return (call("sessions", query) as JSONArray).rows().map { row ->
+        return (call(resource, query) as JSONArray).rows().onEach { row ->
             val studentId = id(row.getString("student_id"))
-            check(student == null || studentId == student.id) { "Görüşme seçili öğrenciyle eşleşmiyor." }
+            check(student == null || studentId == student.id) { "Kayıt seçili öğrenciyle eşleşmiyor." }
+        }
+    }
+
+    suspend fun sessions(student: GuidanceChoice?, offset: Int, limit: Int): List<GuidanceSessionRow> =
+        scopedRows("sessions", student, offset, limit).map { row ->
             GuidanceSessionRow(id(row.getString("id")), row.text("student_name"), row.text("counselor_name"),
                 row.getString("session_type"), row.getString("session_date"), row.getString("confidentiality_level"),
                 row.text("summary"), row.text("action_plan"), row.text("follow_up_date"))
         }
-    }
+
+    suspend fun notes(student: GuidanceChoice?, offset: Int, limit: Int): List<GuidanceNoteRow> =
+        scopedRows("notes", student, offset, limit).map { row ->
+            val tags = row.optJSONArray("tags")
+            GuidanceNoteRow(id(row.getString("id")), row.text("student_name"), row.text("counselor_name"),
+                row.getString("note_type"), row.getString("created_at"), row.getString("confidentiality_level"),
+                row.getString("content"), if (tags == null) emptyList() else (0 until tags.length()).map(tags::getString))
+        }
+
+    suspend fun incidents(student: GuidanceChoice?, offset: Int, limit: Int): List<GuidanceIncidentRow> =
+        scopedRows("incidents", student, offset, limit).map { row ->
+            GuidanceIncidentRow(id(row.getString("id")), row.text("student_name"), id(row.getString("student_id")),
+                row.text("reported_by_name"), row.getString("incident_date"), row.getString("severity"),
+                row.getString("description"), row.text("location"), row.getBoolean("parent_notified"),
+                row.getBoolean("resolved"), row.text("resolution_notes"))
+        }
 
     suspend fun create(draft: GuidanceSessionDraft) {
         val body = JSONObject().put("student_id", id(draft.student.id)).put("counselor_id", id(draft.counselor.id))
@@ -90,6 +133,39 @@ internal class NativeGuidanceClient {
         check(saved.getString("student_id") == draft.student.id && saved.getString("counselor_id") == draft.counselor.id &&
             saved.getString("session_type") == draft.type && saved.getString("session_date") == draft.date.toString()) {
             "Kaydedilen görüşme seçili öğrenci, danışman ve tarihle eşleşmiyor."
+        }
+    }
+
+    suspend fun createNote(draft: GuidanceNoteDraft) {
+        val body = JSONObject().put("student_id", id(draft.student.id)).put("counselor_id", id(draft.counselor.id))
+            .put("note_type", draft.type).put("confidentiality_level", draft.confidentiality)
+            .put("content", draft.content).put("tags", JSONArray(draft.tags))
+        val saved = call("notes", body = body) as JSONObject
+        id(saved.getString("id"))
+        check(saved.getString("student_id") == draft.student.id && saved.getString("counselor_id") == draft.counselor.id &&
+            saved.getString("note_type") == draft.type && saved.getString("confidentiality_level") == draft.confidentiality) {
+            "Kaydedilen not seçili öğrenci ve danışmanla eşleşmiyor."
+        }
+    }
+
+    suspend fun createIncident(draft: GuidanceIncidentDraft, actorId: String) {
+        val body = JSONObject().put("student_id", id(draft.student.id)).put("incident_date", draft.date.toString())
+            .put("severity", draft.severity).put("description", draft.description).put("parent_notified", draft.parentNotified)
+        if (draft.location.isNotBlank()) body.put("location", draft.location)
+        val saved = call("incidents", body = body) as JSONObject
+        id(saved.getString("id"))
+        check(saved.getString("student_id") == draft.student.id && saved.getString("reported_by") == id(actorId) &&
+            saved.getString("severity") == draft.severity && saved.getString("incident_date") == draft.date.toString()) {
+            "Kaydedilen olay seçili öğrenci ve bildiren kişiyle eşleşmiyor."
+        }
+    }
+
+    suspend fun resolve(incident: GuidanceIncidentRow, notes: String?) {
+        val result = call("incidents/${id(incident.id)}/resolve",
+            body = JSONObject().put("resolution_notes", notes ?: JSONObject.NULL), method = "PUT") as JSONObject
+        check(result.getString("id") == incident.id && result.getString("student_id") == incident.studentId &&
+            result.getBoolean("resolved") && result.text("resolution_notes")?.takeUnless(String::isBlank) == notes) {
+            "Sunucudaki çözüm notu eşleşmiyor. Olay kaydını yeniden yükleyin."
         }
     }
 }

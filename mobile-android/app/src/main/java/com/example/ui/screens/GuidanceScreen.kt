@@ -9,7 +9,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.data.remote.GuidanceChoice
+import com.example.data.remote.GuidanceIncidentDraft
+import com.example.data.remote.GuidanceIncidentRow
+import com.example.data.remote.GuidanceNoteDraft
+import com.example.data.remote.GuidanceNoteRow
 import com.example.data.remote.GuidanceOptions
+import com.example.data.remote.GuidanceRow
 import com.example.data.remote.GuidanceSessionDraft
 import com.example.data.remote.GuidanceSessionRow
 import com.example.data.remote.NativeGuidanceClient
@@ -24,6 +29,13 @@ import java.time.LocalDate
 private const val GUIDANCE_PAGE_SIZE = 20
 private val guidanceTypes = mapOf("INDIVIDUAL" to "Bireysel", "GROUP" to "Grup", "FAMILY" to "Aile", "CRISIS" to "Kriz")
 private val confidentialityLevels = mapOf("STANDARD" to "Standart", "RESTRICTED" to "Kısıtlı", "CONFIDENTIAL" to "Gizli")
+private val noteTypes = mapOf("OBSERVATION" to "Gözlem", "ASSESSMENT" to "Değerlendirme", "INTERVENTION" to "Müdahale")
+private val severityLevels = mapOf("MINOR" to "Düşük", "MODERATE" to "Orta", "SEVERE" to "Yüksek", "CRITICAL" to "Kritik")
+private enum class GuidanceSection(val title: String, val createTitle: String, val saveTitle: String, val saved: String) {
+    SESSIONS("Görüşmeler", "Yeni görüşme", "Görüşmeyi kaydet", "Rehberlik görüşmesi kaydedildi."),
+    NOTES("Danışman notları", "Yeni danışman notu", "Notu kaydet", "Danışman notu kaydedildi."),
+    INCIDENTS("Davranış olayları", "Yeni davranış olayı", "Olayı kaydet", "Davranış olayı kaydedildi."),
+}
 
 @Composable
 fun GuidanceScreen(state: Okul360UiState, onNavigateBack: () -> Unit = {}) {
@@ -34,49 +46,70 @@ fun GuidanceScreen(state: Okul360UiState, onNavigateBack: () -> Unit = {}) {
                 Text("Rehberlik görüşmelerini görüntüleme yetkiniz yok.", Modifier.padding(16.dp))
             user.is_super_admin == true && state.workspaceOrganizationId.isNullOrBlank() ->
                 Text("Rehberlik görüşmeleri için bir kurum çalışma alanı seçin.", Modifier.padding(16.dp))
-            else -> GuidanceSessions(NativeNavigationPolicy.has(user, "guidance.write"), onNavigateBack)
+            else -> GuidanceRecords(user.id, NativeNavigationPolicy.has(user, "guidance.write"), onNavigateBack)
         }
     }
 }
 
 @Composable
-private fun GuidanceSessions(canWrite: Boolean, onBack: () -> Unit) {
+private fun GuidanceRecords(actorId: String, canWrite: Boolean, onBack: () -> Unit) {
     val client = remember { NativeGuidanceClient() }
+    var section by remember { mutableStateOf(GuidanceSection.SESSIONS) }
     var student by remember { mutableStateOf<GuidanceChoice?>(null) }
-    var records by remember { mutableStateOf<List<GuidanceSessionRow>?>(null) }
+    var records by remember { mutableStateOf<List<GuidanceRow>?>(null) }
     var page by remember { mutableIntStateOf(0) }
     var revision by remember { mutableIntStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
     var choosing by remember { mutableStateOf(false) }
     var creating by remember { mutableStateOf(false) }
-    var selectedRecord by remember { mutableStateOf<GuidanceSessionRow?>(null) }
+    var selectedRecord by remember { mutableStateOf<GuidanceRow?>(null) }
     var feedback by remember { mutableStateOf<String?>(null) }
 
     fun reload(targetPage: Int) {
         records = null
+        selectedRecord = null
         error = null
         page = targetPage
         revision++
     }
-    LaunchedEffect(student, revision) {
+    LaunchedEffect(section, student, revision) {
         try {
-            records = client.sessions(student, page * GUIDANCE_PAGE_SIZE, GUIDANCE_PAGE_SIZE + 1)
+            val offset = page * GUIDANCE_PAGE_SIZE
+            val limit = GUIDANCE_PAGE_SIZE + 1
+            records = when (section) {
+                GuidanceSection.SESSIONS -> client.sessions(student, offset, limit)
+                GuidanceSection.NOTES -> client.notes(student, offset, limit)
+                GuidanceSection.INCIDENTS -> client.incidents(student, offset, limit)
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
-            error = failure.message ?: "Rehberlik görüşmeleri yüklenemedi."
+            error = failure.message ?: "Rehberlik kayıtları yüklenemedi."
         }
     }
     LazyColumn(Modifier.fillMaxSize().testTag("guidance_sessions"),
         contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             TextButton(onClick = onBack) { Text("Geri") }
-            Text("Rehberlik görüşmeleri", style = MaterialTheme.typography.headlineSmall)
+            Text("Rehberlik servisi", style = MaterialTheme.typography.headlineSmall)
+        }
+        item {
+            Column {
+                GuidanceSection.entries.forEach { option ->
+                    FilterChip(section == option, onClick = {
+                        section = option
+                        feedback = null
+                        reload(0)
+                    }, label = { Text(option.title) })
+                }
+            }
+        }
+        item {
             Text("Öğrenci: ${student?.name ?: "Tüm öğrenciler"}")
             OutlinedButton(onClick = { choosing = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Öğrenci seç") }
             if (student != null) TextButton(onClick = { student = null; feedback = null; reload(0) }) { Text("Tüm öğrenciler") }
             if (canWrite && student != null) Button(onClick = { creating = true; feedback = null }, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text("Yeni görüşme")
+                Text(section.createTitle)
             }
             feedback?.let { Text(it) }
         }
@@ -86,17 +119,36 @@ private fun GuidanceSessions(canWrite: Boolean, onBack: () -> Unit) {
                 Text(error.orEmpty())
                 OutlinedButton(onClick = { reload(page) }) { Text("Yeniden yükle") }
             }
-            rows == null -> item { Text("Görüşmeler yükleniyor…") }
-            rows.isEmpty() -> item { Text("Rehberlik görüşmesi bulunamadı.") }
+            rows == null -> item { Text("Rehberlik kayıtları yükleniyor…") }
+            rows.isEmpty() -> item { Text("Bu kapsamda rehberlik kaydı bulunamadı.") }
             else -> items(rows.take(GUIDANCE_PAGE_SIZE), key = { it.id }) { record ->
                 OutlinedCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(guidanceTypes[record.type] ?: record.type, style = MaterialTheme.typography.titleMedium)
                         record.studentName?.let { Text(it) }
-                        record.counselorName?.let { Text("Danışman: $it") }
-                        Text(record.date)
-                        Text(confidentialityLevels[record.confidentiality] ?: record.confidentiality)
-                        TextButton(onClick = { selectedRecord = record }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Görüşmeyi incele") }
+                        val action = when (record) {
+                            is GuidanceSessionRow -> {
+                                Text(guidanceTypes[record.type] ?: record.type, style = MaterialTheme.typography.titleMedium)
+                                record.counselorName?.let { Text("Danışman: $it") }
+                                Text(record.date)
+                                Text(confidentialityLevels[record.confidentiality] ?: record.confidentiality)
+                                "Görüşmeyi incele"
+                            }
+                            is GuidanceNoteRow -> {
+                                Text(noteTypes[record.type] ?: record.type, style = MaterialTheme.typography.titleMedium)
+                                record.counselorName?.let { Text("Danışman: $it") }
+                                Text(record.createdAt.take(10))
+                                Text(confidentialityLevels[record.confidentiality] ?: record.confidentiality)
+                                "Notu incele"
+                            }
+                            is GuidanceIncidentRow -> {
+                                Text(severityLevels[record.severity] ?: record.severity, style = MaterialTheme.typography.titleMedium)
+                                record.reporter?.let { Text("Bildiren: $it") }
+                                Text(record.date)
+                                Text(if (record.resolved) "Çözüldü" else "Açık olay")
+                                "Olayı incele"
+                            }
+                        }
+                        TextButton(onClick = { selectedRecord = record }, modifier = Modifier.heightIn(min = 48.dp)) { Text(action) }
                     }
                 }
             }
@@ -117,18 +169,27 @@ private fun GuidanceSessions(canWrite: Boolean, onBack: () -> Unit) {
     }
     val currentStudent = student
     if (creating && canWrite && currentStudent != null) {
-        GuidanceCreateSession(client, currentStudent, { creating = false }) {
-            feedback = "Rehberlik görüşmesi kaydedildi."
+        GuidanceCreateRecord(client, actorId, section, currentStudent, { creating = false }) {
+            feedback = section.saved
             creating = false
             reload(0)
         }
     }
-    selectedRecord?.let { record ->
-        ConsentFormDialog(guidanceTypes[record.type] ?: record.type, "guidance_detail", false, { selectedRecord = null }, {
+    when (val record = selectedRecord) {
+        is GuidanceSessionRow -> ConsentFormDialog(guidanceTypes[record.type] ?: record.type, "guidance_detail", false, { selectedRecord = null }, {
             record.summary?.let { item { Text(it) } }
             record.actionPlan?.let { item { Text("Takip planı: $it") } }
             record.followUp?.let { item { Text("Takip tarihi: $it") } }
         }) {}
+        is GuidanceNoteRow -> ConsentFormDialog(noteTypes[record.type] ?: record.type, "guidance_detail", false, { selectedRecord = null }, {
+            item { Text(record.content) }
+            if (record.tags.isNotEmpty()) item { Text(record.tags.joinToString(", ")) }
+        }) {}
+        is GuidanceIncidentRow -> GuidanceIncidentDetails(client, record, canWrite, { selectedRecord = null }) {
+            feedback = "Olay çözümü kaydedildi."
+            reload(page)
+        }
+        null -> Unit
     }
 }
 
@@ -169,7 +230,10 @@ private fun GuidanceStudentPicker(client: NativeGuidanceClient, onClose: () -> U
 }
 
 @Composable
-private fun GuidanceCreateSession(client: NativeGuidanceClient, student: GuidanceChoice, onClose: () -> Unit, onSaved: () -> Unit) {
+private fun GuidanceCreateRecord(
+    client: NativeGuidanceClient, actorId: String, section: GuidanceSection, student: GuidanceChoice,
+    onClose: () -> Unit, onSaved: () -> Unit,
+) {
     val actions = rememberCoroutineScope()
     var options by remember { mutableStateOf<GuidanceOptions?>(null) }
     var counselor by remember { mutableStateOf<GuidanceChoice?>(null) }
@@ -179,11 +243,19 @@ private fun GuidanceCreateSession(client: NativeGuidanceClient, student: Guidanc
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var date by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf("INDIVIDUAL") }
+    val types = when (section) {
+        GuidanceSection.SESSIONS -> guidanceTypes
+        GuidanceSection.NOTES -> noteTypes
+        GuidanceSection.INCIDENTS -> severityLevels
+    }
+    var type by remember { mutableStateOf(types.keys.first()) }
     var confidentiality by remember { mutableStateOf("STANDARD") }
     var summary by remember { mutableStateOf("") }
     var actionPlan by remember { mutableStateOf("") }
     var followUp by remember { mutableStateOf("") }
+    var tags by remember { mutableStateOf("") }
+    var location by remember { mutableStateOf("") }
+    var parentNotified by remember { mutableStateOf(false) }
     LaunchedEffect(counselorSearch, optionRevision) {
         try {
             if (counselorSearch.isNotBlank()) delay(250)
@@ -196,60 +268,137 @@ private fun GuidanceCreateSession(client: NativeGuidanceClient, student: Guidanc
             optionError = failure.message ?: "Danışmanlar yüklenemedi."
         }
     }
-    ConsentFormDialog("Yeni görüşme", "guidance_create", busy, onClose, {
+    ConsentFormDialog(section.createTitle, "guidance_create", busy, onClose, {
         item { Text(student.name) }
-        item {
-            OutlinedTextField(counselorSearch, { counselorSearch = it.take(100); counselor = null; options = null; optionError = null },
-                enabled = !busy, modifier = Modifier.fillMaxWidth(), label = { Text("Danışman ara") })
-        }
-        when {
-            optionError != null -> item {
-                Text(optionError.orEmpty())
-                OutlinedButton(onClick = { optionError = null; optionRevision++ }) { Text("Yeniden yükle") }
+        if (section != GuidanceSection.INCIDENTS) {
+            item {
+                OutlinedTextField(counselorSearch, { counselorSearch = it.take(100); counselor = null; options = null; optionError = null },
+                    enabled = !busy, modifier = Modifier.fillMaxWidth(), label = { Text("Danışman ara") })
             }
-            options == null -> item { Text("Danışmanlar yükleniyor…") }
-            options?.counselors?.isEmpty() == true -> item { Text("Uygun danışman bulunamadı.") }
+            when {
+                optionError != null -> item {
+                    Text(optionError.orEmpty())
+                    OutlinedButton(onClick = { optionError = null; optionRevision++ }) { Text("Yeniden yükle") }
+                }
+                options == null -> item { Text("Danışmanlar yükleniyor…") }
+                options?.counselors?.isEmpty() == true -> item { Text("Uygun danışman bulunamadı.") }
+            }
+            if (options?.moreCounselors == true) item { Text("Danışman adını yazarak listeyi daraltın.") }
+            items(options?.counselors.orEmpty(), key = { it.id }) { choice ->
+                FilterChip(counselor == choice, enabled = !busy, onClick = { counselor = choice }, label = { Text(choice.name) })
+            }
+        } else if (optionError != null) item {
+            Text(optionError.orEmpty())
+            OutlinedButton(onClick = { optionError = null; optionRevision++ }) { Text("Yeniden yükle") }
         }
-        if (options?.moreCounselors == true) item { Text("Danışman adını yazarak listeyi daraltın.") }
-        items(options?.counselors.orEmpty(), key = { it.id }) { choice ->
-            FilterChip(counselor == choice, enabled = !busy, onClick = { counselor = choice }, label = { Text(choice.name) })
+        if (section != GuidanceSection.NOTES) item {
+            val label = if (section == GuidanceSection.SESSIONS) "Görüşme tarihi (YYYY-AA-GG)" else "Olay tarihi (YYYY-AA-GG)"
+            OutlinedTextField(date, { date = it.take(10) }, enabled = !busy, label = { Text(label) })
         }
-        item { OutlinedTextField(date, { date = it.take(10) }, enabled = !busy, label = { Text("Görüşme tarihi (YYYY-AA-GG)") }) }
-        items(guidanceTypes.toList()) { (value, title) ->
+        items(types.toList()) { (value, title) ->
             FilterChip(type == value, enabled = !busy, onClick = { type = value }, label = { Text(title) })
         }
-        items(confidentialityLevels.toList()) { (value, title) ->
-            FilterChip(confidentiality == value, enabled = !busy, onClick = { confidentiality = value }, label = { Text(title) })
+        if (section != GuidanceSection.INCIDENTS) {
+            items(confidentialityLevels.toList()) { (value, title) ->
+                FilterChip(confidentiality == value, enabled = !busy, onClick = { confidentiality = value }, label = { Text(title) })
+            }
         }
-        item { OutlinedTextField(summary, { summary = it.take(2000) }, enabled = !busy, label = { Text("Görüşme özeti") }) }
-        item { OutlinedTextField(actionPlan, { actionPlan = it.take(2000) }, enabled = !busy, label = { Text("Takip planı") }) }
-        item { OutlinedTextField(followUp, { followUp = it.take(10) }, enabled = !busy, label = { Text("Takip tarihi (YYYY-AA-GG)") }) }
+        when (section) {
+            GuidanceSection.SESSIONS -> {
+                item { OutlinedTextField(summary, { summary = it.take(2000) }, enabled = !busy, label = { Text("Görüşme özeti") }) }
+                item { OutlinedTextField(actionPlan, { actionPlan = it.take(2000) }, enabled = !busy, label = { Text("Takip planı") }) }
+                item { OutlinedTextField(followUp, { followUp = it.take(10) }, enabled = !busy, label = { Text("Takip tarihi (YYYY-AA-GG)") }) }
+            }
+            GuidanceSection.NOTES -> {
+                item { OutlinedTextField(summary, { summary = it.take(5000) }, enabled = !busy, label = { Text("Danışman notu") }) }
+                item { OutlinedTextField(tags, { tags = it.take(1000) }, enabled = !busy, label = { Text("Etiketler (virgülle ayırın)") }) }
+            }
+            GuidanceSection.INCIDENTS -> {
+                item { OutlinedTextField(location, { location = it.take(255) }, enabled = !busy, label = { Text("Olay yeri") }) }
+                item { OutlinedTextField(summary, { summary = it.take(2000) }, enabled = !busy, label = { Text("Olay açıklaması") }) }
+                item {
+                    Row {
+                        Checkbox(parentNotified, { parentNotified = it }, enabled = !busy)
+                        Text("Veliye daha önce bilgi verildi")
+                    }
+                }
+            }
+        }
         error?.let { item { Text(it) } }
     }) {
         val sessionDate = runCatching { LocalDate.parse(date) }.getOrNull()
         val followUpDate = runCatching { LocalDate.parse(followUp) }.getOrNull()
         val selectedCounselor = counselor
         val validFollowUp = followUp.isBlank() || followUpDate != null && sessionDate != null && followUpDate >= sessionDate
-        Button(enabled = !busy && sessionDate != null && selectedCounselor != null &&
-            options?.counselors?.contains(selectedCounselor) == true && validFollowUp,
+        val validCounselor = selectedCounselor != null && options?.counselors?.contains(selectedCounselor) == true
+        val tagList = tags.split(",").map(String::trim).filter(String::isNotEmpty)
+        val ready = when (section) {
+            GuidanceSection.SESSIONS -> sessionDate != null && validCounselor && validFollowUp
+            GuidanceSection.NOTES -> validCounselor && summary.isNotBlank() && tagList.size <= 20 && tagList.all { it.length <= 50 }
+            GuidanceSection.INCIDENTS -> sessionDate != null && options != null && summary.isNotBlank()
+        }
+        Button(enabled = !busy && ready,
             modifier = Modifier.heightIn(min = 48.dp), onClick = {
-                if (sessionDate == null || selectedCounselor == null || busy) return@Button
-                val draft = GuidanceSessionDraft(student, selectedCounselor, type, sessionDate, confidentiality,
-                    summary.trim(), actionPlan.trim(), followUpDate)
+                if (!ready || busy) return@Button
                 busy = true
                 error = null
                 actions.launch {
                     try {
-                        client.create(draft)
+                        when (section) {
+                            GuidanceSection.SESSIONS -> client.create(GuidanceSessionDraft(student, requireNotNull(selectedCounselor), type,
+                                requireNotNull(sessionDate), confidentiality, summary.trim(), actionPlan.trim(), followUpDate))
+                            GuidanceSection.NOTES -> client.createNote(GuidanceNoteDraft(student, requireNotNull(selectedCounselor), type,
+                                confidentiality, summary.trim(), tagList))
+                            GuidanceSection.INCIDENTS -> client.createIncident(GuidanceIncidentDraft(student, requireNotNull(sessionDate), type,
+                                summary.trim(), location.trim(), parentNotified), actorId)
+                        }
                         onSaved()
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (failure: Exception) {
-                        error = failure.message ?: "Rehberlik görüşmesi kaydedilemedi."
+                        error = failure.message ?: "Rehberlik kaydı oluşturulamadı."
                     } finally {
                         busy = false
                     }
                 }
-            }) { Text("Görüşmeyi kaydet") }
+            }) { Text(section.saveTitle) }
+    }
+}
+
+@Composable
+private fun GuidanceIncidentDetails(
+    client: NativeGuidanceClient, incident: GuidanceIncidentRow, canWrite: Boolean, onClose: () -> Unit, onResolved: () -> Unit,
+) {
+    val actions = rememberCoroutineScope()
+    var notes by remember(incident.id) { mutableStateOf("") }
+    var busy by remember(incident.id) { mutableStateOf(false) }
+    var error by remember(incident.id) { mutableStateOf<String?>(null) }
+    ConsentFormDialog("Davranış olayı", "guidance_detail", busy, onClose, {
+        item { Text(incident.description) }
+        incident.location?.let { item { Text("Olay yeri: $it") } }
+        if (incident.parentNotified) item { Text("Kayıtta veliye bilgi verildiği belirtilmiş.") }
+        incident.resolutionNotes?.let { item { Text("Çözüm: $it") } }
+        if (canWrite && !incident.resolved) item {
+            OutlinedTextField(notes, { notes = it.take(2000) }, enabled = !busy, label = { Text("Çözüm notu") })
+        }
+        error?.let { item { Text(it) } }
+    }) {
+        if (canWrite && !incident.resolved) Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp), onClick = {
+            if (busy) return@Button
+            busy = true
+            error = null
+            actions.launch {
+                try {
+                    client.resolve(incident, notes.trim().ifBlank { null })
+                    onResolved()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Exception) {
+                    error = failure.message ?: "Çözüm kaydedilemedi."
+                } finally {
+                    busy = false
+                }
+            }
+        }) { Text("Çözüldü olarak kaydet") }
     }
 }

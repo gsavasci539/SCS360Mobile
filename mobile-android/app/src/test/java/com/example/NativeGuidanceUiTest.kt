@@ -32,6 +32,9 @@ class NativeGuidanceUiTest {
     private var font = 1f
     @Volatile private var requestBody: JSONObject? = null
     @Volatile private var wrongAcknowledgement = false
+    @Volatile private var noteBody: JSONObject? = null
+    @Volatile private var incidentBody: JSONObject? = null
+    @Volatile private var resolveBody: JSONObject? = null
 
     @Before fun start() {
         base = ApiClientProvider.activeBaseUrl
@@ -60,6 +63,31 @@ class NativeGuidanceUiTest {
                     val saved = requestBody
                     if (saved != null && !wrongAcknowledgement) put(JSONObject(saved.toString()).put("id", id(4))
                         .put("student_name", "Test Öğrencisi").put("counselor_name", "Test Danışmanı"))
+                }
+                uri.path == "/api/guidance/notes" && exchange.requestMethod == "POST" -> {
+                    val sent = JSONObject(exchange.requestBody.use { it.readBytes().decodeToString() })
+                    noteBody = sent
+                    JSONObject(sent.toString()).put("id", id(6))
+                }
+                uri.path == "/api/guidance/notes" -> JSONArray().apply {
+                    noteBody?.let { put(JSONObject(it.toString()).put("id", id(6)).put("created_at", "2026-11-20T12:00:00")
+                        .put("student_name", "Test Öğrencisi").put("counselor_name", "Test Danışmanı")) }
+                }
+                uri.path == "/api/guidance/incidents" && exchange.requestMethod == "POST" -> {
+                    val sent = JSONObject(exchange.requestBody.use { it.readBytes().decodeToString() })
+                    incidentBody = sent
+                    JSONObject(sent.toString()).put("id", id(7)).put("reported_by", id(3))
+                }
+                uri.path == "/api/guidance/incidents" -> JSONArray().apply {
+                    incidentBody?.let {
+                        put(JSONObject(it.toString()).put("id", id(7)).put("student_name", "Test Öğrencisi")
+                            .put("resolved", resolveBody != null).put("resolution_notes", resolveBody?.opt("resolution_notes")))
+                    }
+                }
+                uri.path == "/api/guidance/incidents/${id(7)}/resolve" && exchange.requestMethod == "PUT" -> {
+                    val sent = JSONObject(exchange.requestBody.use { it.readBytes().decodeToString() })
+                    resolveBody = sent
+                    JSONObject(sent.toString()).put("id", id(7)).put("student_id", id(2)).put("resolved", true)
                 }
                 else -> {
                     exchange.sendResponseHeaders(404, -1)
@@ -118,6 +146,53 @@ class NativeGuidanceUiTest {
 
     @Test fun mismatchedServerAcknowledgementDoesNotShowSuccess() {
         verifyCreate(matches = false)
+    }
+
+    @Test fun confidentialNoteUsesItsOwnEndpointAndReloadsForTheSelectedStudent() {
+        open(canWrite = true)
+        click("guidance_sessions", "Danışman notları")
+        click("guidance_sessions", "Yeni danışman notu")
+        click("guidance_create", "Test Danışmanı")
+        click("guidance_create", "Gizli")
+        typeIn("guidance_create", "Danışman notu", "İzole test notu")
+        typeIn("guidance_create", "Etiketler (virgülle ayırın)", "ilk, ikinci")
+        click("guidance_create", "Notu kaydet")
+        click("guidance_sessions", "Notu incele")
+        compose.onNodeWithText("İzole test notu").assertIsDisplayed()
+        val saved = requireNotNull(noteBody)
+        assertEquals(id(2), saved.getString("student_id"))
+        assertEquals(id(3), saved.getString("counselor_id"))
+        assertEquals("CONFIDENTIAL", saved.getString("confidentiality_level"))
+        assertEquals(listOf("ilk", "ikinci"), (0..1).map(saved.getJSONArray("tags")::getString))
+        assertEquals(2, requests.count { it.startsWith("GET /api/guidance/notes?") && it.contains("student_id=${id(2)}") })
+    }
+
+    @Test fun incidentAndResolutionUseServerRecordsWithoutSendingNotification() {
+        open(canWrite = true)
+        click("guidance_sessions", "Davranış olayları")
+        click("guidance_sessions", "Yeni davranış olayı")
+        typeIn("guidance_create", "Olay açıklaması", "İzole test olayı")
+        click("guidance_create", "Olayı kaydet")
+        click("guidance_sessions", "Olayı incele")
+        typeIn("guidance_detail", "Çözüm notu", "İzole test çözümü")
+        click("guidance_detail", "Çözüldü olarak kaydet")
+        compose.waitUntil(15_000) { requests.count { it.startsWith("GET /api/guidance/incidents?") } == 3 }
+        click("guidance_sessions", "Olayı incele")
+        compose.onNodeWithText("Çözüm: İzole test çözümü").assertIsDisplayed()
+        compose.onNodeWithText("Çözüldü olarak kaydet").assertDoesNotExist()
+        val saved = requireNotNull(incidentBody)
+        assertEquals(id(2), saved.getString("student_id"))
+        assertFalse(saved.getBoolean("parent_notified"))
+        assertFalse(saved.has("reported_by"))
+        assertEquals("İzole test çözümü", resolveBody?.getString("resolution_notes"))
+        assertEquals(listOf("POST /api/guidance/incidents", "PUT /api/guidance/incidents/${id(7)}/resolve"),
+            requests.filterNot { it.startsWith("GET ") })
+    }
+
+    private fun typeIn(container: String, label: String, value: String) {
+        val field = hasText(label) and hasSetTextAction()
+        compose.onNodeWithTag(container).performScrollToNode(field)
+        compose.onNode(field).performTextInput(value)
     }
 
     private fun verifyCreate(matches: Boolean) {
