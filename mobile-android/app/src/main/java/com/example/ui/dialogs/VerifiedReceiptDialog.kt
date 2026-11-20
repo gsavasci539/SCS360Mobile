@@ -25,9 +25,9 @@ import java.text.NumberFormat
 import java.util.Locale
 
 @Composable
-fun VerifiedReceiptDialog(debtId: String, onDismiss: () -> Unit) {
+fun VerifiedReceiptDialog(debtId: String, parentStudentId: String? = null, onDismiss: () -> Unit) {
     val context = LocalContext.current
-    val client = remember(debtId) { runCatching { NativeReceiptClient(debtId) }.getOrNull() }
+    val client = remember(debtId, parentStudentId) { runCatching { NativeReceiptClient(debtId, parentStudentId) }.getOrNull() }
     var rows by remember { mutableStateOf<List<VerifiedReceipt>?>(null) }
     var busy by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }
     var revision by remember { mutableIntStateOf(0) }; val scope = rememberCoroutineScope()

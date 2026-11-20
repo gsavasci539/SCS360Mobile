@@ -11,11 +11,12 @@ data class VerifiedReceipt(val id: String, val paymentId: String, val number: St
 class ReceiptHttpException(val code: Int) : java.io.IOException("Makbuz isteği HTTP $code")
 
 /** Every receipt is selected through an authorized payment linked to this debt. */
-class NativeReceiptClient(private val debtId: String) {
+class NativeReceiptClient(private val debtId: String, private val parentStudentId: String? = null) {
     private val scope = NativeRequestScope.bound() ?: ApiClientProvider.interceptor.captureScope()
     private val base = ApiClientProvider.activeBaseUrl
     private val client = ApiClientProvider.createOkHttpClient()
     private val receipts = mutableMapOf<String, VerifiedReceipt>()
+    private val parentPath = parentStudentId?.let { "parent/child/${UUID.fromString(it)}/debts/$debtId/receipts" }
     init { UUID.fromString(debtId) }
     fun current() = scope.current()
     private suspend fun json(path: String): JSONObject = scope.io {
@@ -28,26 +29,41 @@ class NativeReceiptClient(private val debtId: String) {
     private fun money(row: JSONObject, key: String) = row.getString(key).toBigDecimal().also {
         check(it >= BigDecimal.ZERO && it <= BigDecimal("9999999999.99") && it.stripTrailingZeros().scale() <= 2)
     }
+    private fun verifiedReceipt(row: JSONObject, receiptId: String, paymentId: String, amount: BigDecimal): VerifiedReceipt {
+        check(row.getString("id") == receiptId && row.getString("payment_id") == paymentId)
+        val issued = row.getString("issued_at")
+        java.time.format.DateTimeFormatter.ISO_DATE_TIME.parse(issued)
+        val status = row.getString("status")
+        check(status in setOf("ACTIVE", "CANCELLED"))
+        val number = row.getString("receipt_number").also { check(it.isNotBlank()) }
+        return VerifiedReceipt(receiptId, paymentId, number, issued, status, amount, money(row, "remaining_debt"))
+    }
     suspend fun load(): List<VerifiedReceipt> = scope.io {
         receipts.clear()
         var page = 1; var total: Int? = null
         val seen = mutableSetOf<String>(); val result = mutableListOf<VerifiedReceipt>()
         while (true) {
-            val data = json("payments?debt_id=$debtId&status=ALL&page=$page&page_size=100")
+            val data = json(parentPath?.let { "$it?page=$page&page_size=100" }
+                ?: "payments?debt_id=$debtId&status=ALL&page=$page&page_size=100")
+            if (parentPath != null) {
+                check(data.getString("student_id") == parentStudentId && data.getString("debt_id") == debtId)
+            }
             val count = data.getInt("total"); check(count in 0..100000 && (total == null || total == count)); total = count
             val rows = data.getJSONArray("items")
             for (i in 0 until rows.length()) {
                 val payment = rows.getJSONObject(i)
-                val id = UUID.fromString(payment.getString("id")).toString()
-                check(seen.add(id) && payment.getString("debt_id") == debtId)
-                if (payment.isNull("receipt_id")) continue
-                val receiptId = UUID.fromString(payment.getString("receipt_id")).toString()
-                val receipt = json("receipts/$receiptId")
-                check(receipt.getString("id") == receiptId && receipt.getString("payment_id") == id)
-                val issued = receipt.getString("issued_at"); java.time.format.DateTimeFormatter.ISO_DATE_TIME.parse(issued)
-                val status = receipt.getString("status"); check(status in setOf("ACTIVE", "CANCELLED"))
-                val number = receipt.getString("receipt_number"); check(number.isNotBlank())
-                result.add(VerifiedReceipt(receiptId, id, number, issued, status, money(payment, "amount"), money(receipt, "remaining_debt")))
+                if (parentPath != null) {
+                    val id = UUID.fromString(payment.getString("payment_id")).toString()
+                    val receiptId = UUID.fromString(payment.getString("id")).toString()
+                    check(seen.add(id))
+                    result.add(verifiedReceipt(payment, receiptId, id, money(payment, "amount")))
+                } else {
+                    val id = UUID.fromString(payment.getString("id")).toString()
+                    check(seen.add(id) && payment.getString("debt_id") == debtId)
+                    if (payment.isNull("receipt_id")) continue
+                    val receiptId = UUID.fromString(payment.getString("receipt_id")).toString()
+                    result.add(verifiedReceipt(json("receipts/$receiptId"), receiptId, id, money(payment, "amount")))
+                }
             }
             check(seen.size <= count)
             if (seen.size == count) break
@@ -58,7 +74,8 @@ class NativeReceiptClient(private val debtId: String) {
     }
     suspend fun pdf(receipt: VerifiedReceipt): ByteArray = scope.io {
         check(receipts[receipt.id] == receipt) { "Önce yetkili makbuz listesini yükleyin" }
-        client.newCall(Request.Builder().url(base + "receipts/${receipt.id}/pdf")
+        val path = "${parentPath ?: "receipts"}/${receipt.id}/pdf"
+        client.newCall(Request.Builder().url(base + path)
             .tag(NativeRequestScope::class.java, scope).build()).execute().use { reply ->
             if (!reply.isSuccessful) throw ReceiptHttpException(reply.code)
             check(reply.header("Content-Type")?.substringBefore(';') == "application/pdf")

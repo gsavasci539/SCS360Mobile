@@ -46,7 +46,7 @@ import com.example.ui.components.RoleContextualAiCard
 import com.example.ui.components.RoleSpeedDialFab
 import com.example.ui.components.RoleSwitchBadge
 import com.example.ui.components.SpeedDialAction
-import com.example.ui.dialogs.ReceiptDialog
+import com.example.ui.dialogs.VerifiedReceiptDialog
 import com.example.ui.dialogs.ceppos.CepPosPaymentDialog
 import com.example.ui.dialogs.iyzico.IyzicoPaymentDialog
 import com.example.ui.navigation.NativeNavigationPolicy
@@ -519,9 +519,10 @@ fun ParentPortalScreen(
                 }
             }
 
-            showReceiptForInvoice?.let { invoice ->
-                ReceiptDialog(
-                    invoice = invoice,
+            showReceiptForInvoice?.takeIf { canReadFinances && it.student_id == currentChild?.id }?.let { invoice ->
+                VerifiedReceiptDialog(
+                    debtId = invoice.id,
+                    parentStudentId = invoice.student_id,
                     onDismiss = { showReceiptForInvoice = null }
                 )
             }

@@ -5,9 +5,9 @@ import com.example.data.model.PaymentReceipt
 
 @Composable
 fun ReceiptDialog(invoice: Invoice, onDismiss: () -> Unit, onPrintOrShare: () -> Unit = {}) {
-    VerifiedReceiptDialog(invoice.id, onDismiss)
+    VerifiedReceiptDialog(invoice.id, onDismiss = onDismiss)
 }
 @Composable
 fun ReceiptDialog(receipt: PaymentReceipt, onDismiss: () -> Unit, onPrintOrShare: () -> Unit) {
-    VerifiedReceiptDialog(receipt.invoice_id, onDismiss)
+    VerifiedReceiptDialog(receipt.invoice_id, onDismiss = onDismiss)
 }
