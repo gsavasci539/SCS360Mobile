@@ -61,6 +61,7 @@ class NativeMobileParityUiTest {
     private val releaseBrowserStatus = CountDownLatch(1)
     @Volatile private var holdBrowserStatus = false
     @Volatile private var failBrowserStatus = false
+    @Volatile private var missingSavedCheckout = false
     @Volatile private var nextCheckout: JSONObject? = null
     @Before fun start() {
         oldFont = RuntimeEnvironment.getFontScale(); RuntimeEnvironment.setFontScale(2f)
@@ -68,6 +69,11 @@ class NativeMobileParityUiTest {
         server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/") { e ->
             calls.add("${e.requestMethod} ${e.requestURI.path}")
+            if (missingSavedCheckout && e.requestMethod == "GET" && e.requestURI.path.contains("/checkouts/")) {
+                e.sendResponseHeaders(404, -1)
+                e.close()
+                return@createContext
+            }
             if (failBrowserStatus && e.requestMethod == "GET" && e.requestURI.path.contains("/checkouts/")) {
                 failBrowserStatus = false
                 e.sendResponseHeaders(503, -1)
@@ -218,9 +224,12 @@ class NativeMobileParityUiTest {
         compose.onNodeWithTag("parent_invoices").performScrollToNode(hasText("Online Öde"))
         compose.onNodeWithTag("parent_invoices").performTouchInput { swipeUp() }
         compose.onNodeWithText("Online Öde").assertIsDisplayed().performClick()
-        compose.onNodeWithTag("hosted_payment").assertExists()
-        compose.waitUntil(15_000) { compose.onAllNodesWithTag("hosted_status").fetchSemanticsNodes().isNotEmpty() }
+        val dialog = compose.onNodeWithTag("hosted_payment")
+        dialog.assertExists()
+        compose.waitUntil(15_000) { runCatching { dialog.performScrollToNode(hasTestTag("hosted_status")) }.isSuccess }
         compose.onNodeWithTag("hosted_status").assertTextEquals("PENDING")
+        assertEquals(1, calls.count { it == "GET /api/parent/payments/checkouts/${id(3)}" })
+        assertTrue(calls.none { it.startsWith("POST ") })
         paid = true
         compose.onNodeWithTag("hosted_payment").performScrollToNode(hasTestTag("hosted_refresh"))
         compose.onNodeWithTag("hosted_refresh").performScrollTo().assertIsEnabled().performClick()
@@ -267,7 +276,7 @@ class NativeMobileParityUiTest {
         holdBrowserStatus = changeSession
         compose.onNode(checkBalance).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         try {
-            compose.waitUntil(15_000) { calls.contains("GET /api/parent/payments/checkouts/${id(3)}") }
+            compose.waitUntil(15_000) { calls.count { it == "GET /api/parent/payments/checkouts/${id(3)}" } == 2 }
             if (changeSession) {
                 compose.runOnIdle { ApiClientProvider.interceptor.invalidateContext(); revision++ }
                 releaseBrowserStatus.countDown()
@@ -373,7 +382,7 @@ class NativeMobileParityUiTest {
         compose.onNode(open).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(15_000) { launches.isNotEmpty() }
         assertEquals(Intent.ACTION_VIEW, launches.single().action)
-        assertTrue(calls.none { it == "GET $checkoutPath" })
+        assertEquals(1, calls.count { it == "GET $checkoutPath" })
         val beforeReturn = calls.size
         failBrowserStatus = retry
         holdBrowserStatus = changeSession && !retry
@@ -383,7 +392,7 @@ class NativeMobileParityUiTest {
             host.lifecycle.currentState = Lifecycle.State.RESUMED
         }
         try {
-            compose.waitUntil(15_000) { calls.contains("GET $checkoutPath") }
+            compose.waitUntil(15_000) { calls.drop(beforeReturn).contains("GET $checkoutPath") }
             if (retry) {
                 val retryAction = hasText("Ödeme durumunu yeniden sorgula")
                 compose.waitUntil(15_000) {
@@ -394,7 +403,7 @@ class NativeMobileParityUiTest {
                 compose.onNodeWithTag("hosted_prepare").assertDoesNotExist()
                 holdBrowserStatus = changeSession
                 compose.onNode(retryAction).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
-                compose.waitUntil(15_000) { calls.count { it == "GET $checkoutPath" } == 2 }
+                compose.waitUntil(15_000) { calls.drop(beforeReturn).count { it == "GET $checkoutPath" } == 2 }
             }
             if (changeSession) {
                 compose.runOnIdle { ApiClientProvider.interceptor.invalidateContext(); revision++ }
@@ -416,6 +425,27 @@ class NativeMobileParityUiTest {
         } finally {
             releaseBrowserStatus.countDown()
         }
+    }
+
+    @Test fun parentRetriesMissingCheckoutWithTheSavedIdentifier() {
+        missingSavedCheckout = true
+        compose.setContent { Okul360Theme { HostedPaymentDialog(id(2), {}, parentStudentId = id(7)) } }
+        val dialog = compose.onNodeWithTag("hosted_payment")
+        val identity = "Kimlik / pasaport numarası"
+        compose.waitUntil(15_000) {
+            runCatching { dialog.performScrollToNode(hasText("Ödeme kaydı sunucuda bulunamadı.", substring = true)) }.isSuccess
+        }
+        assertTrue(calls.none { it.startsWith("POST ") })
+        for ((label, value) in listOf(identity to "TEST-001", "Telefon" to "5555555555",
+            "Fatura adresi" to "Synthetic test address", "Şehir" to "Test", "Ülke" to "TR")) {
+            dialog.performScrollToNode(hasText(label))
+            compose.onNode(hasText(label) and hasSetTextAction()).performTextInput(value)
+        }
+        dialog.performScrollToNode(hasTestTag("hosted_prepare"))
+        compose.onNodeWithTag("hosted_prepare").performScrollTo().assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitUntil(15_000) { nextCheckout != null }
+        assertEquals(id(3), requireNotNull(nextCheckout).getString("request_id"))
+        assertEquals(listOf("POST /api/parent/payments/initialize"), calls.filter { it.startsWith("POST ") })
     }
 
     @Test fun parentCheckoutConflictReloadsOnlyItsDebtList() {

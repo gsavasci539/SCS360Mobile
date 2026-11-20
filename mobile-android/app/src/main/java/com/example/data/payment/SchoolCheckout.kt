@@ -18,6 +18,7 @@ internal class SchoolCheckoutRejected(val balanceChanged: Boolean) : IllegalStat
 
 data class SchoolCheckoutReference(val requestId: UUID, val debtId: UUID, val amount: BigDecimal)
 internal data class SchoolCheckoutLaunch(val url: String, val reference: SchoolCheckoutReference)
+private class CheckoutNotFound : IllegalStateException("Kayıtlı ödeme işlemi bulunamadı.")
 
 class SchoolCheckout(context: Context, private val debtId: String, private val parentStudentId: String? = null) {
     private val scope = NativeRequestScope.bound() ?: ApiClientProvider.interceptor.captureScope()
@@ -42,7 +43,11 @@ class SchoolCheckout(context: Context, private val debtId: String, private val p
         if (reference == null) {
             val previous = saved() ?: return null
             val requestId = previous.getString("request_id")
-            return validate(call("$paymentsPath/checkouts/$requestId"), requestId, BigDecimal(previous.getString("amount")))
+            return try {
+                validate(call("$paymentsPath/checkouts/$requestId"), requestId, BigDecimal(previous.getString("amount")))
+            } catch (_: CheckoutNotFound) {
+                null
+            }
         }
         check(parentStudentId != null && reference.debtId.toString() == debtId && reference.amount.signum() > 0) {
             "Ödeme kaydı seçili borçla eşleşmiyor"
@@ -56,6 +61,7 @@ class SchoolCheckout(context: Context, private val debtId: String, private val p
             if (body != null) post(body.toString().toRequestBody("application/json".toMediaType()))
         }.build()
         client.newCall(request).execute().use { response ->
+            if (body == null && path.startsWith("$paymentsPath/checkouts/") && response.code == 404) throw CheckoutNotFound()
             if (path == "parent/payments/initialize" && response.code == 409) {
                 val code = runCatching {
                     JSONObject(response.peekBody(4096).string()).optJSONArray("errors")?.optJSONObject(0)?.optString("code")

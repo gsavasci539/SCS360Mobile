@@ -63,6 +63,8 @@ fun HostedPaymentDialog(
     var country by remember(debtId) { mutableStateOf("") }
     var browserCheckout by remember(captured) { mutableStateOf<SchoolCheckoutReference?>(null) }
     var browserRetry by remember(captured) { mutableStateOf<SchoolCheckoutReference?>(null) }
+    var savedStatusUnread by remember(captured) { mutableStateOf(parentStudentId != null && !recoveryOnly) }
+    var savedStatusMissing by remember(captured) { mutableStateOf(false) }
     fun run(action: suspend (SchoolCheckout) -> Unit) {
         if (busy || closed || !captured.current()) return
         busy = true; error = ""
@@ -89,6 +91,14 @@ fun HostedPaymentDialog(
             if (current.optString("status") == SCHOOL_CHECKOUT_COMPLETED) reload()
         }
     }
+    suspend fun loadParentCheckout(service: SchoolCheckout) {
+        debt = service.debt()
+        val hasSavedAttempt = service.saved() != null
+        result = if (hasSavedAttempt) service.status() else null
+        captured.ensureCurrent()
+        savedStatusMissing = hasSavedAttempt && result == null
+        savedStatusUnread = false
+    }
     val checkBrowserReturn by rememberUpdatedState<() -> Unit>({
         val reference = browserCheckout
         if (reference != null && !busy && !closed && captured.current()) {
@@ -108,6 +118,8 @@ fun HostedPaymentDialog(
         run { service ->
             if (recoveryOnly) {
                 result = service.status(recoveryReference) ?: error("Kayıtlı ödeme işlemi bulunamadı.")
+            } else if (parentStudentId != null) {
+                loadParentCheckout(service)
             } else {
                 debt = service.debt()
                 if (service.saved() != null) result = service.refresh()
@@ -130,6 +142,13 @@ fun HostedPaymentDialog(
                 item(key = "remaining") { debt?.let { Text("Kalan: ${it.optString("remaining_amount")} TRY") } }
                 item(key = "error") { if (error.isNotBlank()) Text(error) }
                 item(key = "status") { shownResult?.let { Text(it.optString("message", it.optString("status")), Modifier.testTag("hosted_status")) } }
+                if (savedStatusMissing) item(key = "missing") {
+                    Text("Ödeme kaydı sunucuda bulunamadı. Aynı işlem kimliğiyle tekrar gönderebilirsiniz.")
+                }
+                if (savedStatusUnread && error.isNotBlank()) item(key = "saved_status_retry") {
+                    Button(enabled = !busy, onClick = { run { service -> loadParentCheckout(service) } },
+                        modifier = Modifier.heightIn(min = 48.dp)) { Text("Ödeme durumunu yeniden sorgula") }
+                }
                 if (recoveryOnly && !paid) item(key = "refresh") {
                     Button(enabled = !busy, onClick = { run { service ->
                         result = service.status(recoveryReference) ?: error("Kayıtlı ödeme işlemi bulunamadı.")
@@ -152,7 +171,8 @@ fun HostedPaymentDialog(
                         } }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Kalan borcu kontrol et") }
                     }
                 }
-                if (!paid && !recoveryOnly && browserRetry == null) {
+                if (!paid && !recoveryOnly && !savedStatusUnread && browserRetry == null &&
+                    (parentStudentId == null || shownResult == null)) {
                     item(key = "identity") { OutlinedTextField(identity, { identity = it }, enabled = !busy, label = { Text("Kimlik / pasaport numarası") }, modifier = Modifier.fillMaxWidth()) }
                     item(key = "phone") { OutlinedTextField(phone, { phone = it }, enabled = !busy, label = { Text("Telefon") }, modifier = Modifier.fillMaxWidth()) }
                     item(key = "address") { OutlinedTextField(address, { address = it }, enabled = !busy, label = { Text("Fatura adresi") }, modifier = Modifier.fillMaxWidth()) }
@@ -164,9 +184,13 @@ fun HostedPaymentDialog(
                                 val buyer = JSONObject().put("identityNumber", identity.trim()).put("gsmNumber", phone.trim())
                                     .put("registrationAddress", address.trim()).put("city", city.trim()).put("country", country.trim())
                                 result = service.start(service.saved()?.getString("amount") ?: debt!!.getString("remaining_amount"), buyer)
+                                savedStatusMissing = false
                             }
                         }, modifier = Modifier.testTag("hosted_prepare")) { Text("Ödeme sayfasını hazırla / tekrar dene") }
                     }
+                }
+                if (!paid && !recoveryOnly && !savedStatusUnread && browserRetry == null &&
+                    (parentStudentId == null || shownResult != null)) {
                     if (shownResult?.optBoolean("can_resume") == true) item(key = "resume") {
                         Button(enabled = !busy, onClick = {
                             run { service ->
