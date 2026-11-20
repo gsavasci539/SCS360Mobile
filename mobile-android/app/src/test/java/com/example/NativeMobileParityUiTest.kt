@@ -229,6 +229,63 @@ class NativeMobileParityUiTest {
         assertTrue(calls.none { it.startsWith("POST") && !it.endsWith("/refresh") })
     }
 
+    @Test fun parentRemainingPaymentOpensNewFormWithVerifiedBalance() {
+        verifyRemainingPaymentForm(changeSession = false)
+    }
+
+    @Test fun parentRemainingPaymentDoesNotOpenFormAfterSessionChange() {
+        verifyRemainingPaymentForm(changeSession = true)
+    }
+
+    private fun verifyRemainingPaymentForm(changeSession: Boolean) {
+        paid = true
+        parentInvoiceResponse = JSONObject("""{
+            "student_id":"${id(7)}","online_payment_available":true,"invoices":[
+                {"debt_id":"${id(2)}","paid_amount":"25.00","amount":"100.00","remaining_amount":"75.00","status":"PARTIALLY_PAID"}]
+        }""")
+        var revision by mutableIntStateOf(0)
+        val dismissals = CopyOnWriteArrayList<Int>()
+        compose.setContent {
+            val sessionRevision = revision
+            Okul360Theme { HostedPaymentDialog(id(2), { dismissals.add(sessionRevision) }, parentStudentId = id(7)) }
+        }
+        val dialog = compose.onNodeWithTag("hosted_payment")
+        val checkBalance = hasText("Kalan borcu kontrol et")
+        compose.waitUntil(15_000) { runCatching { dialog.performScrollToNode(checkBalance) }.isSuccess }
+        holdBrowserStatus = changeSession
+        compose.onNode(checkBalance).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        try {
+            compose.waitUntil(15_000) { calls.contains("GET /api/parent/payments/checkouts/${id(3)}") }
+            if (changeSession) {
+                compose.runOnIdle { ApiClientProvider.interceptor.invalidateContext(); revision++ }
+                releaseBrowserStatus.countDown()
+                compose.waitUntil(15_000) { dismissals.isNotEmpty() }
+                dialog.assertDoesNotExist()
+                assertEquals(1, calls.count { it.endsWith("/financial-invoices") })
+                assertNull(nextCheckout)
+                return
+            }
+            val identity = "Kimlik / pasaport numarası"
+            compose.waitUntil(15_000) { runCatching { dialog.performScrollToNode(hasText(identity)) }.isSuccess }
+            assertNull(nextCheckout)
+            for ((label, value) in listOf(identity to "TEST-001", "Telefon" to "5555555555",
+                "Fatura adresi" to "Synthetic test address", "Şehir" to "Test", "Ülke" to "TR")) {
+                dialog.performScrollToNode(hasText(label))
+                compose.onNode(hasText(label) and hasSetTextAction()).performTextInput(value)
+            }
+            dialog.performScrollToNode(hasTestTag("hosted_prepare"))
+            compose.onNodeWithTag("hosted_prepare").performScrollTo().assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
+            compose.waitUntil(15_000) { nextCheckout != null }
+            val request = requireNotNull(nextCheckout)
+            assertEquals("75.00", request.getString("amount"))
+            assertEquals(id(2), request.getString("debt_id"))
+            assertNotEquals(id(3), request.getString("request_id"))
+            assertEquals(1, calls.count { it == "POST /api/parent/payments/initialize" })
+        } finally {
+            releaseBrowserStatus.countDown()
+        }
+    }
+
     @Test fun parentCanStartRemainingPaymentOnlyAfterVerifyingTheCompletedCheckout() = runBlocking {
         val context = RuntimeEnvironment.getApplication()
         val service = SchoolCheckout(context, id(2), id(7))
