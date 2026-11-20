@@ -60,6 +60,7 @@ fun HostedPaymentDialog(
     var city by remember(debtId) { mutableStateOf("") }
     var country by remember(debtId) { mutableStateOf("") }
     var browserCheckout by remember(captured) { mutableStateOf<SchoolCheckoutReference?>(null) }
+    var browserRetry by remember(captured) { mutableStateOf<SchoolCheckoutReference?>(null) }
     fun run(action: suspend (SchoolCheckout) -> Unit) {
         if (busy || closed || !captured.current()) return
         busy = true; error = ""
@@ -71,16 +72,21 @@ fun HostedPaymentDialog(
             finally { if (captured.current()) busy = false }
         }
     }
+    fun checkReturnedCheckout(reference: SchoolCheckoutReference) {
+        run { service ->
+            browserRetry = reference
+            val current = service.status(reference) ?: error("Kayıtlı ödeme işlemi bulunamadı.")
+            captured.ensureCurrent()
+            result = current
+            browserRetry = null
+            if (current.optString("status") == SCHOOL_CHECKOUT_COMPLETED) reload()
+        }
+    }
     val checkBrowserReturn by rememberUpdatedState<() -> Unit>({
         val reference = browserCheckout
         if (reference != null && !busy && !closed && captured.current()) {
             browserCheckout = null
-            run { service ->
-                val current = service.status(reference) ?: error("Kayıtlı ödeme işlemi bulunamadı.")
-                captured.ensureCurrent()
-                result = current
-                if (current.optString("status") == SCHOOL_CHECKOUT_COMPLETED) reload()
-            }
+            checkReturnedCheckout(reference)
         }
     })
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -123,7 +129,13 @@ fun HostedPaymentDialog(
                         if (result?.optString("status") == SCHOOL_CHECKOUT_COMPLETED) reload()
                     } }, modifier = Modifier.heightIn(min = 48.dp).testTag("hosted_refresh")) { Text("Sunucudan sonucu kontrol et") }
                 }
-                if (!paid && !recoveryOnly) {
+                browserRetry?.let { reference ->
+                    item(key = "browser_retry") {
+                        Button(enabled = !busy, onClick = { checkReturnedCheckout(reference) },
+                            modifier = Modifier.heightIn(min = 48.dp)) { Text("Ödeme durumunu yeniden sorgula") }
+                    }
+                }
+                if (!paid && !recoveryOnly && browserRetry == null) {
                     item(key = "identity") { OutlinedTextField(identity, { identity = it }, enabled = !busy, label = { Text("Kimlik / pasaport numarası") }, modifier = Modifier.fillMaxWidth()) }
                     item(key = "phone") { OutlinedTextField(phone, { phone = it }, enabled = !busy, label = { Text("Telefon") }, modifier = Modifier.fillMaxWidth()) }
                     item(key = "address") { OutlinedTextField(address, { address = it }, enabled = !busy, label = { Text("Fatura adresi") }, modifier = Modifier.fillMaxWidth()) }

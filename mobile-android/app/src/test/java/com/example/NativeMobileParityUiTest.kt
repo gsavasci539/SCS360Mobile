@@ -58,12 +58,19 @@ class NativeMobileParityUiTest {
     @Volatile private var rejectCheckout = false
     private val releaseBrowserStatus = CountDownLatch(1)
     @Volatile private var holdBrowserStatus = false
+    @Volatile private var failBrowserStatus = false
     @Before fun start() {
         oldFont = RuntimeEnvironment.getFontScale(); RuntimeEnvironment.setFontScale(2f)
         base = ApiClientProvider.activeBaseUrl; token = ApiClientProvider.interceptor.authToken
         server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/") { e ->
             calls.add("${e.requestMethod} ${e.requestURI.path}")
+            if (failBrowserStatus && e.requestMethod == "GET" && e.requestURI.path.contains("/checkouts/")) {
+                failBrowserStatus = false
+                e.sendResponseHeaders(503, -1)
+                e.close()
+                return@createContext
+            }
             if (rejectCheckout && e.requestMethod == "POST" && e.requestURI.path == "/api/parent/payments/initialize") {
                 e.requestBody.use { it.readBytes() }
                 parentInvoiceResponse = JSONObject("""{
@@ -222,7 +229,15 @@ class NativeMobileParityUiTest {
         verifyParentBrowserReturn(changeSession = true)
     }
 
-    private fun verifyParentBrowserReturn(changeSession: Boolean) {
+    @Test fun parentBrowserRetryChecksTheSameCheckout() {
+        verifyParentBrowserReturn(changeSession = false, retry = true)
+    }
+
+    @Test fun parentBrowserRetryDiscardsTheResultAfterSessionChange() {
+        verifyParentBrowserReturn(changeSession = true, retry = true)
+    }
+
+    private fun verifyParentBrowserReturn(changeSession: Boolean, retry: Boolean = false) {
         val host = object : LifecycleOwner {
             override val lifecycle = LifecycleRegistry.createUnsafe(this)
         }
@@ -255,7 +270,8 @@ class NativeMobileParityUiTest {
         assertEquals(Intent.ACTION_VIEW, launches.single().action)
         assertTrue(calls.none { it == "GET $checkoutPath" })
         val beforeReturn = calls.size
-        holdBrowserStatus = changeSession
+        failBrowserStatus = retry
+        holdBrowserStatus = changeSession && !retry
         paid = true
         compose.runOnIdle {
             host.lifecycle.currentState = Lifecycle.State.STARTED
@@ -263,6 +279,18 @@ class NativeMobileParityUiTest {
         }
         try {
             compose.waitUntil(15_000) { calls.contains("GET $checkoutPath") }
+            if (retry) {
+                val retryAction = hasText("Ödeme durumunu yeniden sorgula")
+                compose.waitUntil(15_000) {
+                    runCatching { dialog.performScrollToNode(retryAction); compose.onNode(retryAction).assertIsEnabled() }.isSuccess
+                }
+                assertTrue(reloads.isEmpty())
+                compose.onNodeWithTag("hosted_refresh").assertDoesNotExist()
+                compose.onNodeWithTag("hosted_prepare").assertDoesNotExist()
+                holdBrowserStatus = changeSession
+                compose.onNode(retryAction).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+                compose.waitUntil(15_000) { calls.count { it == "GET $checkoutPath" } == 2 }
+            }
             if (changeSession) {
                 compose.runOnIdle { ApiClientProvider.interceptor.invalidateContext(); revision++ }
                 releaseBrowserStatus.countDown()
@@ -279,7 +307,7 @@ class NativeMobileParityUiTest {
                 }
                 assertEquals(listOf(id(7)), reloads)
             }
-            assertEquals(listOf("GET $checkoutPath"), calls.drop(beforeReturn))
+            assertEquals(List(if (retry) 2 else 1) { "GET $checkoutPath" }, calls.drop(beforeReturn))
         } finally {
             releaseBrowserStatus.countDown()
         }
