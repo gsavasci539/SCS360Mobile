@@ -713,7 +713,7 @@ internal fun ParentPaymentsTab(
                     Text("Tutar: ${currency.format(row.amount)}")
                     Text("Ödenen: ${currency.format(row.paid)}")
                     Text("Kalan: ${currency.format(row.remaining)}", fontWeight = FontWeight.Bold)
-                    if (invoice.status == "PAID") OutlinedButton(
+                    if (invoice.status == "PAID" || row.paid.signum() > 0) OutlinedButton(
                             onClick = { onReceiptClicked(invoice) }, modifier = Modifier.heightIn(min = 48.dp)
                         ) { Text("Makbuz İncele") }
                     if (canMakePayment && row.isPayable) {

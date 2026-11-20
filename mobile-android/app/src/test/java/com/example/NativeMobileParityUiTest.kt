@@ -51,6 +51,11 @@ class NativeMobileParityUiTest {
         server.createContext("/") { e ->
             calls.add("${e.requestMethod} ${e.requestURI.path}")
             val data: Any = when {
+                e.requestURI.path == "/api/parent/child/${id(7)}/debts/${id(2)}/receipts" ->
+                    JSONObject().put("student_id", id(7)).put("debt_id", id(2)).put("total", 1)
+                        .put("items", JSONArray().put(JSONObject().put("id", id(12)).put("payment_id", id(4))
+                            .put("receipt_number", "TEST-MAKBUZ").put("amount", "25.10").put("remaining_debt", "100.25")
+                            .put("issued_at", "2026-11-20T12:00:00+03:00").put("status", "ACTIVE")))
                 e.requestURI.path.endsWith("/financial-invoices") -> parentInvoiceResponse ?: JSONObject()
                     .put("student_id", id(7))
                     .put("online_payment_available", true)
@@ -324,6 +329,31 @@ class NativeMobileParityUiTest {
         compose.runOnIdle { state = state.copy(currentUser = user.copy(permissions = listOf("parent.view_finances"))) }
         compose.onAllNodesWithText("Online Öde").assertCountEquals(0)
     }
+    @Test fun parentCanOpenReceiptForAPartialPayment() {
+        val child = Student(id = id(7), first_name = "Deniz")
+        parentInvoiceResponse = JSONObject("""{
+            "student_id":"${child.id}","online_payment_available":false,"invoices":[
+                {"debt_id":"${id(2)}","amount":125.35,"paid_amount":25.10,"remaining_amount":100.25,"status":"PARTIALLY_PAID"}]
+        }""")
+        val snapshot = runBlocking { NativeParentPortalClient().invoiceSnapshot(child) }
+        val state = Okul360UiState(isLoggedIn = true, selectedRole = UserRole.PARENT, parentChildren = listOf(child),
+            currentUser = User(id = id(1), permissions = listOf("parent.view_finances")),
+            parentInvoiceStates = mapOf(child.id to ParentInvoiceLoadState.LOADED),
+            parentInvoiceSnapshots = mapOf(child.id to snapshot))
+        compose.setContent {
+            Okul360Theme {
+                ParentPortalScreen(state, {}, { _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _ -> }, onLogout = {})
+            }
+        }
+        compose.onNodeWithTag("parent_invoices").performScrollToNode(hasText("Makbuz İncele"))
+        compose.onNodeWithText("Makbuz İncele").assertIsDisplayed().performClick()
+        compose.waitUntil(15_000) { compose.onAllNodesWithTag("receipt_pdf_${id(12)}").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Makbuz: TEST-MAKBUZ").assertExists()
+        val prefix = "/api/parent/child/${child.id}/debts/${id(2)}/receipts"
+        assertTrue(calls.contains("GET $prefix"))
+        assertTrue(calls.all { it.startsWith("GET /api/parent/") })
+    }
+
     @Test fun parentMessagingReadsAuthorizedTeachersAndServerHistoryAfterAcknowledgement() {
         val actor = User(id = id(1), permissions = listOf("parent.send_message"))
         compose.setContent { Okul360Theme { ParentVerifiedMessagingPane(id(7), actor) } }
