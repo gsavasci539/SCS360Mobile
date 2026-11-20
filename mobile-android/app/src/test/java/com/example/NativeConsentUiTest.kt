@@ -41,6 +41,7 @@ class NativeConsentUiTest {
     @Volatile private var decisionBody: JSONObject? = null
     @Volatile private var decisionSaved = false
     @Volatile private var documentBody: JSONObject? = null
+    @Volatile private var documentActive = true
     @Volatile private var guardianBody: JSONObject? = null
     private var useWrongDocumentHash = false
     private val guardianPath get() = "/api/parent/child/${id(3)}/consents"
@@ -59,11 +60,17 @@ class NativeConsentUiTest {
             val uri = exchange.requestURI
             paths.add("$method $uri")
             val data: Any = when {
-                method == "GET" && uri.path == documents -> JSONArray().put(JSONObject()
-                    .put("id", id(1)).put("title", "Test izin belgesi").put("version", "1.3")
-                    .put("document_type", "EXCURSION").put("content", "İzole test belge metni.").put("effective_date", "2026-11-20"))
+                method == "GET" && uri.path == documents -> JSONArray().apply {
+                    if (uri.query.contains("is_active=$documentActive")) put(JSONObject()
+                        .put("id", id(1)).put("title", "Test izin belgesi").put("version", "1.3")
+                        .put("document_type", "EXCURSION").put("content", "İzole test belge metni.").put("effective_date", "2026-11-20"))
+                }
                 method == "POST" && uri.path == documents -> JSONObject(exchange.requestBody.use { it.readBytes().decodeToString() })
                     .also { documentBody = JSONObject(it.toString()) }.put("id", id(7))
+                method == "PATCH" && uri.path == "$documents/${id(1)}/status" -> {
+                    documentActive = JSONObject(exchange.requestBody.use { it.readBytes().decodeToString() }).getBoolean("is_active")
+                    JSONObject().put("id", id(1)).put("is_active", documentActive)
+                }
                 method == "GET" && uri.path == options -> {
                     check(uri.query.contains("organization_id=${id(2)}"))
                     val parents = if (uri.query.contains("student_id=${id(3)}")) {
@@ -138,6 +145,25 @@ class NativeConsentUiTest {
         compose.onNodeWithText("Veli kararı kaydet").assertDoesNotExist()
         compose.onNodeWithText("Arşive al").assertDoesNotExist()
         assertEquals(listOf("GET $documents?is_active=true&offset=0&limit=21"), paths)
+    }
+
+    @Test fun archiveAndReactivationReloadTheCanonicalDocumentLists() {
+        open(canWrite = true)
+        clickIn("consent_document", "Arşive al")
+        compose.onNodeWithText("İzin belgesi bulunamadı.").let { empty ->
+            compose.waitUntil(15_000) { runCatching { empty.assertExists() }.isSuccess }
+        }
+        assertFalse(documentActive)
+        clickIn("consent_records", "Arşivi göster")
+        clickIn("consent_records", "Belgeyi incele")
+        clickIn("consent_document", "Etkinleştir")
+        compose.waitUntil(15_000) { paths.count { it.startsWith("GET $documents?is_active=false") } == 2 }
+        assertTrue(documentActive)
+        clickIn("consent_records", "Etkin belgeleri göster")
+        clickIn("consent_records", "Belgeyi incele")
+        compose.onNodeWithText("İzole test belge metni.").assertIsDisplayed()
+        assertEquals(List(2) { "PATCH $documents/${id(1)}/status" }, paths.filter { it.startsWith("PATCH ") })
+        assertTrue(paths.none { it.startsWith("POST ") })
     }
 
     @Test fun rootNeedsAnExplicitWorkspaceBeforeAnyConsentRequest() {
