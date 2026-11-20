@@ -70,7 +70,6 @@ fun useDashboardData(
         state.announcements,
         state.leaveNotices,
         state.medicineNotices,
-        state.consents,
         state.busRoutes,
         state.organizationAccess
     ) {
@@ -173,8 +172,7 @@ fun useDashboardData(
 
             val pendingLeaves = effectiveState.leaveNotices.count { it.status.equals("PENDING", ignoreCase = true) }
             val pendingMedicines = effectiveState.medicineNotices.count { it.status.equals("PENDING", ignoreCase = true) }
-            val pendingConsents = effectiveState.consents.count { !it.is_approved }
-            val pendingTotal = pendingLeaves + pendingMedicines + pendingConsents
+            val pendingTotal = pendingLeaves + pendingMedicines
 
             val activeBuses = effectiveState.busRoutes.count {
                 it.current_status.contains("YOLDA", ignoreCase = true) ||

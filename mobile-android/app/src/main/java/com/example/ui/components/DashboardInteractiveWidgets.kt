@@ -1996,14 +1996,11 @@ fun DailyCashAndApprovalsInteractiveWidget(
     val pendingMedicines = remember(state.medicineNotices) {
         state.medicineNotices.filter { it.status.equals("PENDING", ignoreCase = true) }
     }
-    val pendingConsents = remember(state.consents) {
-        state.consents.filter { !it.is_approved }
-    }
     val pendingAppointments = remember(state.appointments) {
         state.appointments.filter { it.status.equals("PENDING", ignoreCase = true) }
     }
 
-    val totalPendingApprovals = pendingLeaves.size + pendingMedicines.size + pendingConsents.size + pendingAppointments.size
+    val totalPendingApprovals = pendingLeaves.size + pendingMedicines.size + pendingAppointments.size
 
     val monthlyCollected = state.financeSummary?.total_collected_monthly ?: 185000.0
     val monthlyExpenses = state.financeSummary?.total_expenses_monthly
@@ -2076,7 +2073,7 @@ fun DailyCashAndApprovalsInteractiveWidget(
                             }
                         }
                         Text(
-                            text = "${pendingLeaves.size} İzin • ${pendingMedicines.size} İlaç • ${pendingConsents.size} Belge Onayı",
+                            text = "${pendingLeaves.size} İzin • ${pendingMedicines.size} İlaç",
                             fontSize = 11.sp,
                             color = Color(0xFF64748B),
                             maxLines = 1,
@@ -2213,18 +2210,6 @@ fun DailyCashAndApprovalsInteractiveWidget(
                                 )
                             }
 
-                            // Pending Consents
-                            pendingConsents.take(2).forEach { consent ->
-                                ApprovalQuickRow(
-                                    badge = "Muvafakatname",
-                                    badgeBg = Color(0xFFF3E8FF),
-                                    badgeColor = Color(0xFF6D28D9),
-                                    title = "${consent.student_name} • ${consent.title}",
-                                    subtitle = "Son Tarih: ${consent.expiry_date}",
-                                    actionLabel = "Onayla",
-                                    onAction = { onApproveConsent(consent.id, "Yönetici Onayı") }
-                                )
-                            }
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))

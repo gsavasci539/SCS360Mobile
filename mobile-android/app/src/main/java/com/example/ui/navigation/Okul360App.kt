@@ -1253,8 +1253,6 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             SubScreen.CONSENTS -> ConsentsScreen(
                                 state = state,
                                 onNavigateBack = { currentSubScreen = SubScreen.NONE },
-                                onApproveConsent = { id, parentName -> viewModel.approveConsent(id, parentName) },
-                                onCreateConsent = { consent -> viewModel.createConsent(consent) }
                             )
                             SubScreen.GUIDANCE -> GuidanceScreen(
                                 state = state,
@@ -1432,7 +1430,6 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onSendPaymentReminder = { id, name -> viewModel.sendPaymentReminder(id, name) },
                                 onApproveLeaveNotice = { id -> viewModel.approveLeaveNotice(id) },
                                 onMarkMedicineGiven = { id -> viewModel.markMedicineGiven(id) },
-                                onApproveConsent = { id, parentName -> viewModel.approveConsent(id, parentName) },
                                 onNavigateToConsents = { currentSubScreen = SubScreen.CONSENTS },
                                 onNavigateToDismissal = { currentSubScreen = SubScreen.DISMISSAL },
                                 onNavigateToSecurity = { currentSubScreen = SubScreen.SECURITY },

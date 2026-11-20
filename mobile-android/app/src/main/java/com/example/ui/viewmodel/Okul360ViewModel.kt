@@ -684,7 +684,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             if (allowed("users.read")) { loadRoles(); loadUsers() }
             if (allowed("settings.read")) { loadRfidCards(); loadHardwareDevices(); checkSystemHealth() }
             if (actor.is_super_admin == true) loadAiAnalyticsData()
-            if (allowed("consents.read")) loadConsents()
             if (allowed("guidance.read")) loadGuidanceRecords()
             if (allowed("health.read")) loadInfirmaryVisits()
             if (allowed("clubs.read")) loadClubs()
@@ -2927,30 +2926,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     // ==========================================
     // Okul360 Yeni Modül Metotları
     // ==========================================
-
-    // 1. Consents (Muvafakatname & İzin)
-    fun loadConsents(studentId: String? = null) {
-        viewModelScope.launch(requestFailures) {
-            val list = repository.getConsents(studentId)
-            _uiState.update { it.copy(consents = list) }
-        }
-    }
-
-    fun approveConsent(id: String, parentName: String) {
-        viewModelScope.launch(requestFailures) {
-            repository.approveConsent(id, parentName)
-            loadConsents()
-            _uiState.update { it.copy(toastMessage = "İzin belgesi başarıyla veli tarafından onaylandı.") }
-        }
-    }
-
-    fun createConsent(consent: StudentConsent) {
-        viewModelScope.launch(requestFailures) {
-            repository.createConsent(consent)
-            loadConsents()
-            _uiState.update { it.copy(toastMessage = "Yeni muvafakatname belgesi velilere iletildi.") }
-        }
-    }
 
     // 2. Guidance (Rehberlik & PDR)
     fun loadGuidanceRecords(studentId: String? = null) {
