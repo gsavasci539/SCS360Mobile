@@ -28,7 +28,7 @@ class NativePlatformInvoiceTest {
         val id = UUID(96, 1).toString()
         val org = UUID(96, 2).toString()
         val requestId = UUID(96, 3).toString()
-        val invoice = SubscriptionInvoice(id = id, organization_id = org, amount = 17.54,
+        val invoice = SubscriptionInvoice(id = id, organization_id = org, plan_id = UUID(96, 4).toString(), amount = 17.54,
             currency = "TRY", status = "PENDING", can_cancel = true)
         val receipt = PlatformInvoiceDraft(PlatformInvoiceOperation.SETTLE, requestId, "receipt-1", "17,54",
             "2026-11-17T10:30:00+03:00", "", "", "")

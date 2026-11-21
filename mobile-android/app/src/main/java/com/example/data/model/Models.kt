@@ -1568,7 +1568,9 @@ data class OrganizationAccessStatus(
     val active_users: Int = 0,
     val user_limit: Int = 0,
     val saas_iyzico_enabled: Boolean = false,
-    val is_billing_authorized: Boolean = false
+    val is_billing_authorized: Boolean = false,
+    val accepts_payment_requests: Boolean = false,
+    val warning: String? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -1593,7 +1595,8 @@ data class SubscriptionInvoice(
     val reconcile_note: String? = null,
     val created_at: String = "",
     val checkout_status: String? = null,
-    val can_cancel: Boolean = false
+    val can_cancel: Boolean = false,
+    val checkout_id: String? = null
 )
 
 @JsonClass(generateAdapter = true)

@@ -8,6 +8,7 @@ import com.example.data.payment.iyzico.IyzicoPaymentResult
 import com.example.data.repository.Okul360Repository
 import com.example.data.remote.ParentChildOptionsModule
 import com.example.data.remote.ParentInvoiceSnapshot
+import com.example.data.remote.SaasApi
 import com.example.ui.navigation.NativeNavigationPolicy
 import android.content.Context
 import com.example.util.NetworkMonitor
@@ -17,6 +18,7 @@ import com.example.util.NotificationHelper
 import com.example.util.CsvExportHelper
 import com.example.util.AiAnalyticsEngine
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -243,6 +245,7 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     private val networkMonitor = NetworkMonitor(application)
 
     private val _uiState = MutableStateFlow(Okul360UiState())
+    private var subscriptionRefresh: Job? = null
     val uiState: StateFlow<Okul360UiState> = _uiState.asStateFlow()
 
     private var attendanceEditor: com.example.data.remote.NativeAttendanceEditor? = null
@@ -2155,51 +2158,82 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     }
 
     suspend fun savePlatformInvoiceOperation(invoice: SubscriptionInvoice, draft: com.example.data.remote.PlatformInvoiceDraft): String? {
-        val api = com.example.data.remote.SaasApi()
+        if (_uiState.value.currentUser.is_super_admin != true) return "Platform oturumu gerekli."
+        return saveSubscriptionInvoice("Fatura kaydı doğrulandı.") { saveInvoiceOperation(invoice, draft) }
+    }
+
+    fun refreshSubscriptionAccessStatus(showSuccess: Boolean = true) {
+        subscriptionRefresh?.cancel()
+        val api = SaasApi()
+        subscriptionRefresh = viewModelScope.launch(requestFailures) {
+            try {
+                val root = _uiState.value.currentUser.is_super_admin == true
+                val snapshot = api.snapshot(root)
+                if (api.current()) _uiState.update { it.copy(organizationAccess = snapshot.access,
+                    subscriptionPlans = snapshot.plans, subscriptionInvoices = snapshot.invoices,
+                    platformTenants = snapshot.tenants,
+                    toastMessage = if (showSuccess) "Üyelik bilgileri sunucudan okundu." else it.toastMessage) }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                if (api.current()) _uiState.update { it.copy(toastMessage = "Üyelik listesi yenilenemedi.") }
+            }
+        }
+    }
+
+    suspend fun createFreeSubscriptionRequest(plan: SubscriptionPlan, requestId: String): String? {
+        val state = _uiState.value
+        val organization = state.currentUser.organization_id
+        if (organization.isNullOrBlank() || state.organizationAccess.organization_id != organization ||
+            !state.organizationAccess.is_billing_authorized || !state.organizationAccess.accepts_payment_requests) {
+            return "Kurum üyeliği talep oluşturmaya açık değil."
+        }
+        return saveSubscriptionInvoice("Ücretsiz paket talebi doğrulandı.") { requestFreePackage(organization, plan, requestId) }
+    }
+
+    suspend fun checkSaasCheckoutStatus(invoice: SubscriptionInvoice, platform: Boolean): String? {
+        if (platform) {
+            if (_uiState.value.currentUser.is_super_admin != true) return "Platform oturumu gerekli."
+        } else if (!ownsSubscriptionInvoice(invoice)) {
+            return "Bu kurumun üyelik faturasında işlem yapma yetkisi gerekli."
+        }
+        return saveSubscriptionInvoice("Ödeme durumu doğrulandı.") { checkInvoiceStatus(invoice, platform) }
+    }
+
+    suspend fun changeOwnerSubscriptionInvoice(invoice: SubscriptionInvoice, activateFree: Boolean): String? {
+        if (!ownsSubscriptionInvoice(invoice) || !_uiState.value.organizationAccess.accepts_payment_requests) {
+            return "Kurum üyeliği bu işleme açık değil."
+        }
+        val message = if (activateFree) "Ücretsiz paket etkinleştirildi." else "Ödeme talebi iptal edildi."
+        return saveSubscriptionInvoice(message) { changeOwnerInvoice(invoice, activateFree) }
+    }
+
+    private fun ownsSubscriptionInvoice(invoice: SubscriptionInvoice): Boolean {
+        val state = _uiState.value
+        return state.currentUser.is_super_admin != true && state.organizationAccess.is_billing_authorized &&
+            invoice.organization_id.isNotBlank() && invoice.organization_id == state.currentUser.organization_id &&
+            invoice.organization_id == state.organizationAccess.organization_id
+    }
+
+    private suspend fun saveSubscriptionInvoice(message: String, operation: suspend SaasApi.() -> SubscriptionInvoice): String? {
+        val api = SaasApi()
         return try {
-            val saved = api.saveInvoiceOperation(invoice, draft)
+            val saved = api.operation()
             if (!api.current()) return "Oturum değişti. Fatura listesini yeniden açın."
             _uiState.update { state ->
-                state.copy(
-                    subscriptionInvoices = state.subscriptionInvoices.map { if (it.id == saved.id) saved else it },
-                    toastMessage = "Fatura kaydı doğrulandı."
-                )
+                val existing = state.subscriptionInvoices
+                val invoices = if (existing.any { it.id == saved.id }) existing.map { if (it.id == saved.id) saved else it }
+                    else listOf(saved) + existing
+                state.copy(subscriptionInvoices = invoices, toastMessage = message)
             }
-            refreshSubscriptionAccessStatus()
+            refreshSubscriptionAccessStatus(showSuccess = false)
             null
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
         } catch (invalid: IllegalArgumentException) {
             invalid.message ?: "İşlem bilgilerini kontrol edin."
         } catch (_: Exception) {
-            "Fatura kaydı doğrulanamadı. Taslak korunuyor."
+            "Fatura durumu doğrulanamadı. Yeniden deneyin."
         }
-    }
-
-    fun refreshSubscriptionAccessStatus() {
-        viewModelScope.launch(requestFailures) {
-            val api = com.example.data.remote.SaasApi()
-            try {
-                val root = _uiState.value.selectedRole == UserRole.SUPERADMIN
-                val snapshot = api.snapshot(root)
-                if (api.current()) _uiState.update { it.copy(organizationAccess = snapshot.access,
-                    subscriptionPlans = snapshot.plans, subscriptionInvoices = snapshot.invoices,
-                    platformTenants = snapshot.tenants, toastMessage = "Üyelik bilgileri sunucudan okundu.") }
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                if (api.current()) _uiState.update { it.copy(organizationAccess = OrganizationAccessStatus(),
-                    subscriptionPlans = emptyList(), subscriptionInvoices = emptyList(), platformTenants = emptyList(),
-                    toastMessage = "Üyelik bilgileri alınamadı; önceki örnek veriler kullanılmadı.") }
-            }
-        }
-    }
-
-    fun createRenewalInvoiceRequest(planId: String, billingPeriod: String) {
-        _uiState.update { it.copy(toastMessage = "Üyelik satın alma mağaza yapılandırması bekliyor; yerel fiyat veya ödeme talebi üretilmedi.") }
-    }
-
-    fun simulateAccessStatusChange(newStatus: String) {
-        _uiState.update { it.copy(toastMessage = "Bu işlem web yönetim panelinden yapılmalıdır; yerel ödeme veya üyelik kaydı oluşturulmadı.") }
     }
 
     // ==========================================
@@ -2223,30 +2257,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         com.example.data.remote.ApiClientProvider.interceptor.workspaceOrganizationId = null
         _uiState.update { freshState(it, workspace = null, workspaceName = null) }
         refreshSubscriptionAccessStatus()
-    }
-
-    fun startSaasCardCheckout(invoiceId: String, buyerName: String, buyerEmail: String, billingAddress: String) {
-        _uiState.update { it.copy(toastMessage = "Uygulama içi üyelik satın alımı için mağaza abonelik yapılandırması henüz tamamlanmamış. Ödeme başlatılmadı.") }
-    }
-
-    fun checkSaasCheckoutStatus(invoiceId: String) {
-        viewModelScope.launch(requestFailures) {
-            val api = com.example.data.remote.SaasApi()
-            try { api.request("subscription/invoices/${java.util.UUID.fromString(invoiceId)}/payment-status"); refreshSubscriptionAccessStatus() }
-            catch (e: Exception) { if (api.current()) _uiState.update { it.copy(toastMessage = "Ödeme durumu sunucudan doğrulanamadı; üyelik değiştirilmedi.") } }
-        }
-    }
-
-    fun activateFreeSubscriptionPlan(planId: String) {
-        _uiState.update { it.copy(toastMessage = "Paket etkinleştirme işlemini web üyelik panelinden tamamlayın. Yerel üyelik aktifleştirilmedi.") }
-    }
-
-    fun cancelPendingSubscriptionInvoice(invoiceId: String) {
-        viewModelScope.launch(requestFailures) {
-            val api = com.example.data.remote.SaasApi()
-            try { api.request("subscription/invoices/${java.util.UUID.fromString(invoiceId)}/cancel", "POST", org.json.JSONObject()); refreshSubscriptionAccessStatus() }
-            catch (e: Exception) { if (api.current()) _uiState.update { it.copy(toastMessage = "İptal sunucuda doğrulanamadı; fatura değiştirilmedi.") } }
-        }
     }
 
     fun registerPublicTenantSignup(

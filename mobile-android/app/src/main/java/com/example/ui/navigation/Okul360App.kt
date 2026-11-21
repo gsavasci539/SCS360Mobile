@@ -204,7 +204,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
         ) {
             // SaaS GRACE / RESTRICTED / SUSPENDED Access Banner across all role portals
             AnimatedVisibility(
-                visible = state.organizationAccess.status != "ACTIVE",
+                visible = state.organizationAccess.status in setOf("GRACE", "RESTRICTED", "SUSPENDED"),
                 enter = expandVertically() + fadeIn(),
                 exit = shrinkVertically() + fadeOut()
             ) {
@@ -235,9 +235,9 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = if (isGrace) {
-                                    "Ek Süre (GRACE): Son Tarih ${state.organizationAccess.grace_until ?: "10 Gün"}"
+                                    state.organizationAccess.warning ?: "Üyelik ek sürede."
                                 } else {
-                                    "Erişim Kısıtlı (${state.organizationAccess.status} • HTTP 402)"
+                                    state.organizationAccess.warning ?: "Kurum erişimi kısıtlı."
                                 },
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Bold,
@@ -743,7 +743,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
 
             // SaaS GRACE / RESTRICTED / SUSPENDED Access Banner (SAAS_ISLETIMI & SAAS_KABUL_PLANI)
             AnimatedVisibility(
-                visible = state.organizationAccess.status != "ACTIVE",
+                visible = state.organizationAccess.status in setOf("GRACE", "RESTRICTED", "SUSPENDED"),
                 enter = expandVertically() + fadeIn(),
                 exit = shrinkVertically() + fadeOut()
             ) {
@@ -775,23 +775,13 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             Column {
                                 Text(
                                     text = if (isGrace) {
-                                        "Ek Süre (GRACE): Son Tarih ${state.organizationAccess.grace_until ?: "10 Gün"}"
+                                        state.organizationAccess.warning ?: "Üyelik ek sürede."
                                     } else {
-                                        "Erişim Kısıtlı (${state.organizationAccess.status} • HTTP 402)"
+                                        state.organizationAccess.warning ?: "Kurum erişimi kısıtlı."
                                     },
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = bannerFg
-                                )
-                                Text(
-                                    text = if (isGrace) {
-                                        "Üyelik süreniz doldu, 10×24 saatlik ek süre içindesiniz. Kesinti olmaması için yenileyin."
-                                    } else {
-                                        "İşlemlere devam etmek için Üyelik ve Ödeme sayfasından yenileme talebi oluşturun."
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontSize = 11.sp,
-                                    color = bannerFg.copy(alpha = 0.9f)
                                 )
                             }
                         }
@@ -1085,6 +1075,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                     viewModel.toggleTenantActive(orgId, isActive)
                                 },
                                 onSaveInvoice = viewModel::savePlatformInvoiceOperation,
+                                onCheckInvoiceStatus = { invoice -> viewModel.checkSaasCheckoutStatus(invoice, platform = true) },
                                 onOpenTenantWorkspace = { orgId, orgName ->
                                     viewModel.openTenantWorkspace(orgId, orgName)
                                     currentSubScreen = SubScreen.NONE
@@ -1093,29 +1084,13 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onUpdatePlan = viewModel::savePlatformPlan
                             )
                             SubScreen.SUBSCRIPTION_BILLING -> SubscriptionBillingScreen(
-                                currentUserRole = state.selectedRole,
                                 accessStatus = state.organizationAccess,
                                 plans = state.subscriptionPlans,
                                 invoices = state.subscriptionInvoices,
                                 onRefreshAccessStatus = { viewModel.refreshSubscriptionAccessStatus() },
-                                onCreateRenewalRequest = { planId, billingPeriod ->
-                                    viewModel.createRenewalInvoiceRequest(planId, billingPeriod)
-                                },
-                                onSimulateAccessStatusChange = { newStatus ->
-                                    viewModel.simulateAccessStatusChange(newStatus)
-                                },
-                                onStartCardCheckout = { invoiceId, buyerName, buyerEmail, billingAddress ->
-                                    viewModel.startSaasCardCheckout(invoiceId, buyerName, buyerEmail, billingAddress)
-                                },
-                                onCheckPaymentStatus = { invoiceId ->
-                                    viewModel.checkSaasCheckoutStatus(invoiceId)
-                                },
-                                onActivateFreePlan = { planId ->
-                                    viewModel.activateFreeSubscriptionPlan(planId)
-                                },
-                                onCancelPendingInvoice = { invoiceId ->
-                                    viewModel.cancelPendingSubscriptionInvoice(invoiceId)
-                                },
+                                onRequestFreePlan = viewModel::createFreeSubscriptionRequest,
+                                onCheckPaymentStatus = { invoice -> viewModel.checkSaasCheckoutStatus(invoice, platform = false) },
+                                onChangeInvoice = viewModel::changeOwnerSubscriptionInvoice,
                                 onLogout = { viewModel.logout() }
                             )
                             SubScreen.DISMISSAL -> DismissalScreen(state) { currentSubScreen = SubScreen.SECURITY }

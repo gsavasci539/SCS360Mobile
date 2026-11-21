@@ -28,6 +28,48 @@ class NativeScreenLayoutTest {
     private val state = Okul360UiState(currentUser = User(id = "synthetic-user", full_name = "Örnek kullanıcı", role = "ADMIN"), students = students)
 
     @OptIn(ExperimentalTestApi::class)
+    @Test fun ownerBillingActionsFitLargeFontAndKeepTheFreeRequestIdentity() {
+        val free = SubscriptionPlan(id = "free-plan", name = "Ücretsiz paket", currency = "TRY", is_active = true)
+        val paid = free.copy(id = "paid-plan", name = "Ücretli paket", price = 5.25)
+        val invoice = SubscriptionInvoice(id = "invoice", invoice_no = "invoice", organization_id = "school",
+            plan_id = free.id, plan_name = free.name, status = "PENDING", currency = "TRY", can_cancel = true)
+        val online = invoice.copy(id = "online", amount = 5.25, can_cancel = false, checkout_status = "PENDING")
+        val observed = mutableListOf<String>()
+        var size by mutableStateOf(DpSize(360.dp, 780.dp))
+        compose.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(size) then DeviceConfigurationOverride.FontScale(2f)) {
+                Okul360Theme { AppContentWrapper { key(size) {
+                    SubscriptionBillingScreen(
+                        accessStatus = OrganizationAccessStatus(organization_id = "school", status = "ACTIVE",
+                            is_billing_authorized = true, accepts_payment_requests = true),
+                        plans = listOf(free, paid), invoices = listOf(invoice, online),
+                        onRefreshAccessStatus = {}, onRequestFreePlan = { _, request ->
+                            observed += request
+                            "Geçici bağlantı hatası"
+                        }, onCheckPaymentStatus = { null }, onChangeInvoice = { _, _ -> null }, onLogout = {}
+                    )
+                } } }
+            }
+        }
+        val list = compose.onNodeWithTag("subscription_billing_list")
+        fun scrollTo(tag: String) = list.performScrollToNode(hasTestTag(tag))
+        scrollTo("select_free_plan_free-plan")
+        compose.onNodeWithTag("select_free_plan_free-plan").performClick()
+        scrollTo("request_free_package")
+        repeat(2) { compose.onNodeWithTag("request_free_package").performClick(); compose.waitForIdle() }
+        assertEquals(2, observed.size)
+        assertEquals(observed.first(), observed.last())
+        for (window in listOf(DpSize(360.dp, 780.dp), DpSize(780.dp, 360.dp))) {
+            compose.runOnIdle { size = window }
+            for (tag in listOf("activate_free_plan_invoice", "cancel_subscription_invoice_invoice", "saas_check_payment_btn_online")) {
+                scrollTo(tag)
+                compose.onNodeWithTag(tag).assertIsDisplayed().assertWidthIsAtLeast(48.dp)
+            }
+        }
+        compose.onNodeWithTag("cancel_subscription_invoice_online").assertDoesNotExist()
+    }
+
+    @OptIn(ExperimentalTestApi::class)
     @Test fun platformCreationRemainsReachableAtLargeFontInPortraitAndLandscape() {
         var size by mutableStateOf(DpSize(360.dp, 780.dp))
         compose.setContent {

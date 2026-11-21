@@ -36,6 +36,7 @@ fun PlatformSaasScreen(
     onUpdateTenantSubscription: suspend (orgId: String, planId: String, periodStart: String, periodEnd: String) -> String?,
     onToggleTenantActive: (orgId: String, isActive: Boolean) -> Unit,
     onSaveInvoice: suspend (SubscriptionInvoice, PlatformInvoiceDraft) -> String?,
+    onCheckInvoiceStatus: suspend (SubscriptionInvoice) -> String? = { "Ödeme durumu sorgulanamıyor." },
     onOpenTenantWorkspace: (orgId: String, orgName: String) -> Unit = { _, _ -> },
     onUpdatePlan: suspend (SubscriptionPlan) -> String? = { "Paket düzenleme kullanılamıyor." }
 ) {
@@ -48,6 +49,8 @@ fun PlatformSaasScreen(
     val actionScope = rememberCoroutineScope()
     var savingPlanId by remember { mutableStateOf<String?>(null) }
     var failedPlanAction by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var checkingInvoiceId by remember { mutableStateOf<String?>(null) }
+    var failedInvoiceStatus by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     if (currentUserRole != UserRole.SUPERADMIN) {
         Box(
@@ -428,6 +431,9 @@ fun PlatformSaasScreen(
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 inv.checkout_status?.let { Text("Online ödeme: $it", fontSize = 12.sp) }
+                                failedInvoiceStatus?.takeIf { it.first == inv.id }?.let {
+                                    Text(it.second, color = MaterialTheme.colorScheme.error)
+                                }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 FlowRow(
                                     modifier = Modifier.fillMaxWidth(),
@@ -435,6 +441,7 @@ fun PlatformSaasScreen(
                                     if (inv.status == "PENDING" && inv.can_cancel) {
                                         Button(
                                             onClick = { invoiceAction = inv to PlatformInvoiceOperation.SETTLE },
+                                            enabled = checkingInvoiceId == null,
                                             modifier = Modifier.testTag("verify_invoice_btn_${inv.id}")
                                         ) {
                                             Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -442,9 +449,27 @@ fun PlatformSaasScreen(
                                             Text("Ödemeyi Doğrula", fontSize = 11.5.sp)
                                         }
                                     }
+                                    if (inv.checkout_status in setOf("INITIALIZING", "PENDING", "REVIEW")) {
+                                        OutlinedButton(enabled = checkingInvoiceId == null, onClick = {
+                                            if (checkingInvoiceId == null) {
+                                                checkingInvoiceId = inv.id
+                                                failedInvoiceStatus = null
+                                                actionScope.launch {
+                                                    try {
+                                                        failedInvoiceStatus = onCheckInvoiceStatus(inv)?.let { inv.id to it }
+                                                    } finally {
+                                                        checkingInvoiceId = null
+                                                    }
+                                                }
+                                            }
+                                        }, modifier = Modifier.testTag("platform_check_payment_${inv.id}")) {
+                                            Text("Ödeme sonucunu kontrol et")
+                                        }
+                                    }
                                     if (inv.status == "PAID_REVIEW") {
                                         Button(
                                             onClick = { invoiceAction = inv to PlatformInvoiceOperation.APPLY },
+                                            enabled = checkingInvoiceId == null,
                                             colors = ButtonDefaults.buttonColors(containerColor = ScsPetrolGreen),
                                             modifier = Modifier.testTag("reconcile_invoice_btn_${inv.id}")
                                         ) {
@@ -456,6 +481,7 @@ fun PlatformSaasScreen(
                                     if (inv.status == "PAID_REVIEW") {
                                         OutlinedButton(
                                             onClick = { invoiceAction = inv to PlatformInvoiceOperation.REFUND_RECORDED },
+                                            enabled = checkingInvoiceId == null,
                                             modifier = Modifier.testTag("refund_invoice_btn_${inv.id}")
                                         ) {
                                             Icon(Icons.Default.Replay, contentDescription = null, modifier = Modifier.size(15.dp))

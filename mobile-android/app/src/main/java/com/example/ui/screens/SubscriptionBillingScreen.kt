@@ -18,32 +18,40 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.*
 import com.example.ui.theme.*
+import kotlinx.coroutines.launch
 import java.util.Locale
+import java.util.UUID
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SubscriptionBillingScreen(
-    currentUserRole: UserRole,
     accessStatus: OrganizationAccessStatus,
     plans: List<SubscriptionPlan>,
     invoices: List<SubscriptionInvoice>,
     onRefreshAccessStatus: () -> Unit,
-    onCreateRenewalRequest: (planId: String, billingPeriod: String) -> Unit,
-    onSimulateAccessStatusChange: (String) -> Unit,
-    onStartCardCheckout: (invoiceId: String, buyerName: String, buyerEmail: String, billingAddress: String) -> Unit = { _, _, _, _ -> },
-    onCheckPaymentStatus: (invoiceId: String) -> Unit = {},
-    onActivateFreePlan: (planId: String) -> Unit = {},
-    onCancelPendingInvoice: (invoiceId: String) -> Unit = {},
+    onRequestFreePlan: suspend (SubscriptionPlan, String) -> String?,
+    onCheckPaymentStatus: suspend (SubscriptionInvoice) -> String?,
+    onChangeInvoice: suspend (invoice: SubscriptionInvoice, activateFree: Boolean) -> String?,
     onLogout: () -> Unit
 ) {
-    val isBillingAuthorized = accessStatus.is_billing_authorized && (currentUserRole == UserRole.SUPERADMIN ||
-        currentUserRole == UserRole.OWNER ||
-        currentUserRole == UserRole.ADMIN ||
-        currentUserRole == UserRole.MANAGER ||
-        currentUserRole == UserRole.FINANCE)
-
-    var selectedPlanId by remember(accessStatus.plan_id) { mutableStateOf(accessStatus.plan_id) }
-    var selectedPeriod by remember(accessStatus.billing_period) { mutableStateOf(accessStatus.billing_period) }
-    var checkoutInvoice by remember { mutableStateOf<SubscriptionInvoice?>(null) }
+    val isBillingAuthorized = accessStatus.is_billing_authorized && accessStatus.organization_id.isNotBlank() && accessStatus.status != "PLATFORM"
+    var selectedPlanId by remember(accessStatus.organization_id) { mutableStateOf("") }
+    var requestId by remember(accessStatus.organization_id, selectedPlanId) { mutableStateOf(UUID.randomUUID().toString()) }
+    val taskScope = rememberCoroutineScope()
+    var busyAction by remember(accessStatus.organization_id) { mutableStateOf<String?>(null) }
+    var actionError by remember(accessStatus.organization_id) { mutableStateOf<Pair<String, String>?>(null) }
+    fun runAction(key: String, action: suspend () -> String?) {
+        if (busyAction != null) return
+        busyAction = key
+        actionError = null
+        taskScope.launch {
+            try {
+                actionError = action()?.let { key to it }
+            } finally {
+                busyAction = null
+            }
+        }
+    }
 
     // If organization is RESTRICTED or SUSPENDED and current user is NOT authorized for billing (e.g., Teacher / Parent / Staff),
     // show the exact non-billing restricted screen without leaking invoice details.
@@ -108,6 +116,7 @@ fun SubscriptionBillingScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
+            .testTag("subscription_billing_list")
             .background(NeutralLightBackground),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -162,7 +171,7 @@ fun SubscriptionBillingScreen(
                                 Icon(Icons.Default.WarningAmber, contentDescription = null, tint = StatusWarning)
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    "Üyelik döneminiz sona erdi. 10×24 saatlik ek süre (GRACE) içindesiniz (${accessStatus.remaining_grace_days} gün kaldı). Hizmet kesintisi yaşamamak için lütfen yenileme talebi oluşturun.",
+                                    accessStatus.warning ?: "Üyelik ek sürede. ${accessStatus.remaining_grace_days} gün kaldı.",
                                     fontSize = 12.sp,
                                     color = NeutralTextPrimary,
                                     fontWeight = FontWeight.Medium
@@ -183,7 +192,7 @@ fun SubscriptionBillingScreen(
                                 Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = StatusError)
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    "SUBSCRIPTION_REQUIRED (402): Ek kullanım süresi dolduğu için operasyonel modüller kısıtlanmıştır. Ödeme doğrulandığında erişim otomatik olarak açılacaktır.",
+                                    accessStatus.warning ?: "Kurum erişimi kısıtlı.",
                                     fontSize = 12.sp,
                                     color = StatusError,
                                     fontWeight = FontWeight.SemiBold
@@ -223,7 +232,7 @@ fun SubscriptionBillingScreen(
 
 
         // Quota Progress Bars
-        item {
+        if (isBillingAuthorized) item {
             Card(
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -264,108 +273,39 @@ fun SubscriptionBillingScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Paket Seçimi & Yenileme Ödeme Talebi", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                        Text(
-                            "Fiyat sunucu tarafından paket tanımından hesaplanır. Aynı paket için açık ödeme talebi varsa tekrar kullanılır; paket değişirse eski açık talep iptal edilir (Geçerlilik: 1 Gün).",
-                            fontSize = 12.sp,
-                            color = NeutralTextSecondary
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-
+                        Text("Üyelik paketleri", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        if (plans.isEmpty()) Text("Kullanılabilir paket bulunamadı.")
                         plans.forEach { plan ->
                             val selected = selectedPlanId == plan.id
-                            Surface(
-                                color = if (selected) ScsContainerLight else NeutralLightSurfaceVariant,
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                onClick = { selectedPlanId = plan.id }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(plan.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                        Text(
-                                            "${plan.branch_limit} Şube • ${plan.student_limit} Öğrenci • ${plan.user_limit} Kullanıcı",
-                                            fontSize = 12.sp,
-                                            color = NeutralTextSecondary
-                                        )
-                                    }
-                                    Text(
-                                        "${plan.currency} ${String.format(Locale.US, "%,.0f", plan.price)}",
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = ScsPetrolGreen
-                                    )
+                            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                val available = accessStatus.accepts_payment_requests && plan.is_active && plan.price == 0.0
+                                if (available) {
+                                    RadioButton(selected, onClick = { selectedPlanId = plan.id }, enabled = busyAction == null,
+                                        modifier = Modifier.testTag("select_free_plan_${plan.id}"))
+                                }
+                                Column(Modifier.weight(1f).padding(8.dp)) {
+                                    Text(plan.name, fontWeight = FontWeight.Bold)
+                                    Text("${plan.currency} ${String.format(Locale.US, "%,.2f", plan.price)} / ${if (plan.billing_period == "YEARLY") "Yıl" else "Ay"}")
+                                    Text("${plan.branch_limit} şube • ${plan.student_limit} öğrenci • ${plan.user_limit} kullanıcı",
+                                        fontSize = 12.sp, color = NeutralTextSecondary)
                                 }
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(
-                                selected = selectedPeriod == "MONTHLY",
-                                onClick = { selectedPeriod = "MONTHLY" },
-                                label = { Text("Aylık Yenileme") }
-                            )
-                            FilterChip(
-                                selected = selectedPeriod == "YEARLY",
-                                onClick = { selectedPeriod = "YEARLY" },
-                                label = { Text("Yıllık Yenileme") }
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-                        val chosenPlan = plans.find { it.id == selectedPlanId }
-                        if (chosenPlan != null && chosenPlan.price <= 0.0) {
-                            Button(
-                                onClick = { onActivateFreePlan(selectedPlanId) },
-                                colors = ButtonDefaults.buttonColors(containerColor = ScsPetrolGreen),
-                                modifier = Modifier.fillMaxWidth().testTag("activate_free_plan_btn")
-                            ) {
-                                Icon(Icons.Default.Verified, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Ücretsiz Paketi Etkinleştir (0 TL • Sağlayıcısız)")
+                        val selectedPlan = plans.firstOrNull { it.id == selectedPlanId && it.is_active && it.price == 0.0 }
+                        if (accessStatus.accepts_payment_requests && selectedPlan != null) {
+                            actionError?.takeIf { it.first == selectedPlan.id }?.let {
+                                Text(it.second, color = MaterialTheme.colorScheme.error)
                             }
-                        } else {
-                            Button(
-                                onClick = { onCreateRenewalRequest(selectedPlanId, selectedPeriod) },
-                                modifier = Modifier.fillMaxWidth().testTag("create_renewal_invoice_btn")
-                            ) {
-                                Icon(Icons.Default.ReceiptLong, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Yenileme Faturası / Ödeme Talebi Oluştur")
+                            Button(onClick = {
+                                runAction(selectedPlan.id) {
+                                    onRequestFreePlan(selectedPlan, requestId).also { if (it == null) requestId = UUID.randomUUID().toString() }
+                                }
+                            }, enabled = busyAction == null, modifier = Modifier.fillMaxWidth().testTag("request_free_package")) {
+                                Text("Ücretsiz paket talebi oluştur")
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Surface(
-                            color = NeutralLightSurfaceVariant,
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    if (accessStatus.saas_iyzico_enabled) Icons.Default.CreditCard else Icons.Default.CreditCardOff,
-                                    contentDescription = null,
-                                    tint = if (accessStatus.saas_iyzico_enabled) ScsPetrolGreen else NeutralTextSecondary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    if (accessStatus.saas_iyzico_enabled) {
-                                        "Uygulama içi üyelik satın alımı mağaza abonelik yapılandırması bekliyor. Kurumun okul/kurs tahsilatı ayrı bir ödeme akışıdır."
-                                    } else {
-                                        "Uygulama içi üyelik satın alımı henüz açık değil. Bu ekrandaki üyelik ve ödeme durumları sunucudan okunur."
-                                    },
-                                    fontSize = 11.sp,
-                                    color = NeutralTextSecondary
-                                )
-                            }
-                        }
+                        Text("Ücretli uygulama içi üyelik satın alımı mağaza abonelik yapılandırması bekliyor.",
+                            fontSize = 12.sp, color = NeutralTextSecondary)
                     }
                 }
             }
@@ -408,38 +348,30 @@ fun SubscriptionBillingScreen(
                                 }
                             )
                         }
-                        if (inv.status == "OPEN" || inv.status == "PENDING_VERIFICATION") {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                if (inv.amount > 0.0 && accessStatus.saas_iyzico_enabled) {
-                                    Button(
-                                        onClick = { checkoutInvoice = inv },
-                                        modifier = Modifier.weight(1f).testTag("saas_card_checkout_btn_${inv.id}"),
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
-                                    ) {
-                                        Icon(Icons.Default.CreditCard, contentDescription = null, modifier = Modifier.size(15.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Kartla Öde", fontSize = 11.sp, maxLines = 1)
+                        inv.checkout_status?.let { Text("Online ödeme: $it") }
+                        actionError?.takeIf { it.first == inv.id }?.let {
+                            Text(it.second, color = MaterialTheme.colorScheme.error)
+                        }
+                        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (inv.checkout_status in setOf("INITIALIZING", "PENDING", "REVIEW")) {
+                                OutlinedButton(enabled = busyAction == null, onClick = {
+                                    runAction(inv.id) { onCheckPaymentStatus(inv) }
+                                }, modifier = Modifier.testTag("saas_check_payment_btn_${inv.id}")) {
+                                    Text("Ödeme sonucunu kontrol et")
+                                }
+                            }
+                            if (inv.status == "PENDING" && inv.can_cancel && accessStatus.accepts_payment_requests) {
+                                if (inv.amount == 0.0) {
+                                    Button(enabled = busyAction == null, onClick = {
+                                        runAction(inv.id) { onChangeInvoice(inv, true) }
+                                    }, modifier = Modifier.testTag("activate_free_plan_${inv.id}")) {
+                                        Text("Ücretsiz paketi etkinleştir")
                                     }
                                 }
-                                OutlinedButton(
-                                    onClick = { onCheckPaymentStatus(inv.id) },
-                                    modifier = Modifier.weight(1f).testTag("saas_check_payment_btn_${inv.id}"),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
-                                ) {
-                                    Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(15.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Ödeme Sonucunu Kontrol Et", fontSize = 10.5.sp, maxLines = 1)
-                                }
-                                TextButton(
-                                    onClick = { onCancelPendingInvoice(inv.id) },
-                                    colors = ButtonDefaults.textButtonColors(contentColor = StatusError),
-                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp)
-                                ) {
-                                    Text("İptal Et", fontSize = 11.sp)
+                                OutlinedButton(enabled = busyAction == null, onClick = {
+                                    runAction(inv.id) { onChangeInvoice(inv, false) }
+                                }, modifier = Modifier.testTag("cancel_subscription_invoice_${inv.id}")) {
+                                    Text("Talebi iptal et")
                                 }
                             }
                         }
@@ -449,44 +381,6 @@ fun SubscriptionBillingScreen(
         }
     }
 
-    checkoutInvoice?.let { inv ->
-        var buyerName by remember { mutableStateOf(accessStatus.organization_name) }
-        var buyerEmail by remember { mutableStateOf("muhasebe@scs360.com.tr") }
-        var billingAddress by remember { mutableStateOf("Ataşehir / İstanbul") }
-
-        AlertDialog(
-            onDismissRequest = { checkoutInvoice = null },
-            title = { Text("Kartla Öde • Hosted Checkout (${inv.invoice_no})", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Surface(color = StatusInfoContainer, shape = RoundedCornerShape(8.dp)) {
-                        Text(
-                            "Güvenlik: Kart numarası, son kullanma tarihi ve CVV bilgileri SCS360 içinde toplanmaz; doğrulanmış HTTPS Hosted Checkout oturumuna yönlendirilirsiniz.",
-                            fontSize = 11.5.sp,
-                            color = NeutralTextPrimary,
-                            modifier = Modifier.padding(10.dp)
-                        )
-                    }
-                    OutlinedTextField(value = buyerName, onValueChange = { buyerName = it }, label = { Text("Alıcı / Kurum Unvanı") }, singleLine = true)
-                    OutlinedTextField(value = buyerEmail, onValueChange = { buyerEmail = it }, label = { Text("Fatura E-Postası") }, singleLine = true)
-                    OutlinedTextField(value = billingAddress, onValueChange = { billingAddress = it }, label = { Text("Fatura Adresi") }, singleLine = true)
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onStartCardCheckout(inv.id, buyerName.trim(), buyerEmail.trim(), billingAddress.trim())
-                        checkoutInvoice = null
-                    }
-                ) {
-                    Text("Güvenli Ödeme Sayfasını Başlat")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { checkoutInvoice = null }) { Text("Kapat") }
-            }
-        )
-    }
 }
 
 @Composable

@@ -10,7 +10,6 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.data.model.OrganizationAccessStatus
 import com.example.data.model.SubscriptionInvoice
 import com.example.data.model.SubscriptionPlan
-import com.example.data.model.UserRole
 import com.example.ui.components.DashboardWidgetsSkeletonGrid
 import com.example.ui.screens.SubscriptionBillingScreen
 import com.example.ui.theme.Okul360Theme
@@ -49,7 +48,6 @@ class ExampleRobolectricTest {
     composeTestRule.setContent {
       Okul360Theme {
         SubscriptionBillingScreen(
-          currentUserRole = UserRole.ADMIN,
           accessStatus = OrganizationAccessStatus(
             organization_name = "SCS360 Eğitim Kurumları A.Ş.",
             status = "ACTIVE",
@@ -58,8 +56,9 @@ class ExampleRobolectricTest {
           plans = listOf(SubscriptionPlan()),
           invoices = listOf(SubscriptionInvoice()),
           onRefreshAccessStatus = {},
-          onCreateRenewalRequest = { _, _ -> },
-          onSimulateAccessStatusChange = {},
+          onRequestFreePlan = { _, _ -> null },
+          onCheckPaymentStatus = { null },
+          onChangeInvoice = { _, _ -> null },
           onLogout = {}
         )
       }
