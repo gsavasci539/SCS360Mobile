@@ -576,36 +576,11 @@ interface Okul360ApiService {
     @POST("reports/overdue-debts/remind")
     suspend fun remindOverdueDebts(@Body body: Map<String, Any>): Map<String, Any>
 
-    // Users
-    @GET("users")
-    suspend fun getUsers(): List<AppUser>
-
-    @GET("users")
-    suspend fun getUsersV1(): List<AppUser>
-
-    @GET("users")
-    suspend fun getUsersDirect(): List<AppUser>
-
     @GET("teachers")
     suspend fun getTeachers(): List<AppUser>
 
     @GET("teachers")
     suspend fun getTeachersV1(): List<AppUser>
-
-    @POST("users")
-    suspend fun createUser(@Body user: AppUser): AppUser
-
-    @GET("users/{user_id}")
-    suspend fun getUserById(@Path("user_id") userId: String): AppUser
-
-    @PUT("users/{user_id}")
-    suspend fun updateUser(
-        @Path("user_id") userId: String,
-        @Body user: AppUser
-    ): AppUser
-
-    @DELETE("users/{user_id}")
-    suspend fun deleteUser(@Path("user_id") userId: String): Map<String, Any>
 
     @GET("users/{user_id}/branches")
     suspend fun getUserBranches(@Path("user_id") userId: String): List<Branch>

@@ -446,17 +446,17 @@ data class RoleDefinition(
 
 @JsonClass(generateAdapter = true)
 data class AppUser(
-    val id: String = "usr-1",
+    val id: String = "",
     val full_name: String = "",
     val email: String = "",
     val phone: String = "",
-    val role: String = "TEACHER",
-    val role_display_name: String = "Öğretmen",
-    val branch_id: String = "branch-1",
-    val branch_name: String = "Merkez Kampüs",
+    val role: String = "",
+    val role_display_name: String = "",
+    val branch_id: String = "",
+    val branch_name: String = "",
     val is_active: Boolean = true,
-    val created_at: String = "2026-01-15",
-    val password: String = "123456"
+    val created_at: String = "",
+    val password: String = ""
 )
 
 @JsonClass(generateAdapter = true)

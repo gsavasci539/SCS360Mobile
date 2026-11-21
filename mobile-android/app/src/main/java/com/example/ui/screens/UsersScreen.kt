@@ -1,595 +1,316 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.data.model.AppUser
-import com.example.data.model.Branch
-import com.example.data.model.UserRole
+import com.example.data.remote.InstitutionAccount
+import com.example.data.remote.NativeInstitutionRoleClient
+import com.example.data.remote.NativeInstitutionUsersClient
+import com.example.data.remote.RegistryHttpException
+import com.example.data.remote.UserAccess
+import com.example.data.remote.UserAccessChoice
+import com.example.data.remote.UserAccessOptions
+import com.example.ui.components.financePresentationScope
 import com.example.ui.navigation.NativeNavigationPolicy
-import com.example.ui.theme.*
 import com.example.ui.viewmodel.Okul360UiState
+import java.util.Locale
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import org.json.JSONObject
 
-@OptIn(ExperimentalMaterial3Api::class)
+private val accountStatuses = mapOf("ACTIVE" to "Aktif", "PASSIVE" to "Pasif", "BLOCKED" to "Engelli")
+
 @Composable
-fun UsersScreen(
-    state: Okul360UiState,
-    onAddUser: (String, String, String, String, String, String) -> Unit = { _, _, _, _, _, _ -> },
-    onDeleteUser: (String) -> Unit = {},
-    onResetPassword: (String, String) -> Unit = { _, _ -> },
-    onUpdateUserAccess: (userId: String, roles: List<String>, branchIds: List<String>, status: String) -> Unit = { _, _, _, _ -> },
-    onEnsureStandardRoles: () -> Unit = {},
-    onLinkParentAccount: (studentId: String, parentUserId: String?, receiveNotifications: Boolean, smsPhone: String?, whatsappPhone: String?) -> Unit = { _, _, _, _, _ -> }
+fun UsersScreen(state: Okul360UiState, onBack: () -> Unit, onOpenParents: (() -> Unit)? = null) {
+    val actor = state.currentUser
+    val organization = if (actor.is_super_admin == true) state.workspaceOrganizationId else actor.organization_id
+    if (!state.isLoggedIn || organization.isNullOrBlank() || !NativeNavigationPolicy.has(actor, "users.read")) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Kullanıcı yönetimi için yetkili kurum çalışma alanını açın.")
+            TextButton(onClick = onBack) { Text("Geri") }
+        }
+        return
+    }
+    val write = NativeNavigationPolicy.has(actor, "users.write")
+    val parentLink = onOpenParents?.takeIf { NativeNavigationPolicy.has(actor, "parents.read", "parent.read") }
+    key(financePresentationScope(state), state.serverBaseUrl) {
+        val client = remember { NativeInstitutionUsersClient(organization, state.selectedBranchId) }
+        val catalog = if (NativeNavigationPolicy.canCompleteRoleCatalogue(actor, state.workspaceOrganizationId))
+            remember { NativeInstitutionRoleClient(organization) } else null
+        val selectedBranch = state.selectedBranchId.takeUnless { it.isBlank() || it == "all" }
+        NativeUserWorkspace(client, catalog, selectedBranch, write, onBack, parentLink)
+    }
+}
+
+@Composable
+private fun NativeUserWorkspace(
+    client: NativeInstitutionUsersClient, catalog: NativeInstitutionRoleClient?, selectedBranch: String?,
+    canWrite: Boolean, onBack: () -> Unit, onOpenParents: (() -> Unit)?
 ) {
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedRoleFilter by remember { mutableStateOf("ALL") }
-    var showAddDialog by remember { mutableStateOf(false) }
-    var showParentLinkDialog by remember { mutableStateOf(false) }
-    var selectedUserForAccess by remember { mutableStateOf<AppUser?>(null) }
+    var search by remember { mutableStateOf("") }
+    var page by remember { mutableIntStateOf(1) }
+    var revision by remember { mutableIntStateOf(0) }
+    var busy by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var editing by remember { mutableStateOf(false) }
+    var account by remember { mutableStateOf<InstitutionAccount?>(null) }
+    var assigning by remember { mutableStateOf<InstitutionAccount?>(null) }
+    var removing by remember { mutableStateOf<InstitutionAccount?>(null) }
+    val coroutine = rememberCoroutineScope()
+    val roster by key(page, search, revision) { produceState<Result<Pair<List<InstitutionAccount>, Boolean>>?>(null) {
+        value = userResult {
+            if (search.isNotBlank()) delay(250)
+            client.list(page, search)
+        }
+    } }
 
-    // Non-root users cannot see or modify the Root (SUPERADMIN) account
-    val visibleUsers = remember(state.users, state.selectedRole, searchQuery, selectedRoleFilter) {
-        state.users.filter { u ->
-            val isRoot = u.role.contains("SUPERADMIN", ignoreCase = true) || u.email.equals("root@scs360.com.tr", ignoreCase = true)
-            val allowedByRootRule = state.selectedRole == UserRole.SUPERADMIN || !isRoot
-            val matchesRole = selectedRoleFilter == "ALL" || u.role.contains(selectedRoleFilter, ignoreCase = true)
-            val matchesSearch = searchQuery.isBlank() ||
-                u.full_name.contains(searchQuery, ignoreCase = true) ||
-                u.email.contains(searchQuery, ignoreCase = true)
-            allowedByRootRule && matchesRole && matchesSearch
+    fun action(operation: suspend () -> String, showError: (String) -> Unit = { message = it }) {
+        if (busy) return
+        busy = true
+        message = null
+        coroutine.launch {
+            try {
+                message = operation()
+                revision++
+            } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                showError(if (failure is RegistryHttpException && failure.code == 409)
+                    "Kayıt değişti veya bu e-posta kullanılıyor. Güncel kaydı açın." else "Sunucu işlemi doğrulanamadı.")
+            } finally { busy = false }
         }
     }
 
-    Scaffold(
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { showAddDialog = true },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = Color.White,
-                icon = { Icon(Icons.Default.PersonAdd, contentDescription = null) },
-                text = { Text("Yeni Kullanıcı Ekle", fontWeight = FontWeight.Bold) },
-                modifier = Modifier.testTag("add_user_fab")
-            )
+    val rows = roster?.getOrNull()?.first.orEmpty()
+    LazyColumn(Modifier.fillMaxSize().testTag("institution_users_list"), contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item {
+            Text("Kullanıcılar ve erişim", style = MaterialTheme.typography.headlineSmall)
+            TextButton(onClick = onBack, enabled = !busy) { Text("Geri") }
+            message?.let { Text(it) }
+            if (canWrite) Button(onClick = { account = null; editing = true }, enabled = !busy,
+                modifier = Modifier.testTag("add_user_fab")) { Text("Yeni kullanıcı") }
+            if (onOpenParents != null) OutlinedButton(onClick = onOpenParents, enabled = !busy) { Text("Veli ve giriş hesabı yönetimi") }
+            if (catalog != null) OutlinedButton(onClick = {
+                action(operation = {
+                    val count = catalog.completeCatalogue()
+                    if (count == 0) "Standart kurum rolleri doğrulandı." else "$count standart kurum rolü eklendi ve doğrulandı."
+                })
+            }, enabled = !busy, modifier = Modifier.testTag("ensure_standard_roles_btn")) { Text("Eksik standart rolleri ekle") }
+            AccountField(search, { search = it; page = 1 }, "Ad veya e-posta ile ara", 100, enabled = !busy)
+            TextButton(onClick = { revision++ }, enabled = !busy) { Text("Listeyi yenile") }
+            if (roster == null) Text("Kullanıcılar yükleniyor…")
+            else if (roster?.isFailure == true) Text("Kullanıcılar alınamadı.")
+            else if (rows.isEmpty()) Text("Bu kapsamda kullanıcı bulunamadı.")
         }
-    ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(NeutralLightBackground)
-                .padding(paddingValues)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(vertical = 16.dp)
-        ) {
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Kullanıcılar, Rol & Şube Erişimi",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = NeutralTextPrimary
-                    )
-                    Text(
-                        text = "Kullanıcı kartına tıklayarak Genel ve Kurum rollerini ile şube erişimlerini tek işlemde (atomik) atayabilirsiniz. Şube seçilmezse rol tüm kurum genelinde çalışır.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = NeutralTextSecondary
-                    )
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        if (NativeNavigationPolicy.canCompleteRoleCatalogue(state.currentUser, state.workspaceOrganizationId)) OutlinedButton(
-                            onClick = onEnsureStandardRoles,
-                            modifier = Modifier.fillMaxWidth().testTag("ensure_standard_roles_btn"),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
-                        ) {
-                            Icon(Icons.Default.VerifiedUser, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Eksik standart rolleri ekle")
-                        }
-                        FilledTonalButton(
-                            onClick = { showParentLinkDialog = true },
-                            modifier = Modifier.fillMaxWidth().testTag("open_parent_link_dialog_btn"),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
-                        ) {
-                            Icon(Icons.Default.FamilyRestroom, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Veli giriş hesabı bağla")
-                        }
+        items(rows, key = { it.id }) { row ->
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(row.name, style = MaterialTheme.typography.titleMedium)
+                    Text(row.email)
+                    Text(accountStatuses[row.status] ?: row.status)
+                    if (row.roleNames.isNotEmpty()) Text(row.roleNames.joinToString(", "))
+                    if (canWrite) {
+                        TextButton(onClick = { assigning = row }, enabled = !busy) { Text("Rol ve şube erişimi") }
+                        TextButton(onClick = { account = row; editing = true }, enabled = !busy) { Text("Kullanıcıyı düzenle") }
+                        TextButton(onClick = { removing = row; message = null }, enabled = !busy) { Text("Hesabı pasife al") }
                     }
                 }
             }
-
-            item {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("user_search_input"),
-                    placeholder = { Text("Ad soyad veya e-posta ile ara...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Ara") },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Temizle")
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White
-                    )
-                )
-            }
-
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val filters = listOf(
-                        "ALL" to "Tümü (${visibleUsers.size})",
-                        "ADMIN" to "Yönetici",
-                        "TEACHER" to "Öğretmen",
-                        "ACCOUNTANT" to "Muhasebe",
-                        "PARENT" to "Veli"
-                    )
-                    filters.forEach { (roleKey, label) ->
-                        FilterChip(
-                            selected = selectedRoleFilter == roleKey,
-                            onClick = { selectedRoleFilter = roleKey },
-                            label = { Text(label, fontSize = 12.sp) }
-                        )
-                    }
-                }
-            }
-
-            items(visibleUsers, key = { it.id }) { user ->
-                val isRootAccount = user.role.contains("SUPERADMIN", ignoreCase = true) ||
-                    user.email.equals("root@scs360.com.tr", ignoreCase = true)
-
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { selectedUserForAccess = user }
-                        .testTag("user_card_${user.id}"),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(46.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = user.full_name.take(1).uppercase(),
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(12.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = user.full_name,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = NeutralTextPrimary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    if (isRootAccount) {
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Surface(color = ScsOrbitGold, shape = RoundedCornerShape(6.dp)) {
-                                            Text(
-                                                "ROOT KORUMALI",
-                                                color = ScsPetrolGreen,
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                                Text(
-                                    text = "${user.email} • Şube: ${user.branch_name}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = NeutralTextSecondary
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Surface(
-                                        color = MaterialTheme.colorScheme.secondaryContainer,
-                                        shape = RoundedCornerShape(6.dp)
-                                    ) {
-                                        Text(
-                                            text = user.role,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
-                                    Text(
-                                        text = if (user.is_active) "Aktif" else "Pasif / Engelli",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (user.is_active) StatusSuccess else StatusWarning,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            OutlinedButton(
-                                onClick = { selectedUserForAccess = user },
-                                modifier = Modifier.testTag("user_access_btn_${user.id}")
-                            ) {
-                                Icon(Icons.Default.ManageAccounts, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Rol & Şube Erişimi Ata", fontSize = 12.sp)
-                            }
-
-                            if (!isRootAccount) {
-                                IconButton(
-                                    onClick = { onDeleteUser(user.id) },
-                                    modifier = Modifier.testTag("delete_user_${user.id}")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.DeleteOutline,
-                                        contentDescription = "Kullanıcıyı Sil",
-                                        tint = StatusError
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+        }
+        if (page > 1 || roster?.getOrNull()?.second == true) item {
+            if (page > 1) TextButton(onClick = { page-- }, enabled = !busy) { Text("Önceki sayfa") }
+            if (roster?.getOrNull()?.second == true) TextButton(onClick = { page++ }, enabled = !busy) { Text("Sonraki sayfa") }
+        }
+    }
+    if (editing) key(account?.id) {
+        AccountEditor(client, account, selectedBranch, busy, onClose = { editing = false }) { form, showError ->
+            action({
+                val isCreating = account == null
+                val stored = client.save(form, account?.id)
+                editing = false
+                if (isCreating) { assigning = stored; page = 1 }
+                if (form.has("password") && !isCreating) "Kullanıcı kaydı doğrulandı ve parola güncellemesi onaylandı."
+                else "Kullanıcı kaydı doğrulandı."
+            }, showError)
+        }
+    }
+    assigning?.let { target ->
+        key(target.id) {
+            AccountAccessEditor(client, target, busy, onClose = { assigning = null }) { baseline, desired, showError ->
+                action({
+                    client.replaceAccess(target.id, baseline, desired)
+                    assigning = null
+                    "Rol ve şube erişimi doğrulandı."
+                }, showError)
             }
         }
     }
-
-    selectedUserForAccess?.let { targetUser ->
-        val isRoot = targetUser.role.contains("SUPERADMIN", ignoreCase = true) ||
-            targetUser.email.equals("root@scs360.com.tr", ignoreCase = true)
-
-        val allRoles = listOf(
-            "OWNER" to "Kurum Sahibi (Kurum Rolü • OWNER)",
-            "ADMIN" to "Kurum Yöneticisi (Kurum Rolü • ADMIN)",
-            "BRANCH_ADMIN" to "Şube Yöneticisi (Kurum Rolü • BRANCH_ADMIN)",
-            "TEACHER" to "Öğretmen (Kurum Rolü • TEACHER)",
-            "PARENT" to "Veli (Kurum Rolü • PARENT)",
-            "ACCOUNTANT" to "Muhasebe (Kurum Rolü • ACCOUNTANT)",
-            "STAFF" to "Personel (Kurum Rolü • STAFF)",
-            "CANTEEN" to "Kantin (Kurum Rolü • CANTEEN)",
-            "SECURITY" to "Güvenlik (Kurum Rolü • SECURITY)",
-            "LIBRARIAN" to "Kütüphane (Kurum Rolü • LIBRARIAN)",
-            "BUS_DRIVER" to "Servis (Kurum Rolü • BUS_DRIVER)"
-        )
-        var selectedRoles by remember(targetUser) {
-            mutableStateOf(
-                targetUser.role.split(",").map { it.trim().uppercase() }.filter { it.isNotBlank() }.toSet()
-                    .ifEmpty { setOf("TEACHER") }
-            )
-        }
-        var selectedBranchIds by remember(targetUser) {
-            mutableStateOf(setOf(targetUser.branch_id).filter { it.isNotBlank() }.toSet())
-        }
-        var selectedStatus by remember(targetUser) {
-            mutableStateOf(if (targetUser.is_active) "ACTIVE" else "INACTIVE")
-        }
-
-        AlertDialog(
-            onDismissRequest = { selectedUserForAccess = null },
-            title = {
-                Column {
-                    Text("${targetUser.full_name} • Erişim & Şube Ata", fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    Text(targetUser.email, fontSize = 12.sp, color = NeutralTextSecondary)
-                }
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (isRoot) {
-                        Surface(color = StatusWarningContainer, shape = RoundedCornerShape(8.dp)) {
-                            Text(
-                                "Root (is_super_admin) hesabı korumalıdır; pasife alınamaz, engellenemez veya silinemez.",
-                                fontSize = 12.sp,
-                                color = NeutralTextPrimary,
-                                modifier = Modifier.padding(10.dp)
-                            )
-                        }
-                    } else {
-                        Text("Hesap Durumu:", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("ACTIVE" to "Aktif", "INACTIVE" to "Pasif", "BLOCKED" to "Engelli").forEach { (st, lbl) ->
-                                FilterChip(
-                                    selected = selectedStatus == st,
-                                    onClick = { selectedStatus = st },
-                                    label = { Text(lbl, fontSize = 11.sp) }
-                                )
-                            }
-                        }
-                    }
-
-                    Text("Atanacak Roller (Çoklu Seçim):", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                    allRoles.forEach { (roleCode, roleTitle) ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable(enabled = !isRoot) {
-                                    selectedRoles = if (selectedRoles.contains(roleCode)) {
-                                        (selectedRoles - roleCode).ifEmpty { setOf(roleCode) }
-                                    } else {
-                                        selectedRoles + roleCode
-                                    }
-                                }
-                        ) {
-                            Checkbox(
-                                checked = selectedRoles.contains(roleCode),
-                                onCheckedChange = { checked ->
-                                    if (!isRoot) {
-                                        selectedRoles = if (checked) {
-                                            selectedRoles + roleCode
-                                        } else {
-                                            (selectedRoles - roleCode).ifEmpty { setOf(roleCode) }
-                                        }
-                                    }
-                                },
-                                enabled = !isRoot
-                            )
-                            Text(roleTitle, fontSize = 12.sp)
-                        }
-                    }
-
-                    HorizontalDivider()
-                    Text(
-                        "Şube Kapsamı (Seçilmezse Tüm Kurum Genelinde Geçerlidir):",
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp
-                    )
-                    val branchOptions = if (state.branches.isNotEmpty()) state.branches else listOf(
-                        Branch(id = "branch-1", name = "Merkez Kampüs"),
-                        Branch(id = "branch-2", name = "Anadolu Lisesi Kampüsü")
-                    )
-                    branchOptions.forEach { br ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    selectedBranchIds = if (selectedBranchIds.contains(br.id)) {
-                                        selectedBranchIds - br.id
-                                    } else {
-                                        selectedBranchIds + br.id
-                                    }
-                                }
-                        ) {
-                            Checkbox(
-                                checked = selectedBranchIds.contains(br.id),
-                                onCheckedChange = { checked ->
-                                    selectedBranchIds = if (checked) selectedBranchIds + br.id else selectedBranchIds - br.id
-                                }
-                            )
-                            Text("${br.name} (${br.id})", fontSize = 12.sp)
-                        }
-                    }
-                }
-            },
+    removing?.let { target ->
+        AlertDialog(onDismissRequest = { if (!busy) removing = null }, title = { Text("Hesabı pasife al") },
+            text = { Text(message ?: target.name) },
             confirmButton = {
-                Button(
-                    onClick = {
-                        onUpdateUserAccess(
-                            targetUser.id,
-                            selectedRoles.toList(),
-                            selectedBranchIds.distinct(),
-                            if (isRoot) "ACTIVE" else selectedStatus
-                        )
-                        selectedUserForAccess = null
-                    },
-                    modifier = Modifier.testTag("save_user_access_btn")
-                ) {
-                    Text("Atomik Kaydet")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { selectedUserForAccess = null }) { Text("Kapat") }
-            }
-        )
+                Button(enabled = !busy, onClick = {
+                    action(operation = {
+                        client.deactivate(target.id)
+                        removing = null
+                        "Kullanıcı hesabı pasife alındı."
+                    })
+                }) { Text("Pasife al") }
+            }, dismissButton = { TextButton(onClick = { removing = null }, enabled = !busy) { Text("Vazgeç") } })
     }
+}
 
-    if (showAddDialog) {
-        var fullName by remember { mutableStateOf("") }
-        var email by remember { mutableStateOf("") }
-        var phone by remember { mutableStateOf("+90 5") }
-        var selectedRole by remember { mutableStateOf("TEACHER") }
-        var password by remember { mutableStateOf("Scs360!2026") }
-        val branchId = state.branches.firstOrNull()?.id ?: "branch-1"
-
-        AlertDialog(
-            onDismissRequest = { showAddDialog = false },
-            title = { Text("Yeni Kullanıcı Oluştur", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = fullName,
-                        onValueChange = { fullName = it },
-                        label = { Text("Ad Soyad") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = email,
-                        onValueChange = { email = it },
-                        label = { Text("E-Posta Adresi") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = phone,
-                        onValueChange = { phone = it },
-                        label = { Text("Telefon") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = { Text("Geçici Şifre") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text("Başlangıç Rolü:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("ADMIN", "TEACHER", "ACCOUNTANT", "PARENT").forEach { r ->
-                            FilterChip(
-                                selected = selectedRole == r,
-                                onClick = { selectedRole = r },
-                                label = { Text(r, fontSize = 11.sp) }
-                            )
-                        }
+@Composable
+private fun AccountEditor(client: NativeInstitutionUsersClient, existing: InstitutionAccount?, preferredBranch: String?, busy: Boolean,
+    onClose: () -> Unit, onSave: (JSONObject, (String) -> Unit) -> Unit
+) {
+    var firstName by remember { mutableStateOf(existing?.firstName.orEmpty()) }
+    var lastName by remember { mutableStateOf(existing?.lastName.orEmpty()) }
+    var email by remember { mutableStateOf(existing?.email.orEmpty()) }
+    var phone by remember { mutableStateOf(existing?.phone.orEmpty()) }
+    var position by remember { mutableStateOf(existing?.position.orEmpty()) }
+    var department by remember { mutableStateOf(existing?.department.orEmpty()) }
+    var status by remember { mutableStateOf(existing?.status ?: "ACTIVE") }
+    var password by remember { mutableStateOf("") }
+    var branch by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var retry by remember { mutableIntStateOf(0) }
+    val options by key(retry) { produceState<Result<UserAccessOptions>?>(null) {
+        if (existing == null) {
+            value = userResult { client.options() }
+            val ready = value?.getOrNull()
+            if (branch == null) branch = ready?.branches?.firstOrNull { it.id == preferredBranch }?.id
+                ?: ready?.takeUnless { it.allowAllBranches }?.branches?.singleOrNull()?.id
+        }
+    } }
+    val valid = firstName.isNotBlank() && lastName.isNotBlank() && android.util.Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches() &&
+        (existing != null && password.isEmpty() || password.length >= 8) &&
+        (existing != null || options?.getOrNull()?.let { it.allowAllBranches || branch != null } == true)
+    AlertDialog(onDismissRequest = { if (!busy) onClose() }, title = { Text(if (existing == null) "Yeni kullanıcı" else "Kullanıcı bilgileri") },
+        text = { Column(Modifier.fillMaxWidth().heightIn(max = 380.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AccountField(firstName, { firstName = it }, "Ad", 100, !busy)
+            AccountField(lastName, { lastName = it }, "Soyad", 100, !busy)
+            AccountField(email, { email = it }, "E-posta", 255, !busy)
+            AccountField(phone, { phone = it }, "Telefon", 20, !busy)
+            AccountField(position, { position = it }, "Pozisyon", 100, !busy)
+            AccountField(department, { department = it }, "Birim", 100, !busy)
+            AccountField(password, { password = it }, if (existing == null) "Başlangıç parolası" else "Yeni parola (isteğe bağlı)", 4096, !busy, secret = true)
+            if (password.isNotEmpty() && password.length < 8) Text("Parola en az 8 karakter olmalı.")
+            if (existing != null) accountStatuses.forEach { (code, label) ->
+                FilterChip(selected = status == code, onClick = { status = code }, enabled = !busy, label = { Text(label) })
+            } else {
+                val available = options?.getOrNull()
+                if (options == null) Text("Şube seçenekleri yükleniyor…")
+                if (options?.isFailure == true) TextButton(onClick = { retry++ }) { Text("Şubeleri yeniden yükle") }
+                available?.let {
+                    Text("Başlangıç şubesi")
+                    if (it.allowAllBranches) FilterChip(selected = branch == null, onClick = { branch = null }, enabled = !busy,
+                        label = { Text("Kurum geneli") })
+                    it.branches.forEach { choice ->
+                        FilterChip(selected = branch == choice.id, onClick = { branch = choice.id }, enabled = !busy,
+                            label = { Text(choice.name) })
                     }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (fullName.isNotBlank() && email.isNotBlank()) {
-                            onAddUser(fullName.trim(), email.trim(), selectedRole, phone.trim(), branchId, password)
-                            showAddDialog = false
-                        }
-                    }
-                ) {
-                    Text("Kaydet")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddDialog = false }) {
-                    Text("İptal")
                 }
             }
-        )
-    }
+            error?.let { Text(it) }
+        } },
+        confirmButton = {
+            Button(enabled = valid && !busy, onClick = {
+                error = null
+                val form = JSONObject().put("first_name", firstName.trim()).put("last_name", lastName.trim())
+                    .put("email", email.trim().lowercase(Locale.ROOT)).put("phone", phone.trim().ifBlank { null } ?: JSONObject.NULL)
+                    .put("position", position.trim().ifBlank { null } ?: JSONObject.NULL)
+                    .put("department", department.trim().ifBlank { null } ?: JSONObject.NULL)
+                if (password.isNotEmpty()) form.put("password", password)
+                if (existing != null) form.put("status", status) else branch?.let { form.put("branch_id", it) }
+                onSave(form) { error = it }
+            }) { Text("Kaydet") }
+        }, dismissButton = { TextButton(onClick = onClose, enabled = !busy) { Text("Vazgeç") } })
+}
 
-    if (showParentLinkDialog) {
-        val students = state.students
-        var selectedStudentId by remember { mutableStateOf(students.firstOrNull()?.id ?: "std-1") }
-        val selectedStudent = students.find { it.id == selectedStudentId } ?: students.firstOrNull()
-        var selectedUserId by remember(selectedStudent) { mutableStateOf(selectedStudent?.linked_parent_user_id ?: "") }
-        var receiveNotifications by remember(selectedStudent) { mutableStateOf(selectedStudent?.receive_notifications ?: true) }
-        var smsPhone by remember(selectedStudent) { mutableStateOf(selectedStudent?.sms_phone ?: selectedStudent?.parent_phone ?: "") }
-        var whatsappPhone by remember(selectedStudent) { mutableStateOf(selectedStudent?.whatsapp_phone ?: selectedStudent?.parent_phone ?: "") }
-
-        AlertDialog(
-            onDismissRequest = { showParentLinkDialog = false },
-            title = {
-                Column {
-                    Text("Veli Giriş Hesabı Bağla (PUT /parents/{id}/account)", fontWeight = FontWeight.Bold, fontSize = 15.5.sp)
-                    Text("Veli kaydını giriş hesabına bağlar ve PARENT rolünü güvenceye alır. Aynı kullanıcı iki farklı veli kaydına bağlanamaz (409).", fontSize = 11.sp, color = NeutralTextSecondary)
-                }
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Öğrenci / Veli Kaydı Seçin:", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-                    students.take(4).forEach { std ->
-                        FilterChip(
-                            selected = selectedStudentId == std.id,
-                            onClick = { selectedStudentId = std.id },
-                            label = { Text("${std.parent_name} (${std.full_name})", fontSize = 11.sp) }
-                        )
-                    }
-                    Text("Bağlanacak Giriş Kullanıcısı (Boş bırakılırsa bağ kaldırılır):", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(
-                            selected = selectedUserId.isBlank(),
-                            onClick = { selectedUserId = "" },
-                            label = { Text("Bağlantıyı Kaldır (null)", fontSize = 11.sp) }
-                        )
-                        visibleUsers.take(2).forEach { u ->
-                            FilterChip(
-                                selected = selectedUserId == u.id,
-                                onClick = { selectedUserId = u.id },
-                                label = { Text(u.full_name, fontSize = 11.sp) }
-                            )
+@Composable
+private fun AccountAccessEditor(client: NativeInstitutionUsersClient, target: InstitutionAccount, busy: Boolean, onClose: () -> Unit,
+    onSave: (UserAccess, UserAccess, (String) -> Unit) -> Unit
+) {
+    var retry by remember { mutableIntStateOf(0) }
+    var draft by remember { mutableStateOf<UserAccess?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val result by key(retry) { produceState<Result<Pair<UserAccess, UserAccessOptions>>?>(null) {
+        draft = null
+        value = userResult {
+            client.read(target.id)
+            client.access(target.id) to client.options()
+        }
+        draft = value?.getOrNull()?.first
+    } }
+    val loaded = result?.getOrNull()
+    val edited = draft
+    AlertDialog(onDismissRequest = { if (!busy) onClose() }, title = { Text("Rol ve şube erişimi · ${target.name}") },
+        text = {
+            Column(Modifier.fillMaxWidth().heightIn(max = 380.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (result == null) Text("Rol ve şube kayıtları yükleniyor…")
+                if (result?.isFailure == true) Text("Rol ve şube kayıtları alınamadı.")
+                error?.let { Text(it) }
+                TextButton(onClick = { error = null; retry++ }, enabled = !busy) { Text("Güncel erişimi yeniden yükle") }
+                if (loaded != null && edited != null) {
+                    Text("Roller", style = MaterialTheme.typography.titleSmall)
+                    loaded.second.roles.forEach { choice ->
+                        AccountAccessToggle(choice, choice.id in edited.roleIds, busy) { checked ->
+                            draft = edited.copy(roleIds = if (checked) edited.roleIds + choice.id else edited.roleIds - choice.id)
                         }
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = receiveNotifications, onCheckedChange = { receiveNotifications = it })
-                        Text("Bildirim Al (receive_notifications)", fontSize = 12.sp)
+                    Text("Şubeler", style = MaterialTheme.typography.titleSmall)
+                    loaded.second.branches.forEach { choice ->
+                        AccountAccessToggle(choice, choice.id in edited.branchIds, busy) { checked ->
+                            draft = edited.copy(branchIds = if (checked) edited.branchIds + choice.id else edited.branchIds - choice.id)
+                        }
                     }
-                    OutlinedTextField(
-                        value = smsPhone,
-                        onValueChange = { smsPhone = it },
-                        label = { Text("SMS Telefonu (Boş bırakılırsa temizlenir)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = whatsappPhone,
-                        onValueChange = { whatsappPhone = it },
-                        label = { Text("WhatsApp Telefonu (Boş bırakılırsa temizlenir)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    if (!loaded.second.allowAllBranches) Text("En az bir yetkili şube seçin.")
                 }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onLinkParentAccount(
-                            selectedStudentId,
-                            selectedUserId.ifBlank { null },
-                            receiveNotifications,
-                            smsPhone.ifBlank { null },
-                            whatsappPhone.ifBlank { null }
-                        )
-                        showParentLinkDialog = false
-                    }
-                ) {
-                    Text("Hesap Bağını Kaydet")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showParentLinkDialog = false }) { Text("Kapat") }
             }
-        )
+        },
+        confirmButton = {
+            val ready = loaded != null && edited != null && edited != loaded.first &&
+                (loaded.second.allowAllBranches || edited.branchIds.isNotEmpty())
+            Button(enabled = ready && !busy, modifier = Modifier.testTag("save_user_access_btn"), onClick = {
+                if (loaded != null && edited != null) {
+                    error = null
+                    onSave(loaded.first, edited) { error = it }
+                }
+            }) { Text("Erişimi kaydet") }
+        },
+        dismissButton = { TextButton(onClick = onClose, enabled = !busy) { Text("Vazgeç") } })
+}
+
+@Composable
+private fun AccountAccessToggle(choice: UserAccessChoice, selected: Boolean, busy: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Checkbox(checked = selected, enabled = !busy && choice.assignable, onCheckedChange = onChange)
+        Text(choice.name, modifier = Modifier.weight(1f).padding(top = 10.dp))
     }
+}
+
+@Composable
+private fun AccountField(value: String, change: (String) -> Unit, label: String, max: Int, enabled: Boolean, secret: Boolean = false) {
+    OutlinedTextField(value, { change(it.take(max)) }, Modifier.fillMaxWidth(), enabled = enabled,
+        label = { Text(label) }, singleLine = true,
+        visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None)
+}
+
+private suspend fun <T> userResult(work: suspend () -> T): Result<T> = try {
+    Result.success(work())
+} catch (failure: Exception) {
+    if (failure is CancellationException) throw failure
+    Result.failure(failure)
 }

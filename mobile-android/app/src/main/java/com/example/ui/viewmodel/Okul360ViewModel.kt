@@ -1103,7 +1103,7 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
 
     fun changePassword(currentPass: String, newPass: String) {
         viewModelScope.launch(requestFailures) {
-            repository.changePassword(currentPass, newPass, _uiState.value.currentUser.email)
+            repository.changePassword(currentPass, newPass)
             _uiState.update { it.copy(toastMessage = "Hesap şifreniz başarıyla güncellendi.") }
         }
     }
@@ -1321,54 +1321,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(requestFailures) {
             val u = repository.getUsers()
             _uiState.update { it.copy(users = u) }
-        }
-    }
-
-    fun addUser(fullName: String, email: String, role: String, phone: String, branch: String, password: String = "123456") {
-        viewModelScope.launch(requestFailures) {
-            val roleDisplay = when (role.uppercase()) {
-                "SUPERADMIN", "SUPER_ADMIN" -> "Süper Admin (Sistem Yöneticisi)"
-                "ADMIN" -> "Genel Yönetici / Okul Müdürü"
-                "OWNER" -> "Kurum Sahibi / Kurucu"
-                "MANAGER" -> "Şube Müdürü"
-                "TEACHER" -> "Öğretmen"
-                "FINANCE" -> "Muhasebe & Finans"
-                "PARENT" -> "Veli"
-                "CANTEEN" -> "Kantin Personeli"
-                else -> role
-            }
-            val user = AppUser(
-                id = "usr-${UUID.randomUUID()}",
-                full_name = fullName,
-                email = email,
-                phone = phone,
-                role = role,
-                role_display_name = roleDisplay,
-                branch_id = _uiState.value.selectedBranchId,
-                branch_name = branch.ifBlank { _uiState.value.currentUser.branch_name },
-                is_active = true,
-                created_at = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()),
-                password = if (password.isNotBlank()) password else "123456"
-            )
-            repository.addUser(user)
-            _uiState.update { it.copy(toastMessage = "${user.full_name} (${user.email}) sisteme başarıyla tanımlandı.") }
-            loadUsers()
-        }
-    }
-
-    fun resetUserPassword(userId: String, newPassword: String) {
-        viewModelScope.launch(requestFailures) {
-            repository.resetUserPassword(userId, newPassword)
-            _uiState.update { it.copy(toastMessage = "Kullanıcı şifresi başarıyla güncellendi.") }
-            loadUsers()
-        }
-    }
-
-    fun deleteUser(userId: String) {
-        viewModelScope.launch(requestFailures) {
-            repository.deleteUser(userId)
-            _uiState.update { it.copy(toastMessage = "Kullanıcı silindi.") }
-            loadUsers()
         }
     }
 
@@ -2478,24 +2430,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(toastMessage = "Bu işlem web yönetim panelinden yapılmalıdır; yerel ödeme veya üyelik kaydı oluşturulmadı.") }
     }
 
-    fun updateUserAccess(userId: String, roles: List<String>, branchIds: List<String>, status: String) {
-        _uiState.update { cur ->
-            val updatedUsers = cur.users.map { u ->
-                if (u.id == userId) {
-                    u.copy(
-                        role = roles.distinct().joinToString(", "),
-                        is_active = status == "ACTIVE"
-                    )
-                } else u
-            }
-            val scopeDesc = if (branchIds.isEmpty()) "Tüm Kurum Geneli" else "${branchIds.size} Şube"
-            cur.copy(
-                users = updatedUsers,
-                toastMessage = "Kullanıcı rol (${roles.joinToString()}) ve şube erişimi ($scopeDesc) atomik olarak güncellendi."
-            )
-        }
-    }
-
     // ==========================================
     // Nov 4, 2026: Root Scoped Tenant Workspace, Hosted SaaS Checkout, PAID_REVIEW, Refund, Public Signup, Contacts & Standard Roles
     // ==========================================
@@ -2615,61 +2549,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             state.copy(
                 branches = updatedList,
                 toastMessage = "${updatedBranch.name} şube iletişim bilgileri güncellendi."
-            )
-        }
-    }
-
-    fun ensureStandardRolesForOrganization() {
-        val snapshot = _uiState.value
-        val actor = snapshot.currentUser
-        if (!NativeNavigationPolicy.canCompleteRoleCatalogue(actor, snapshot.workspaceOrganizationId)) return
-        val organization = if (actor.is_super_admin == true) snapshot.workspaceOrganizationId else actor.organization_id
-        viewModelScope.launch(requestFailures) {
-            val created = com.example.data.remote.NativeInstitutionRoleClient(requireNotNull(organization)).completeCatalogue()
-            _uiState.update { state ->
-                state.copy(toastMessage = if (created == 0) "Standart kurum rolleri doğrulandı."
-                    else "$created eksik standart kurum rolü eklendi ve doğrulandı.")
-            }
-        }
-    }
-
-    fun linkParentUserAccount(
-        studentId: String,
-        parentUserId: String?,
-        receiveNotifications: Boolean,
-        smsPhone: String?,
-        whatsappPhone: String?
-    ) {
-        val state = _uiState.value
-        if (!parentUserId.isNullOrBlank()) {
-            val conflictStudent = state.students.find { it.id != studentId && it.linked_parent_user_id == parentUserId }
-            if (conflictStudent != null) {
-                _uiState.update {
-                    it.copy(toastMessage = "Hata (409 Conflict): Seçilen kullanıcı hesabı başka bir veli kaydına (${conflictStudent.parent_name}) zaten bağlı!")
-                }
-                return
-            }
-        }
-        val linkedUser = state.users.find { it.id == parentUserId }
-        _uiState.update { cur ->
-            val updatedStudents = cur.students.map { std ->
-                if (std.id == studentId) {
-                    std.copy(
-                        linked_parent_user_id = parentUserId?.takeIf { it.isNotBlank() },
-                        parent_email = linkedUser?.email ?: std.parent_email,
-                        receive_notifications = receiveNotifications,
-                        sms_phone = smsPhone?.trim()?.takeIf { it.isNotBlank() },
-                        whatsapp_phone = whatsappPhone?.trim()?.takeIf { it.isNotBlank() }
-                    )
-                } else std
-            }
-            cur.copy(
-                students = updatedStudents,
-                toastMessage = if (parentUserId.isNullOrBlank()) {
-                    "Veli giriş hesabı bağı kaldırıldı ve bildirim tercihleri güncellendi."
-                } else {
-                    "Veli kaydı '${linkedUser?.full_name ?: parentUserId}' giriş hesabına bağlandı ve PARENT rolü güvenceye alındı."
-                }
             )
         }
     }

@@ -126,7 +126,6 @@ class Okul360Repository(private val context: Context) {
     private val localOrganizations = mutableListOf<Organization>()
     private val localBranches = mutableListOf<Branch>()
     private val localClasses = mutableListOf<ClassGroup>()
-    private val localUsers = mutableListOf<AppUser>()
     private val localRfidCards = mutableListOf<RfidCard>()
     private val localDevices = mutableListOf<HardwareDevice>()
     private val localAnnouncements = mutableListOf<Announcement>()
@@ -333,20 +332,8 @@ class Okul360Repository(private val context: Context) {
         true
     }
 
-    suspend fun changePassword(currentPass: String, newPass: String, userEmail: String? = null): Boolean = requestContext {
-        try {
-            apiService.changePassword(mapOf("current_password" to currentPass, "new_password" to newPass))
-        } catch (failure: Exception) { throw failure }
-
-        if (!userEmail.isNullOrBlank()) {
-            try {
-                database.userDao().updatePasswordByEmail(userEmail, newPass)
-                val idx = localUsers.indexOfFirst { it.email.equals(userEmail, ignoreCase = true) }
-                if (idx >= 0) {
-                    localUsers[idx] = localUsers[idx].copy(password = newPass)
-                }
-            } catch (failure: Exception) { throw failure }
-        }
+    suspend fun changePassword(currentPass: String, newPass: String): Boolean = requestContext {
+        apiService.changePassword(mapOf("current_password" to currentPass, "new_password" to newPass))
         true
     }
 
@@ -532,148 +519,23 @@ class Okul360Repository(private val context: Context) {
         )
     }
 
-    // App Users Management
+    // Institution user directory
     suspend fun getUsers(): List<AppUser> = requestContext {
-        try {
-            val remoteUsers = try {
-                apiService.getUsers()
-            } catch (failure: Exception) { throw failure }
-            if (remoteUsers.isNotEmpty()) {
-                val entities = remoteUsers.map { u ->
-                    UserEntity(
-                        id = u.id,
-                        full_name = u.full_name,
-                        email = u.email,
-                        role = u.role,
-                        tenant_id = "tenant-001",
-                        institution_name = "SCS360 Eğitim Kurumları",
-                        branch_id = u.branch_id,
-                        branch_name = u.branch_name,
-                        phone = u.phone,
-                        avatar_url = null
-                    )
-                }
-                database.userDao().insertUsers(entities)
-                return@requestContext remoteUsers
-            }
-        } catch (failure: Exception) { throw failure }
-
-        // Room Database query
-        val dbUsers = database.userDao().getAllUsers()
-        if (dbUsers.isNotEmpty()) {
-            dbUsers.map { entity ->
-                AppUser(
-                    id = entity.id,
-                    full_name = entity.full_name,
-                    email = entity.email,
-                    phone = entity.phone ?: "",
-                    role = entity.role,
-                    role_display_name = when (entity.role.uppercase()) {
-                        "OWNER" -> "Kurum Sahibi / Kurucu"
-                        "ADMIN" -> "Genel Yönetici / Okul Müdürü"
-                        "MANAGER" -> "Şube Müdürü"
-                        "TEACHER" -> "Öğretmen"
-                        "FINANCE" -> "Muhasebe & Finans"
-                        "PARENT" -> "Veli"
-                        "CANTEEN" -> "Kantin Personeli"
-                        else -> entity.role
-                    },
-                    branch_id = entity.branch_id,
-                    branch_name = entity.branch_name,
-                    is_active = true,
-                    created_at = "2026-01-01",
-                    password = entity.password_hash
-                )
-            }
-        } else {
-            localUsers.toList()
-        }
-    }
-
-    suspend fun addUser(user: AppUser): AppUser = requestContext {
-        val created = try {
-            apiService.createUser(user)
-        } catch (failure: Exception) { throw failure }
-
-        val pass = if (created.password.isNotBlank()) created.password else "123456"
-
-        try {
-            database.userDao().insertUser(
-                UserEntity(
-                    id = created.id,
-                    full_name = created.full_name,
-                    email = created.email,
-                    role = created.role,
-                    tenant_id = "tenant-001",
-                    institution_name = "SCS360 Eğitim Kurumları",
-                    branch_id = created.branch_id,
-                    branch_name = created.branch_name,
-                    phone = created.phone,
-                    avatar_url = null,
-                    password_hash = pass
-                )
-            )
-        } catch (failure: Exception) { throw failure }
-
-        val userWithPass = created.copy(password = pass)
-        val idx = localUsers.indexOfFirst { it.id == userWithPass.id }
-        if (idx >= 0) localUsers[idx] = userWithPass else localUsers.add(userWithPass)
-        userWithPass
-    }
-
-    suspend fun updateUser(user: AppUser): AppUser = requestContext {
-        val updated = try {
-            apiService.updateUser(user.id, user)
-        } catch (failure: Exception) { throw failure }
-
-        val pass = if (updated.password.isNotBlank()) updated.password else "123456"
-
-        try {
-            database.userDao().insertUser(
-                UserEntity(
-                    id = updated.id,
-                    full_name = updated.full_name,
-                    email = updated.email,
-                    role = updated.role,
-                    tenant_id = "tenant-001",
-                    institution_name = "SCS360 Eğitim Kurumları",
-                    branch_id = updated.branch_id,
-                    branch_name = updated.branch_name,
-                    phone = updated.phone,
-                    avatar_url = null,
-                    password_hash = pass
-                )
-            )
-        } catch (failure: Exception) { throw failure }
-
-        val idx = localUsers.indexOfFirst { it.id == user.id }
-        if (idx >= 0) localUsers[idx] = updated else localUsers.add(updated)
-        updated
-    }
-
-    suspend fun resetUserPassword(userId: String, newPass: String): Boolean = requestContext {
-        try {
-            database.userDao().updatePassword(userId, newPass)
-        } catch (_: Exception) {}
-
-        val idx = localUsers.indexOfFirst { it.id == userId }
-        if (idx >= 0) {
-            localUsers[idx] = localUsers[idx].copy(password = newPass)
-        }
-        true
-    }
-
-    suspend fun deleteUser(userId: String): Boolean = requestContext {
-        try {
-            apiService.deleteUser(userId)
-        } catch (failure: Exception) { throw failure }
-
-        try {
-            database.userDao().deleteUser(userId)
-        } catch (failure: Exception) { throw failure }
-
-        localUsers.removeAll { it.id == userId }
-        true
+        val authorization = ApiClientProvider.interceptor
+        val organization = requireNotNull(authorization.workspaceOrganizationId ?: authorization.tenantId)
+        val client = com.example.data.remote.NativeInstitutionUsersClient(organization, authorization.branchId.orEmpty())
+        val records = mutableListOf<AppUser>()
+        var page = 1
+        do {
+            val (rows, more) = client.list(page, "")
+            records.addAll(rows.map { row ->
+                AppUser(id = row.id, full_name = row.name, email = row.email, phone = row.phone.orEmpty(),
+                    role = row.roleSlugs.joinToString(", "), role_display_name = row.roleNames.joinToString(", "),
+                    branch_id = "", branch_name = "", is_active = row.status == "ACTIVE", created_at = "", password = "")
+            })
+            page++
+        } while (more)
+        records
     }
 
     // RFID Cards Management
@@ -1107,7 +969,6 @@ val DEFAULT_SEEDED_INVOICES: List<Invoice> = emptyList()
 val DEFAULT_SEEDED_ORGANIZATIONS: List<Organization> = emptyList()
 val DEFAULT_SEEDED_BRANCHES: List<Branch> = emptyList()
 val DEFAULT_SEEDED_CLASSES: List<ClassGroup> = emptyList()
-val DEFAULT_SEEDED_USERS: List<AppUser> = emptyList()
 val DEFAULT_SEEDED_ANNOUNCEMENTS: List<Announcement> = emptyList()
 val DEFAULT_SEEDED_RFID_CARDS: List<RfidCard> = emptyList()
 val DEFAULT_SEEDED_DEVICES: List<HardwareDevice> = emptyList()

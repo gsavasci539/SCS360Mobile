@@ -949,24 +949,8 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             SubScreen.ROLES -> RolesScreen(state) { currentSubScreen = SubScreen.NONE }
                             SubScreen.USERS -> UsersScreen(
                                 state = state,
-                                onAddUser = { full, email, role, phone, branch, password ->
-                                    viewModel.addUser(full, email, role, phone, branch, password)
-                                },
-                                onDeleteUser = { id ->
-                                    viewModel.deleteUser(id)
-                                },
-                                onResetPassword = { id, newPass ->
-                                    viewModel.resetUserPassword(id, newPass)
-                                },
-                                onUpdateUserAccess = { userId, roles, branchIds, status ->
-                                    viewModel.updateUserAccess(userId, roles, branchIds, status)
-                                },
-                                onEnsureStandardRoles = {
-                                    viewModel.ensureStandardRolesForOrganization()
-                                },
-                                onLinkParentAccount = { studentId, parentUserId, receiveNotifications, smsPhone, whatsappPhone ->
-                                    viewModel.linkParentUserAccount(studentId, parentUserId, receiveNotifications, smsPhone, whatsappPhone)
-                                }
+                                onBack = { currentSubScreen = SubScreen.NONE },
+                                onOpenParents = { currentSubScreen = SubScreen.PARENTS }
                             )
                             SubScreen.DAILY_REPORTS -> DailyReportsScreen(
                                 state = state,

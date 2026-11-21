@@ -215,19 +215,7 @@ fun Okul360NavHost(
 
         // 10. Staff & Users Management Destination
         composable(Screen.Users.route) {
-            UsersScreen(
-                state = state,
-                onAddUser = { full, email, role, phone, branch, password ->
-                    viewModel.addUser(full, email, role, phone, branch, password)
-                },
-                onDeleteUser = { id ->
-                    viewModel.deleteUser(id)
-                },
-                onResetPassword = { id, newPass ->
-                    viewModel.resetUserPassword(id, newPass)
-                },
-                onEnsureStandardRoles = viewModel::ensureStandardRolesForOrganization
-            )
+            UsersScreen(state, onBack = { navController.popBackStack() })
         }
 
         // 11. Daily Reports Destination
