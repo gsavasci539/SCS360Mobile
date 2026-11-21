@@ -1361,17 +1361,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 },
                                 onLogout = { viewModel.logout() }
                             )
-                            SubScreen.DISMISSAL -> DismissalScreen(
-                                students = state.students,
-                                authorizations = state.pickupAuthorizations,
-                                dismissalLogs = state.dismissalLogs,
-                                onCreateAuthorization = { auth -> viewModel.createPickupAuthorization(auth) },
-                                onCancelAuthorization = { authId -> viewModel.cancelPickupAuthorization(authId) },
-                                onRecordHandover = { studentId, nationalId, notes ->
-                                    viewModel.recordStudentHandover(studentId, nationalId, notes)
-                                },
-                                onNavigateToSecurity = { currentSubScreen = SubScreen.SECURITY }
-                            )
+                            SubScreen.DISMISSAL -> DismissalScreen(state) { currentSubScreen = SubScreen.SECURITY }
                             SubScreen.NONE -> {}
                         }
                     } else {
