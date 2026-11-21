@@ -2,6 +2,7 @@ package com.example
 
 import com.example.data.remote.ApiClientProvider
 import com.example.data.remote.NativeTransportClient
+import com.example.data.remote.TransportStopDraft
 import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
@@ -15,10 +16,70 @@ import java.net.InetSocketAddress
 import java.time.LocalDateTime
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicReference
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class NativeTransportClientTest {
+    @Test fun stopEditsSendVersionAndReadBackExactRecordWithZeroCoordinates() {
+        val branch = UUID(18, 1).toString()
+        val routeId = UUID(18, 2).toString()
+        val stopId = UUID(18, 3).toString()
+        val request = UUID(18, 4)
+        val oldVersion = "a".repeat(64)
+        val nextVersion = "b".repeat(64)
+        val mutation = AtomicReference<JSONObject>()
+        val requests = CopyOnWriteArrayList<String>()
+        val base = ApiClientProvider.activeBaseUrl
+        val auth = ApiClientProvider.interceptor
+        val oldToken = auth.authToken
+        val oldTenant = auth.tenantId
+        val oldBranch = auth.branchId
+        val oldWorkspace = auth.workspaceOrganizationId
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/api/bus/") { exchange ->
+            val uri = exchange.requestURI
+            requests += "${exchange.requestMethod} $uri"
+            val payload: Any = when {
+                uri.path.endsWith("/stops/$stopId") -> {
+                    mutation.set(JSONObject(exchange.requestBody.use { it.readBytes().decodeToString() }))
+                    JSONObject().put("id", stopId).put("version", nextVersion)
+                }
+                uri.path.endsWith("/stops") -> JSONArray().put(JSONObject()
+                    .put("id", stopId).put("route_id", routeId).put("stop_order", 1).put("latitude", 0.0)
+                    .put("longitude", 0.0).put("estimated_arrival", "08:30:00")
+                    .put("stop_name", if (mutation.get() == null) "İlk durak" else "Yeni durak")
+                    .put("version", if (mutation.get() == null) oldVersion else nextVersion))
+                else -> JSONObject().put("id", routeId).put("branch_id", branch).put("route_name", "İzole rota")
+                    .put("capacity", 18).put("status", "ACTIVE").put("updated_at", "2026-11-21T08:00:00Z")
+            }
+            val bytes = JSONObject().put("success", true).put("data", payload).toString().toByteArray()
+            exchange.responseHeaders.add("Content-Type", "application/json")
+            exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+        server.start()
+        try {
+            ApiClientProvider.createService("http://127.0.0.1:${server.address.port}/api/")
+            auth.setSession("isolated-route-editor", UUID(18, 8).toString(), branch)
+            runBlocking {
+                val client = NativeTransportClient(branch)
+                val route = client.detail(routeId)
+                val existing = client.stops(route, 10, 0).single()
+                client.saveStop(route, TransportStopDraft("Yeni durak", "1", "0", "0", "08:30"), existing, request)
+            }
+            assertEquals(oldVersion, mutation.get().getString("expected_version"))
+            assertEquals("0.00000000", mutation.get().getString("latitude"))
+            assertEquals(request.toString(), mutation.get().getString("request_id"))
+            assertTrue(requests.any { it.startsWith("PUT /api/bus/stops/$stopId") })
+            assertTrue(requests.any { it.startsWith("GET /api/bus/stops?") && "route_id=$routeId" in it && "record_id=$stopId" in it })
+        } finally {
+            ApiClientProvider.createService(base)
+            auth.setSession(oldToken, oldTenant, oldBranch, oldWorkspace)
+            server.stop(0)
+        }
+    }
+
     @Test fun checkInUsesSchoolDateAndReadsBackOnlySelectedStudent() {
         val branch = UUID(17, 1).toString()
         val routeId = UUID(17, 2).toString()

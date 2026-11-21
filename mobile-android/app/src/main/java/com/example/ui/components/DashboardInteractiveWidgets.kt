@@ -56,8 +56,13 @@ import com.example.data.model.Announcement
 import com.example.data.model.AttendanceStatus
 import com.example.data.model.Invoice
 import com.example.data.model.Student
+import com.example.data.remote.NativeTransportClient
+import com.example.data.remote.TransportSummary
+import com.example.data.remote.TransportTelemetry
+import com.example.ui.navigation.NativeNavigationPolicy
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.Okul360UiState
+import kotlinx.coroutines.CancellationException
 /**
  * Interactive, Summary-Based Dashboard Widgets Section with Drag & Reordering Support
  * Provides customizable operational insights and inline micro-actions for:
@@ -1556,9 +1561,8 @@ fun DailyCashAndApprovalsInteractiveWidget(
     }
 }
 
-/**
- * WIDGET 4: Critical Risk Students & Live Campus/Bus Status ('Kritik Riskli Öğrenciler ve Servis / Kampüs Canlı Durum')
- */
+private data class CampusTransportData(val summary: TransportSummary, val route: String?, val telemetry: TransportTelemetry?)
+
 @Composable
 fun CriticalRiskAndCampusPulseWidget(
     state: Okul360UiState,
@@ -1574,13 +1578,25 @@ fun CriticalRiskAndCampusPulseWidget(
     }
     var expanded by remember { mutableStateOf(false) }
 
-    val activeBuses = remember(state.busRoutes) {
-        state.busRoutes.filter {
-            it.current_status == "MORNING_ROUTE" || it.current_status == "EVENING_ROUTE"
+    val canReadBus = state.isLoggedIn && NativeNavigationPolicy.has(state.currentUser, "bus.read") &&
+        (state.currentUser.is_super_admin != true || !state.workspaceOrganizationId.isNullOrBlank())
+    val busData by key(financePresentationScope(state), state.serverBaseUrl, canReadBus) {
+        produceState<CampusTransportData?>(null) {
+            if (canReadBus) {
+                try {
+                    val client = NativeTransportClient(state.selectedBranchId)
+                    val totals = client.summary()
+                    value = CampusTransportData(totals, null, null)
+                    val first = client.routes("", 1, 0).singleOrNull()
+                    val recorded = first?.let { client.latest(it) }
+                    value = CampusTransportData(totals, first?.name, recorded)
+                } catch (failure: Exception) {
+                    if (failure is CancellationException) throw failure
+                }
+            }
         }
     }
     val riskItems = state.churnRiskList
-    val onlineDevicesCount = state.hardwareDevices.count { it.status.equals("ONLINE", ignoreCase = true) }
 
     val brand = LocalDashboardBrandPalette.current
 
@@ -1631,12 +1647,12 @@ fun CriticalRiskAndCampusPulseWidget(
                                 modifier = Modifier.weight(1f, fill = false)
                             )
                             Spacer(modifier = Modifier.width(5.dp))
-                            Surface(
+                            busData?.let { bus -> Surface(
                                 shape = RoundedCornerShape(6.dp),
                                 color = Color(0xFFE0F2FE)
                             ) {
                                 Text(
-                                    text = "${activeBuses.size.coerceAtLeast(state.busRoutes.size)} Servis",
+                                    text = "${bus.summary.routes} Rota",
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF0369A1),
@@ -1644,10 +1660,10 @@ fun CriticalRiskAndCampusPulseWidget(
                                     maxLines = 1,
                                     modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
                                 )
-                            }
+                            } }
                         }
                         Text(
-                            text = "${riskItems.size.coerceAtLeast(2)} Kritik Takip • ${onlineDevicesCount.coerceAtLeast(3)} RFID Turnike Aktif",
+                            text = "${riskItems.size} kayıtlı kritik takip",
                             fontSize = 11.sp,
                             color = Color(0xFF64748B),
                             maxLines = 1,
@@ -1722,15 +1738,14 @@ fun CriticalRiskAndCampusPulseWidget(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Column {
-                            val firstBus = state.busRoutes.firstOrNull()
                             Text(
-                                text = firstBus?.plate_number ?: "34 OKL 360",
+                                text = busData?.route ?: "Servis kayıtları",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
                                 color = Color(0xFF166534)
                             )
                             Text(
-                                text = "Varış: ~${firstBus?.eta_minutes_to_next_stop ?: 4} dk",
+                                text = busData?.telemetry?.let { "Son konum · ${it.time}" } ?: "Görüntülenebilir konum kaydı yok",
                                 fontSize = 10.sp,
                                 color = Color(0xFF15803D)
                             )
@@ -1805,42 +1820,7 @@ fun CriticalRiskAndCampusPulseWidget(
                             }
                         }
                     } else {
-                        state.students.take(2).forEach { std ->
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = Color(0xFFF8FAFC),
-                                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 3.dp)
-                                    .clickable { onSelectStudent(std) }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "${std.full_name} (${std.class_name})",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 12.sp,
-                                            color = Color(0xFF0F172A)
-                                        )
-                                        Text(
-                                            text = "Veli: ${std.parent_name} • ${std.parent_phone}",
-                                            fontSize = 10.5.sp,
-                                            color = Color(0xFF64748B)
-                                        )
-                                    }
-                                    Icon(
-                                        imageVector = Icons.Default.ChevronRight,
-                                        contentDescription = null,
-                                        tint = Color(0xFF94A3B8)
-                                    )
-                                }
-                            }
-                        }
+                        Text("Görüntülenebilir kritik takip kaydı yok.")
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
@@ -1851,6 +1831,7 @@ fun CriticalRiskAndCampusPulseWidget(
                     ) {
                         Button(
                             onClick = onNavigateToTransport,
+                            enabled = canReadBus,
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color(0xFF0284C7),
@@ -1863,7 +1844,7 @@ fun CriticalRiskAndCampusPulseWidget(
                         ) {
                             Icon(Icons.Default.DirectionsBus, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Canlı Servis GPS", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("Servis kayıtları", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
 
                         OutlinedButton(

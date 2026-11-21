@@ -33,25 +33,32 @@ internal fun TransportScreen(state: Okul360UiState, onNavigateBack: () -> Unit) 
         var routeId by remember { mutableStateOf<String?>(null) }
         val canWrite = NativeNavigationPolicy.has(user, "bus.write")
         val selected = routeId
-        if (selected == null) TransportRoutes(client, onNavigateBack) { routeId = it }
+        if (selected == null) TransportRoutes(client, canWrite, onNavigateBack) { routeId = it }
         else key(selected) { TransportRoutePane(client, selected, canWrite, onBack = { routeId = null }) }
     }
 }
 
 @Composable
-private fun TransportRoutes(client: NativeTransportClient, onBack: () -> Unit, select: (String) -> Unit) {
+private fun TransportRoutes(client: NativeTransportClient, canWrite: Boolean, onBack: () -> Unit, select: (String) -> Unit) {
     var search by remember { mutableStateOf("") }
     var page by remember { mutableIntStateOf(0) }
     var revision by remember { mutableIntStateOf(0) }
+    var editor by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var formError by remember { mutableStateOf<String?>(null) }
+    val coroutine = rememberCoroutineScope()
     val results by transportLoad(search, page, revision) {
         if (search.isNotBlank()) delay(250)
         client.routes(search.trim(), 21, page * 20)
     }
+    val summary by transportLoad(revision) { client.summary() }
     LazyColumn(Modifier.fillMaxSize().testTag("native_transport_routes"), contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Text("Servis ve Ulaşım", style = MaterialTheme.typography.headlineSmall)
             TextButton(onClick = onBack) { Text("Geri") }
+            summary?.getOrNull()?.let { Text("Rota ${it.routes} · Aktif ${it.active} · Kapasite ${it.capacity}") }
+            if (canWrite) Button(enabled = !busy, onClick = { editor = true; formError = null }) { Text("Yeni servis rotası") }
             TransportField(search, "Rota adı veya plaka", 100) { search = it; page = 0 }
             TextButton(onClick = { revision++ }) { Text("Rotaları yenile") }
         }
@@ -63,6 +70,25 @@ private fun TransportRoutes(client: NativeTransportClient, onBack: () -> Unit, s
             }
         }
         if (page > 0 || routes.size > 20) item { TransportPager(page, routes.size, false) { page = it } }
+    }
+    if (editor && canWrite) {
+        TransportRouteEditor(TransportRouteDraft(client.fixedBranch.orEmpty()), false, client.fixedBranch != null,
+            busy, formError, { editor = false }, { branch, searchName, driver -> client.routeChoices(branch, searchName, driver, null) }) { draft, request ->
+            if (!busy) {
+                busy = true
+                formError = null
+                coroutine.launch {
+                    try {
+                        val saved = client.saveRoute(draft, null, request)
+                        editor = false
+                        select(saved.id)
+                    } catch (failure: Exception) {
+                        if (failure is CancellationException) throw failure
+                        formError = "Servis rotası doğrulanamadı. ${failure.message.orEmpty()}"
+                    } finally { busy = false }
+                }
+            }
+        }
     }
 }
 
@@ -77,9 +103,26 @@ private fun TransportRoutePane(client: NativeTransportClient, id: String, canWri
     var student by remember { mutableStateOf<TransportStudent?>(null) }
     var picking by remember { mutableStateOf(false) }
     var editor by remember { mutableStateOf(false) }
+    var editingRoute by remember { mutableStateOf(false) }
+    var editingStop by remember { mutableStateOf(false) }
+    var currentStop by remember { mutableStateOf<TransportStop?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val coroutine = rememberCoroutineScope()
+    fun save(action: suspend () -> String) {
+        if (!canWrite || busy) return
+        busy = true
+        message = null
+        coroutine.launch {
+            try {
+                message = action()
+                revision++
+            } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                message = "Servis kaydı doğrulanamadı. ${failure.message.orEmpty()}"
+            } finally { busy = false }
+        }
+    }
     val routeResponse by transportLoad(id, revision) { client.detail(id) }
     val route = routeResponse?.getOrNull()
     val options by transportLoad(route?.id) { route?.let { client.options(it, "") } }
@@ -100,6 +143,9 @@ private fun TransportRoutePane(client: NativeTransportClient, id: String, canWri
             if (route != null) Text(listOf(route.branchName, route.number, route.plate, route.driver,
                 "Kapasite ${route.capacity}", transportStatus(route.status)).filter(String::isNotBlank).joinToString(" · "))
             route?.description?.takeIf(String::isNotBlank)?.let { Text(it) }
+            if (canWrite && route?.updatedAt?.isNotBlank() == true) TextButton(enabled = !busy, onClick = {
+                editingRoute = true; message = null
+            }) { Text("Servis rotasını düzenle") }
             message?.let { Text(it) }
             TextButton(enabled = !busy, onClick = { revision++ }) { Text("Rota kayıtlarını yenile") }
         }
@@ -122,11 +168,19 @@ private fun TransportRoutePane(client: NativeTransportClient, id: String, canWri
                         latest.speed?.let { Text("Hız ${it} km/sa") }
                     }
                     Text("Rota durakları", style = MaterialTheme.typography.titleMedium)
+                    if (canWrite) Button(enabled = !busy, onClick = {
+                        currentStop = null; editingStop = true; message = null
+                    }) { Text("Rota durağı ekle") }
                 }
                 val rows = stops?.getOrNull().orEmpty()
                 if (rows.isEmpty()) item { Text(transportMessage(stops, "Rota için kayıtlı durak yok.")) }
                 items(rows.take(20), key = { it.id }) { stop ->
-                    TransportRecord(listOf("${stop.order}. ${stop.name}", stop.eta.takeIf(String::isNotBlank)?.let { "Tahmini varış $it" }.orEmpty()))
+                    TransportRecord(listOf("${stop.order}. ${stop.name}",
+                        stop.eta.takeIf(String::isNotBlank)?.let { "Tahmini varış $it" }.orEmpty())) {
+                        if (canWrite && stop.version.isNotBlank()) TextButton(enabled = !busy, onClick = {
+                            currentStop = stop; editingStop = true; message = null
+                        }) { Text("Durağı düzenle") }
+                    }
                 }
                 if (stopsPage > 0 || rows.size > 20) item { TransportPager(stopsPage, rows.size, busy) { stopsPage = it } }
             } else {
@@ -178,22 +232,31 @@ private fun TransportRoutePane(client: NativeTransportClient, id: String, canWri
     if (route != null && editor && canWrite && selected != null && day != null) {
         val existing = records?.getOrNull()?.firstOrNull { it.studentId == selected.id }
         TransportAttendanceEditor(selected, day, existing, busy, message, onClose = { editor = false }) { status, notes, event, time, request ->
-            if (!busy) {
-                busy = true
-                message = null
-                coroutine.launch {
-                    try {
-                        if (event == null) client.saveAttendance(route, selected.id, day, status, notes)
-                        else client.checkIn(route, selected.id, event, LocalDateTime.of(day, requireNotNull(time)), request)
-                        message = "Servis kaydı sunucudan doğrulandı."
-                        revision++
-                        attendancePage = 0
-                        editor = false
-                    } catch (failure: Exception) {
-                        if (failure is CancellationException) throw failure
-                        message = "Servis kaydı doğrulanamadı. ${failure.message.orEmpty()}"
-                    } finally { busy = false }
-                }
+            save {
+                if (event == null) client.saveAttendance(route, selected.id, day, status, notes)
+                else client.checkIn(route, selected.id, event, LocalDateTime.of(day, requireNotNull(time)), request)
+                attendancePage = 0
+                editor = false
+                "Servis kaydı sunucudan doğrulandı."
+            }
+        }
+    }
+    if (route != null && canWrite && editingRoute) {
+        TransportRouteEditor(TransportRouteDraft(route.branch, route.driverId, route.name, route.number, route.plate,
+            route.capacity.toString(), route.status, route.description), true, client.fixedBranch != null, busy, message,
+            { editingRoute = false }, { branch, searchName, driver -> client.routeChoices(branch, searchName, driver, route.id) }) { draft, request ->
+            save { client.saveRoute(draft, route, request); editingRoute = false; "Servis rotası sunucudan doğrulandı." }
+        }
+    }
+    if (route != null && canWrite && editingStop) {
+        val stop = currentStop
+        val draft = stop?.let { TransportStopDraft(it.name, it.order.toString(), it.latitude, it.longitude, it.eta) } ?: TransportStopDraft()
+        TransportStopEditor(draft, stop != null, busy, message, { editingStop = false }) { values, request ->
+            save {
+                client.saveStop(route, values, stop, request)
+                editingStop = false
+                stopsPage = 0
+                "Rota durağı sunucudan doğrulandı."
             }
         }
     }
