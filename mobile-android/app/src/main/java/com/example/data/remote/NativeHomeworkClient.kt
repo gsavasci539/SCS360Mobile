@@ -21,6 +21,8 @@ internal data class HomeworkDraft(val title: String = "", val subject: String = 
 internal data class RecordedHomeworkSubmission(val id: String, val studentId: String, val student: String, val text: String, val status: String,
     val score: BigDecimal?, val feedback: String, val time: String, val fileName: String, val fileUrl: String)
 internal data class HomeworkFile(val name: String, val bytes: ByteArray)
+internal data class ParentHomeworkAssignment(val id: String, val title: String, val description: String,
+    val subject: String, val day: String, val status: String, val score: String, val attachment: String)
 internal const val HOMEWORK_FILE_LIMIT = 10L * 1024 * 1024
 
 internal class NativeHomeworkClient(selectedBranch: String) {
@@ -37,8 +39,9 @@ internal class NativeHomeworkClient(selectedBranch: String) {
     private fun JSONObject.wire() = toString().toRequestBody("application/json".toMediaType())
 
     private suspend fun call(path: String, query: Map<String, String?> = emptyMap(), body: RequestBody? = null,
+        endpoint: String = "homework",
         method: String = if (body == null) "GET" else "POST", binary: Boolean = false): Any = scope.io {
-        val url = (base + "homework" + path).toHttpUrl().newBuilder().apply {
+        val url = (base + endpoint + path).toHttpUrl().newBuilder().apply {
             branch?.let { addQueryParameter("branch_id", it) }
             query.forEach { (key, value) -> value?.let { addQueryParameter(key, it) } }
         }.build()
@@ -109,14 +112,23 @@ internal class NativeHomeworkClient(selectedBranch: String) {
         } to data.getBoolean("more_students")
     }
 
-    suspend fun submissions(homework: String, limit: Int, offset: Int, receipt: String? = null): List<RecordedHomeworkSubmission> =
+    suspend fun parentAssignments(student: String): List<ParentHomeworkAssignment> =
+        (call("", endpoint = "parent/child/${id(student)}/homework") as JSONArray).rows().map {
+            ParentHomeworkAssignment(id(it.getString("id")), it.getString("title"), it.text("description"),
+                it.text("subject"), it.text("due_date"), it.getString("status"), it.text("score"), it.text("attachment_url"))
+        }
+
+    suspend fun submissions(homework: String, limit: Int, offset: Int, receipt: String? = null,
+        student: String? = null): List<RecordedHomeworkSubmission> =
         (call("/submissions", mapOf("homework_id" to id(homework), "limit" to limit.toString(), "offset" to offset.toString(),
-            "record_id" to receipt?.let(::id))) as JSONArray).rows().map {
+            "record_id" to receipt?.let(::id), "student_id" to student?.let(::id))) as JSONArray).rows().map {
             val identifier = id(it.getString("id"))
             check(it.getString("homework_id") == homework && (receipt == null || identifier == receipt))
+            val studentId = id(it.getString("student_id"))
+            check(student == null || studentId == student)
             val fileUrl = it.text("attachment_url")
             check(fileUrl.isEmpty() || fileUrl == "/homework/submissions/$identifier/attachment")
-            RecordedHomeworkSubmission(identifier, id(it.getString("student_id")), it.getString("student_name"),
+            RecordedHomeworkSubmission(identifier, studentId, it.getString("student_name"),
                 it.text("submission_text"), it.getString("status"), it.text("score").toBigDecimalOrNull(), it.text("teacher_feedback"),
                 it.getString("submitted_at"), it.text("attachment_file_name"), fileUrl)
         }
@@ -132,7 +144,7 @@ internal class NativeHomeworkClient(selectedBranch: String) {
             call("$target/submit-file", body = form)
         }) as JSONObject
         check(ack.getString("status") == "SUBMITTED")
-        val stored = submissions(homework, 1, 0, id(ack.getString("id"))).single()
+        val stored = submissions(homework, 1, 0, id(ack.getString("id")), student).single()
         check(stored.studentId == student && stored.text == text && stored.status == "SUBMITTED" &&
             (file == null || stored.fileName == file.name && stored.fileUrl.isNotBlank()))
     }
@@ -141,7 +153,7 @@ internal class NativeHomeworkClient(selectedBranch: String) {
         val body = JSONObject().put("score", score.toPlainString()).put("teacher_feedback", feedback.ifBlank { null } ?: JSONObject.NULL)
         val ack = call("/submissions/${id(submission.id)}/grade", body = body.wire(), method = "PUT") as JSONObject
         check(ack.getString("id") == submission.id && ack.getString("status") == "GRADED")
-        val stored = submissions(homework, 1, 0, submission.id).single()
+        val stored = submissions(homework, 1, 0, submission.id, submission.studentId).single()
         check(stored.studentId == submission.studentId && stored.score?.compareTo(score) == 0 &&
             stored.feedback == feedback && stored.status == "GRADED")
     }

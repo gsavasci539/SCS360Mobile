@@ -23,6 +23,61 @@ import java.util.concurrent.atomic.AtomicReference
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class NativeHomeworkClientTest {
+    @Test fun parentReadsAndConfirmsOnlyTheSelectedChild() {
+        val student = UUID(23, 1).toString()
+        val other = UUID(23, 2).toString()
+        val homework = UUID(23, 3).toString()
+        val submission = UUID(23, 4).toString()
+        val storedStudent = AtomicReference(other)
+        val posted = AtomicReference<JSONObject>()
+        val requests = CopyOnWriteArrayList<String>()
+        val base = ApiClientProvider.activeBaseUrl
+        val auth = ApiClientProvider.interceptor
+        val oldToken = auth.authToken
+        val oldTenant = auth.tenantId
+        val oldBranch = auth.branchId
+        val oldWorkspace = auth.workspaceOrganizationId
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/api/") { exchange ->
+            val path = exchange.requestURI.path
+            requests += "${exchange.requestMethod} ${exchange.requestURI}"
+            val payload = when (path) {
+                "/api/parent/child/$student/homework" -> JSONArray().put(JSONObject().put("id", homework)
+                    .put("title", "İzole ödev").put("status", "PENDING"))
+                "/api/homework/$homework/submit" -> {
+                    posted.set(JSONObject(exchange.requestBody.use { it.readBytes().decodeToString() }))
+                    JSONObject().put("id", submission).put("status", "SUBMITTED")
+                }
+                else -> JSONArray().put(JSONObject().put("id", submission).put("homework_id", homework)
+                    .put("student_id", storedStudent.get()).put("student_name", "İzole öğrenci")
+                    .put("status", "SUBMITTED").put("submission_text", "İzole teslim").put("submitted_at", "2026-11-21T03:00:00Z"))
+            }
+            val bytes = JSONObject().put("success", true).put("data", payload).toString().toByteArray()
+            exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+        server.start()
+        try {
+            ApiClientProvider.createService("http://127.0.0.1:${server.address.port}/api/")
+            auth.setSession("isolated-parent-homework", UUID(23, 5).toString(), UUID(23, 6).toString())
+            runBlocking {
+                val client = NativeHomeworkClient("all")
+                assertEquals(homework, client.parentAssignments(student).single().id)
+                assertTrue(runCatching { client.submit(homework, student, "İzole teslim", null) }.isFailure)
+                storedStudent.set(student)
+                client.submit(homework, student, "İzole teslim", null)
+            }
+            assertEquals(student, posted.get().getString("student_id"))
+            assertTrue(requests.filter { it.startsWith("GET /api/homework/submissions") }.all {
+                "student_id=$student" in it && "record_id=$submission" in it && "branch_id" !in it
+            })
+        } finally {
+            ApiClientProvider.createService(base)
+            auth.setSession(oldToken, oldTenant, oldBranch, oldWorkspace)
+            server.stop(0)
+        }
+    }
+
     @Test fun gradeVerifiesTheExactSubmissionAndBranchBeforeSuccess() {
         val branch = UUID(22, 1).toString()
         val homework = UUID(22, 2).toString()

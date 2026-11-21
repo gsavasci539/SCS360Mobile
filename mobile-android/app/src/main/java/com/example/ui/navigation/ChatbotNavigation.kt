@@ -21,7 +21,7 @@ internal fun chatbotDestination(state: Okul360UiState, tag: String, studentId: S
         val parent = when (tag) {
             CHATBOT_MESSAGING -> ParentNavTab.MESSAGING.takeIf { NativeNavigationPolicy.has(actor, "parent.send_message") }
             "VIEW_PAYMENTS", "VIEW_DEBTS" -> ParentNavTab.PAYMENTS.takeIf { NativeNavigationPolicy.has(actor, "parent.view_finances", "parent.view_finance") }
-            "VIEW_HOMEWORK" -> ParentNavTab.MATERIALS.takeIf { NativeNavigationPolicy.has(actor, "parent.view_children") }
+            "VIEW_HOMEWORK" -> ParentNavTab.HOMEWORK.takeIf { NativeNavigationPolicy.has(actor, "parent.view_children") }
             else -> null
         }
         return parent?.let { ChatbotDestination.Parent(it, studentId) }

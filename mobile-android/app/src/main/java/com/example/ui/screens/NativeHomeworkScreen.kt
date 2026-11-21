@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import com.example.data.remote.*
 import com.example.ui.components.financePresentationScope
@@ -171,7 +172,7 @@ private fun HomeworkWorkspace(client: NativeHomeworkClient, canWrite: Boolean, o
             } }) { Text("Kaldır") } },
             dismissButton = { TextButton(enabled = !busy, onClick = { deleting = false }) { Text("İptal") } })
     }
-    if (canWrite && submitting && current != null) HomeworkSubmitDialog(client, current, busy, notice, { submitting = false }) { student, text, file ->
+    if (canWrite && submitting && current != null) HomeworkSubmitDialog(client, current.id, current.title, busy, notice, { submitting = false }) { student, text, file ->
         write { client.submit(current.id, student, text, file); submitting = false; submissionsPage = 0; "Öğrenci teslimi doğrulandı." }
     }
     val marked = grade
@@ -236,12 +237,13 @@ private fun HomeworkEditor(client: NativeHomeworkClient, initial: HomeworkDraft,
 }
 
 @Composable
-private fun HomeworkSubmitDialog(client: NativeHomeworkClient, homework: RecordedHomework, busy: Boolean, notice: String?,
-    close: () -> Unit, save: (String, String, HomeworkFile?) -> Unit) {
-    var choosing by remember { mutableStateOf(true) }
+private fun HomeworkSubmitDialog(client: NativeHomeworkClient, homework: String, title: String, busy: Boolean, notice: String?,
+    close: () -> Unit, assignedStudent: HomeworkStudentChoice? = null, previousText: String = "",
+    save: (String, String, HomeworkFile?) -> Unit) {
+    var choosing by remember { mutableStateOf(assignedStudent == null) }
     var studentsSearch by remember { mutableStateOf("") }
-    var student by remember { mutableStateOf<HomeworkStudentChoice?>(null) }
-    var text by remember { mutableStateOf("") }
+    var student by remember { mutableStateOf(assignedStudent) }
+    var text by remember { mutableStateOf(previousText) }
     var file by remember { mutableStateOf<HomeworkFile?>(null) }
     var fileBusy by remember { mutableStateOf(false) }
     var fileError by remember { mutableStateOf<String?>(null) }
@@ -278,7 +280,7 @@ private fun HomeworkSubmitDialog(client: NativeHomeworkClient, homework: Recorde
     if (choosing) {
         val options by homeworkLoad(studentsSearch) {
             if (studentsSearch.isNotBlank()) delay(250)
-            client.students(homework.id, studentsSearch.trim())
+            client.students(homework, studentsSearch.trim())
         }
         val result = options?.getOrNull()
         val rows = result?.first.orEmpty()
@@ -292,8 +294,9 @@ private fun HomeworkSubmitDialog(client: NativeHomeworkClient, homework: Recorde
     }
     ConsentFormDialog("Öğrenci ödev teslimi", "native_homework_submission", busy || fileBusy, close, fields = {
         item {
-            Text(homework.title)
-            TextButton(enabled = !busy && !fileBusy, onClick = { choosing = true }) { Text(student?.name ?: "Öğrenci seç") }
+            Text(title)
+            if (assignedStudent != null) Text(assignedStudent.name)
+            else TextButton(enabled = !busy && !fileBusy, onClick = { choosing = true }) { Text(student?.name ?: "Öğrenci seç") }
         }
         item { HomeworkField(text, "Teslim metni", 10000, busy || fileBusy) { text = it } }
         item {
@@ -310,6 +313,108 @@ private fun HomeworkSubmitDialog(client: NativeHomeworkClient, homework: Recorde
         Button(enabled = !busy && !fileBusy && student != null && (text.isNotBlank() || file != null),
             onClick = { save(requireNotNull(student).id, text.trim(), file) }) { Text("Teslimi kaydet") }
     })
+}
+
+@Composable
+internal fun ParentHomeworkPane(studentId: String, studentName: String) {
+    val client = remember(studentId) { NativeHomeworkClient("all") }
+    var selected by remember { mutableStateOf<ParentHomeworkAssignment?>(null) }
+    var revision by remember { mutableIntStateOf(0) }
+    var busy by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(false) }
+    var notice by remember { mutableStateOf<String?>(null) }
+    var fileTarget by remember { mutableStateOf<RecordedHomeworkSubmission?>(null) }
+    val chosen = selected
+    val assignments by homeworkLoad(studentId, revision) { client.parentAssignments(studentId) }
+    val submission by homeworkLoad(studentId, chosen?.id, revision) {
+        chosen?.let { assignment -> client.submissions(assignment.id, 1, 0, student = studentId).singleOrNull() }
+    }
+    val record = submission?.getOrNull()
+    val coroutine = rememberCoroutineScope()
+    val resolver = LocalContext.current.contentResolver
+    val uriHandler = LocalUriHandler.current
+    fun action(work: suspend () -> String) {
+        if (busy) return
+        notice = null
+        busy = true
+        coroutine.launch {
+            try {
+                notice = work()
+            } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                notice = "Ödev işlemi doğrulanamadı. ${failure.message.orEmpty()}"
+            } finally { busy = false }
+        }
+    }
+    val saveFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val target = fileTarget
+        fileTarget = null
+        if (uri != null && target != null) action {
+            val bytes = client.download(target)
+            withContext(Dispatchers.IO) {
+                client.ensureCurrent()
+                checkNotNull(resolver.openOutputStream(uri, "wt")).use { it.write(bytes) }
+            }
+            "Teslim dosyası kaydedildi."
+        }
+    }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item {
+            Text(chosen?.title ?: "Ödevler", style = MaterialTheme.typography.headlineSmall)
+            Text(studentName)
+            notice?.let { Text(it) }
+            if (chosen != null) TextButton(enabled = !busy, onClick = { selected = null; notice = null }) { Text("Ödevlere dön") }
+            TextButton(enabled = !busy, onClick = { revision++ }) { Text("Ödevleri yenile") }
+        }
+        if (chosen == null) {
+            val rows = assignments?.getOrNull().orEmpty()
+            if (rows.isEmpty()) item { Text(homeworkMessage(assignments, "Bu öğrenciye atanmış etkin ödev yok.")) }
+            items(rows, key = { it.id }) { row ->
+                HomeworkCard(listOf(row.title, row.subject, row.day, homeworkStatus(row.status),
+                    row.score.takeIf(String::isNotBlank)?.let { "Puan $it / 100" }.orEmpty())) {
+                    TextButton(onClick = { selected = row; notice = null }) { Text("Ödevi aç") }
+                }
+            }
+        } else item {
+            HomeworkCard(listOf(chosen.subject, chosen.day, chosen.description)) {
+                val link = android.net.Uri.parse(chosen.attachment)
+                if (link.scheme == "https" && !link.host.isNullOrBlank() && link.userInfo == null) {
+                    TextButton(enabled = !busy, onClick = {
+                        try { uriHandler.openUri(chosen.attachment) }
+                        catch (_: IllegalArgumentException) { notice = "Dosya bağlantısı açılamadı." }
+                    }) { Text("Ödev bağlantısını aç") }
+                }
+                when {
+                    submission == null -> Text("Teslim kaydı yükleniyor…")
+                    submission?.isFailure == true -> Text("Teslim kaydı yüklenemedi.")
+                    record == null -> Text("Henüz teslim yok.")
+                    else -> {
+                        Text(homeworkStatus(record.status))
+                        record.score?.let { Text("Puan ${it.toPlainString()} / 100") }
+                        listOf(record.text, record.feedback).filter(String::isNotBlank).forEach { Text(it) }
+                        if (record.fileUrl.isNotBlank()) TextButton(enabled = !busy && fileTarget == null, onClick = {
+                            fileTarget = record
+                            saveFile.launch(record.fileName.ifBlank { "teslim-dosyasi" })
+                        }) { Text("Teslim dosyasını indir") }
+                    }
+                }
+                if (submission?.isSuccess == true && record?.status != "GRADED") {
+                    Button(enabled = !busy, onClick = { notice = null; editing = true }) {
+                        Text(if (record == null) "Ödevi teslim et" else "Teslimi güncelle")
+                    }
+                }
+            }
+        }
+    }
+    if (editing && chosen != null) HomeworkSubmitDialog(client, chosen.id, chosen.title, busy, notice, { editing = false },
+        HomeworkStudentChoice(studentId, studentName), record?.text.orEmpty()) { id, text, file ->
+        action {
+            client.submit(chosen.id, id, text, file)
+            editing = false
+            revision++
+            "Teslim sunucudan doğrulandı."
+        }
+    }
 }
 
 @Composable
@@ -334,6 +439,7 @@ private fun homeworkStatus(code: String) = when (code) {
     "DRAFT" -> "Taslak"
     "GRADED" -> "Değerlendirildi"
     "SUBMITTED" -> "Teslim edildi"
+    "PENDING" -> "Teslim bekliyor"
     else -> code
 }
 

@@ -6,6 +6,7 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -29,6 +30,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -65,6 +67,7 @@ enum class ParentNavTab(
 ) {
     TODAY("Bugün", Icons.Default.Face, Icons.Outlined.Face),
     MATERIALS("Materyal", Icons.Default.MenuBook, Icons.Outlined.MenuBook),
+    HOMEWORK("Ödevler", Icons.Default.Assignment, Icons.Outlined.Assignment),
     MESSAGING("İletişim", Icons.Default.ChatBubble, Icons.Outlined.ChatBubble),
     PAYMENTS("Ödemeler", Icons.Default.CreditCard, Icons.Outlined.CreditCard),
     CONSENTS("İzin belgeleri", Icons.Default.FactCheck, Icons.Outlined.FactCheck),
@@ -122,7 +125,9 @@ fun ParentPortalScreen(
     val visibleTabs = if (limitedToModules) buildList {
         if (canReadAttendance) add(ParentNavTab.DIARY)
         if (canReadFinances) add(ParentNavTab.PAYMENTS)
-    } else ParentNavTab.entries.filter { it != ParentNavTab.CONSENTS || canReadConsents }
+    } else ParentNavTab.entries.filter { tab ->
+        canReadConsents || tab !in setOf(ParentNavTab.CONSENTS, ParentNavTab.HOMEWORK, ParentNavTab.MATERIALS)
+    }
     // The parent portal endpoint has already authorized every relationship.
     val parentChildren = state.parentChildren
     val validShortcut = chatbotStudentId == null || parentChildren.any { it.id == chatbotStudentId }
@@ -361,62 +366,82 @@ fun ParentPortalScreen(
                     containerColor = MaterialTheme.colorScheme.surface,
                     tonalElevation = 3.dp
                 ) {
-                    visibleTabs.forEach { tab ->
-                        val label = if (limitedToModules && tab == ParentNavTab.DIARY) "Yoklama" else tab.title
-                        val isSelected = selectedTab == tab && tab != ParentNavTab.AI_CHATBOT
-                        NavigationBarItem(
-                            selected = isSelected,
-                            onClick = {
-                                if (tab == ParentNavTab.AI_CHATBOT) {
-                                    onOpenChatbot?.invoke()
-                                } else {
-                                    selectedTab = tab
-                                }
-                            },
-                            icon = {
-                                val unreadBadge = if (tab == ParentNavTab.MESSAGING) {
-                                    state.announcements.count { it.read_count == 0 }
-                                } else 0
-                                if (unreadBadge > 0) {
-                                    BadgedBox(
-                                        badge = {
-                                            Badge(containerColor = AccentRose, contentColor = Color.White) {
-                                                Text("$unreadBadge", fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
-                                            }
+                    BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        val density = LocalDensity.current
+                        val minTabWidth = 80.dp * density.fontScale.coerceAtLeast(1f)
+                        val rowWidth = maxOf(maxWidth, minTabWidth * visibleTabs.size)
+                        val viewport = with(density) { maxWidth.roundToPx() }
+                        val tabWidth = with(density) { (rowWidth / visibleTabs.size).roundToPx() }
+                        val scroll = rememberScrollState()
+                        LaunchedEffect(selectedTab, viewport, tabWidth) {
+                            val start = visibleTabs.indexOf(selectedTab).coerceAtLeast(0) * tabWidth
+                            val end = start + tabWidth
+                            val target = when {
+                                start < scroll.value -> start
+                                end > scroll.value + viewport -> end - viewport
+                                else -> scroll.value
+                            }
+                            if (target != scroll.value) scroll.animateScrollTo(target.coerceIn(0, scroll.maxValue))
+                        }
+                        Row(Modifier.horizontalScroll(scroll).width(rowWidth)) {
+                            visibleTabs.forEach { tab ->
+                                val label = if (limitedToModules && tab == ParentNavTab.DIARY) "Yoklama" else tab.title
+                                val isSelected = selectedTab == tab && tab != ParentNavTab.AI_CHATBOT
+                                NavigationBarItem(
+                                    selected = isSelected,
+                                    onClick = {
+                                        if (tab == ParentNavTab.AI_CHATBOT) {
+                                            onOpenChatbot?.invoke()
+                                        } else {
+                                            selectedTab = tab
                                         }
-                                    ) {
-                                        Icon(
-                                            imageVector = if (isSelected) tab.selectedIcon else tab.unselectedIcon,
-                                            contentDescription = label,
-                                            modifier = Modifier.size(21.dp)
+                                    },
+                                    icon = {
+                                        val unreadBadge = if (tab == ParentNavTab.MESSAGING) {
+                                            state.announcements.count { it.read_count == 0 }
+                                        } else 0
+                                        if (unreadBadge > 0) {
+                                            BadgedBox(
+                                                badge = {
+                                                    Badge(containerColor = AccentRose, contentColor = Color.White) {
+                                                        Text("$unreadBadge", fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
+                                                    }
+                                                }
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (isSelected) tab.selectedIcon else tab.unselectedIcon,
+                                                    contentDescription = label,
+                                                    modifier = Modifier.size(21.dp)
+                                                )
+                                            }
+                                        } else {
+                                            Icon(
+                                                imageVector = if (isSelected) tab.selectedIcon else tab.unselectedIcon,
+                                                contentDescription = label,
+                                                modifier = Modifier.size(21.dp)
+                                            )
+                                        }
+                                    },
+                                    label = {
+                                        Text(
+                                            text = label,
+                                            fontSize = 9.5.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
                                         )
-                                    }
-                                } else {
-                                    Icon(
-                                        imageVector = if (isSelected) tab.selectedIcon else tab.unselectedIcon,
-                                        contentDescription = label,
-                                        modifier = Modifier.size(21.dp)
+                                    },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = Color(0xFF7C3AED),
+                                        selectedTextColor = Color(0xFF7C3AED),
+                                        indicatorColor = Color(0xFF7C3AED).copy(alpha = 0.15f),
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                }
-                            },
-                            label = {
-                                Text(
-                                    text = label,
-                                    fontSize = 9.5.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    softWrap = false,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
                                 )
-                            },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Color(0xFF7C3AED),
-                                selectedTextColor = Color(0xFF7C3AED),
-                                indicatorColor = Color(0xFF7C3AED).copy(alpha = 0.15f),
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        )
+                            }
+                        }
                     }
                 }
             }
@@ -482,6 +507,7 @@ fun ParentPortalScreen(
                         onOpenDismissal = onOpenDismissal
                     )
                     ParentNavTab.MATERIALS -> CourseMaterialsScreen(state, child = currentChild.id)
+                    ParentNavTab.HOMEWORK -> key(presentationScope, currentChild.id) { ParentHomeworkPane(currentChild.id, currentChild.full_name) }
                     ParentNavTab.MESSAGING -> key(presentationScope, currentChild.id) { ParentVerifiedMessagingPane(currentChild.id, state.currentUser) }
                     ParentNavTab.PAYMENTS -> ParentPaymentsTab(
                         student = currentChild,
