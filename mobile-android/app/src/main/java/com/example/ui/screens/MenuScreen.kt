@@ -115,7 +115,7 @@ fun MenuScreen(
 
     val communicationItems = remember(state) {
         listOf(
-            MenuItemData("Giden Kutusu & Kuyruk", "Toplu SMS / WhatsApp", Icons.Default.Outbox, Color(0xFFE0E7FF), Color(0xFF4338CA), "${state.broadcastJobs.size}", onNavigateToOutbox),
+            MenuItemData("Giden Kutusu & Kuyruk", "Gönderim kayıtları ve toplu iletiler", Icons.Default.Outbox, Color(0xFFE0E7FF), Color(0xFF4338CA), null, onNavigateToOutbox),
             MenuItemData("Duyurular & Bildirim", "${state.announcements.size} Duyuru", Icons.Default.Campaign, Color(0xFFF3E8FF), Color(0xFF7E22CE), "${state.announcements.size}", onNavigateToCommunication),
             MenuItemData("Özel Mesajlaşma", "Sohbetler", Icons.Default.ChatBubbleOutline, Color(0xFFD1FAE5), Color(0xFF059669), onClick = onNavigateToDirectMessaging),
             MenuItemData("Veli Randevuları", "Birebir Görüşmeler", Icons.Default.EventAvailable, Color(0xFFE0F2FE), Color(0xFF0369A1), "${state.appointments.size}", onNavigateToAppointments),

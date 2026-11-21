@@ -148,15 +148,6 @@ fun Okul360NavHost(
                 onDeleteTemplate = { id ->
                     viewModel.deleteTemplate(id)
                 },
-                onTriggerPushTest = { title, msg, chan ->
-                    viewModel.triggerCustomPush(title, msg, chan)
-                },
-                onTriggerDelayedPushTest = { delaySec, title, msg, chan ->
-                    viewModel.triggerDelayedPush(delaySec, title, msg, chan)
-                },
-                onOpenNotificationSettings = {
-                    viewModel.openDeviceNotificationSettings()
-                }
             )
         }
 
@@ -176,15 +167,6 @@ fun Okul360NavHost(
                 onDeleteTemplate = { id ->
                     viewModel.deleteTemplate(id)
                 },
-                onTriggerPushTest = { title, msg, chan ->
-                    viewModel.triggerCustomPush(title, msg, chan)
-                },
-                onTriggerDelayedPushTest = { delaySec, title, msg, chan ->
-                    viewModel.triggerDelayedPush(delaySec, title, msg, chan)
-                },
-                onOpenNotificationSettings = {
-                    viewModel.openDeviceNotificationSettings()
-                }
             )
         }
 
@@ -378,9 +360,6 @@ fun Okul360NavHost(
                 onTestBackendConnection = { viewModel.testBackendConnection() },
                 onUpdateServerConfig = { url, tenant -> viewModel.updateServerSettings(url, tenant) },
                 onOpenNotificationSettings = { viewModel.openDeviceNotificationSettings() },
-                onTestNotification = {
-                    viewModel.triggerCustomPush("Push Bildirim Testi", "Android push bildirim sistemi başarıyla çalışıyor.", "ANNOUNCEMENT")
-                },
                 onClearLocalCache = { viewModel.clearLocalCache() },
                 onLogout = {
                     viewModel.logout()

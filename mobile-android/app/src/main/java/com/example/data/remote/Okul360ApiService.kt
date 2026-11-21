@@ -927,25 +927,6 @@ interface Okul360ApiService {
     @DELETE("exams/{id}")
     suspend fun deleteExam(@Path("id") id: String): Map<String, Any>
 
-    // 11. İletişim, Outbox & Şablonlar (Communications)
-    @GET("communications/broadcast-jobs")
-    suspend fun getBroadcastJobs(): List<BroadcastJob>
-
-    @POST("communications/broadcast-jobs")
-    suspend fun createBroadcastJob(@Body job: BroadcastJob): BroadcastJob
-
-    @POST("communications/broadcast-jobs/{id}/send")
-    suspend fun sendBroadcastJob(@Path("id") id: String): Map<String, Any>
-
-    @GET("communications/message-templates")
-    suspend fun getMessageTemplates(): List<MessageTemplate>
-
-    @POST("communications/message-templates")
-    suspend fun createMessageTemplate(@Body template: MessageTemplate): MessageTemplate
-
-    @GET("communications/sms-providers")
-    suspend fun getSmsProviders(): List<SmsProvider>
-
     // 12. Veli Portalı İlaç & İzin (Parent Requests)
     @GET("parent/child/{id}/medicine-requests")
     suspend fun getChildMedicineRequests(@Path("id") childId: String): List<MedicineRequest>

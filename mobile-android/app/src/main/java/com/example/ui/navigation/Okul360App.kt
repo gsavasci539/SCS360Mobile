@@ -926,15 +926,6 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onDeleteTemplate = { id ->
                                     viewModel.deleteTemplate(id)
                                 },
-                                onTriggerPushTest = { title, msg, chan ->
-                                    viewModel.triggerCustomPush(title, msg, chan)
-                                },
-                                onTriggerDelayedPushTest = { delaySec, title, msg, chan ->
-                                    viewModel.triggerDelayedPush(delaySec, title, msg, chan)
-                                },
-                                onOpenNotificationSettings = {
-                                    viewModel.openDeviceNotificationSettings()
-                                }
                             )
                             SubScreen.REPORTS -> ReportsScreen(
                                 state = state,
@@ -1149,12 +1140,8 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onTestBackendConnection = { viewModel.testBackendConnection() },
                                 onUpdateServerConfig = { url, tenant -> viewModel.updateServerSettings(url, tenant) },
                                 onOpenNotificationSettings = { viewModel.openDeviceNotificationSettings() },
-                                onTestNotification = {
-                                    viewModel.triggerCustomPush("Push Bildirim Testi", "Android push bildirim sistemi başarıyla çalışıyor.", "ANNOUNCEMENT")
-                                },
                                 onThemeSelected = { viewModel.selectTheme(it) },
                                 onOpenFeedback = { viewModel.openFeedbackDialog(true) },
-                                onTestPaymentReminder = { viewModel.testPaymentReminderPush() },
                                 onClearLocalCache = { viewModel.clearLocalCache() },
                                 onChangePassword = { currentPass, newPass -> viewModel.changePassword(currentPass, newPass) },
                                 onLogout = {
@@ -1198,13 +1185,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onUpdateExam = { exam -> viewModel.updateExam(exam) },
                                 onDeleteExam = { id -> viewModel.deleteExam(id) }
                             )
-                            SubScreen.OUTBOX -> OutboxBroadcastScreen(
-                                state = state,
-                                onBack = { currentSubScreen = SubScreen.NONE },
-                                onCreateBroadcast = { job -> viewModel.createBroadcastJob(job) },
-                                onSendBroadcast = { id -> viewModel.sendBroadcastJob(id) },
-                                onCreateTemplate = { tpl -> viewModel.createMessageTemplate(tpl) }
-                            )
+                            SubScreen.OUTBOX -> OutboxBroadcastScreen(state) { currentSubScreen = SubScreen.NONE }
                             SubScreen.AI_CHAT_AUDIT -> AiChatAuditScreen(
                                 state = state,
                                 onNavigateBack = { currentSubScreen = SubScreen.NONE }

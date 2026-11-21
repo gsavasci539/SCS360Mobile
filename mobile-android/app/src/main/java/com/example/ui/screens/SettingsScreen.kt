@@ -42,8 +42,6 @@ fun SettingsScreen(
     onThemeSelected: ((String) -> Unit)? = null,
     onOpenFeedback: (() -> Unit)? = null,
     onOpenNotificationSettings: (() -> Unit)? = null,
-    onTestNotification: (() -> Unit)? = null,
-    onTestPaymentReminder: (() -> Unit)? = null,
     onClearLocalCache: (() -> Unit)? = null,
     onChangePassword: ((String, String) -> Unit)? = null,
     onLogout: (() -> Unit)? = null,
@@ -483,54 +481,29 @@ fun SettingsScreen(
                             }
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = "Firebase Cloud Messaging (FCM)",
+                                text = "Android bildirimleri",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp,
                                 color = BrandNavy
                             )
                         }
-                        StatusBadge(label = "FCM Aktif", color = Color(0xFF059669))
                     }
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "Gerçek zamanlı FCM push bildirimleri; okul duyuruları, taksit hatırlatmaları ve acil bildirimler için veli ve personele iletilir.",
+                        text = "Bildirim izinlerinizi Android sistem ayarlarından yönetebilirsiniz.",
                         fontSize = 12.sp,
                         color = Color(0xFF475569)
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { onOpenNotificationSettings?.invoke() },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Sistem İzinleri", fontSize = 11.sp)
-                        }
-                        Button(
-                            onClick = { onTestNotification?.invoke() },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
-                        ) {
-                            Icon(Icons.Default.Campaign, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Duyuru Push", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
                     OutlinedButton(
-                        onClick = { onTestPaymentReminder?.invoke() },
+                        enabled = onOpenNotificationSettings != null,
+                        onClick = { onOpenNotificationSettings?.invoke() },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Icon(Icons.Default.CreditCard, contentDescription = null, modifier = Modifier.size(16.dp), tint = AccentAmber)
+                        Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Ödeme / Taksit Push Testi Gönder", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Sistem izinleri", fontSize = 12.sp)
                     }
                 }
             }

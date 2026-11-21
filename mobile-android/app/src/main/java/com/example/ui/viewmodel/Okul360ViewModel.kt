@@ -187,9 +187,6 @@ data class Okul360UiState(
     val consents: List<StudentConsent> = emptyList(),
     val tutoringSessions: List<TutoringSession> = emptyList(),
     val payrollRecords: List<PayrollRecord> = emptyList(),
-    val broadcastJobs: List<BroadcastJob> = emptyList(),
-    val messageTemplates: List<MessageTemplate> = emptyList(),
-    val smsProviders: List<SmsProvider> = emptyList(),
     val medicineRequests: List<MedicineRequest> = emptyList(),
     val excuseRequests: List<ExcuseRequest> = emptyList(),
     val debts: List<Debt> = emptyList(),
@@ -447,34 +444,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun triggerCustomPush(title: String, message: String, channelId: String = NotificationHelper.CHANNEL_ANNOUNCEMENT) {
-        NotificationHelper.showPushNotification(
-            context = getApplication(),
-            title = title,
-            message = message,
-            channelId = channelId
-        )
-        _uiState.update { it.copy(toastMessage = "Android sistem push bildirimi gönderildi.") }
-    }
-
-    fun triggerDelayedPush(
-        delaySeconds: Int,
-        title: String,
-        message: String,
-        channelId: String = NotificationHelper.CHANNEL_ANNOUNCEMENT
-    ) {
-        viewModelScope.launch(requestFailures) {
-            _uiState.update { it.copy(toastMessage = "$delaySeconds sn sonra arka planda bildirim gelecek. Şimdi uygulamayı küçültebilirsiniz.") }
-            delay(delaySeconds * 1000L)
-            NotificationHelper.showPushNotification(
-                context = getApplication(),
-                title = title,
-                message = message,
-                channelId = channelId
-            )
-        }
-    }
-
     fun openDeviceNotificationSettings() {
         NotificationHelper.openNotificationSettings(getApplication())
     }
@@ -555,7 +524,7 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             if (allowed("attendance.read")) loadAttendance()
             if (allowed("finance.read")) loadFinance()
             if (allowed("announcement.read")) loadAnnouncements()
-            if (allowed("notification.read")) { loadTemplates(); loadOutboxLogs(); loadBroadcastData() }
+            if (allowed("notification.read")) { loadTemplates(); loadOutboxLogs() }
             if (allowed("daily_reports.read", "academic.read")) loadDailyReports()
             if (allowed("report.read")) loadReports()
             if (allowed("inventory.read")) loadResources()
@@ -1145,20 +1114,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(requestFailures) {
             repository.changePassword(currentPass, newPass, _uiState.value.currentUser.email)
             _uiState.update { it.copy(toastMessage = "Hesap şifreniz başarıyla güncellendi.") }
-        }
-    }
-
-    fun retryOutboxLog(logId: String) {
-        viewModelScope.launch(requestFailures) {
-            _uiState.update { state ->
-                val updatedLogs = state.outboxLogs.map { log ->
-                    if (log.id == logId) log.copy(status = "DELIVERED") else log
-                }
-                state.copy(
-                    outboxLogs = updatedLogs,
-                    toastMessage = "Bildirim Outbox Worker tarafından kuyruktan tekrar gönderildi."
-                )
-            }
         }
     }
 
@@ -1757,23 +1712,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
 
     fun openFeedbackDialog(show: Boolean) {
         _uiState.update { it.copy(showFeedbackDialog = show) }
-    }
-
-    fun testPaymentReminderPush() {
-        val firstStudent = _uiState.value.students.firstOrNull()
-        val studentName = firstStudent?.full_name ?: "Ali Veli"
-        val invoice = _uiState.value.invoices.firstOrNull { it.status != "PAID" }
-        val amount = invoice?.amount ?: 4500.0
-        val dueDate = invoice?.due_date ?: "30.08.2026"
-        NotificationHelper.sendPaymentReminderPush(
-            context = getApplication(),
-            studentName = studentName,
-            amount = amount,
-            dueDate = dueDate
-        )
-        _uiState.update {
-            it.copy(toastMessage = "Ödeme hatırlatma push bildirimi gönderildi.")
-        }
     }
 
     fun refreshData() {
@@ -2425,42 +2363,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             repository.deleteExam(examId)
             loadExams()
             _uiState.update { it.copy(toastMessage = "Sınav kaydı silindi.") }
-        }
-    }
-
-    // ==========================================
-    // İletişim Kuyruğu & Broadcast & Şablonlar
-    // ==========================================
-    fun loadBroadcastData() {
-        viewModelScope.launch(requestFailures) {
-            val jobs = repository.getBroadcastJobs()
-            val tpls = repository.getMessageTemplates()
-            val providers = repository.getSmsProviders()
-            _uiState.update { it.copy(broadcastJobs = jobs, messageTemplates = tpls, smsProviders = providers) }
-        }
-    }
-
-    fun createBroadcastJob(job: BroadcastJob) {
-        viewModelScope.launch(requestFailures) {
-            repository.createBroadcastJob(job)
-            loadBroadcastData()
-            _uiState.update { it.copy(toastMessage = "Toplu bildirim işi (${job.channel}) oluşturuldu.") }
-        }
-    }
-
-    fun sendBroadcastJob(jobId: String) {
-        viewModelScope.launch(requestFailures) {
-            repository.sendBroadcastJob(jobId)
-            loadBroadcastData()
-            _uiState.update { it.copy(toastMessage = "Toplu mesajlar başarıyla gönderildi ve teslimat raporlandı.") }
-        }
-    }
-
-    fun createMessageTemplate(template: MessageTemplate) {
-        viewModelScope.launch(requestFailures) {
-            repository.createMessageTemplate(template)
-            loadBroadcastData()
-            _uiState.update { it.copy(toastMessage = "Yeni şablon '${template.name}' kaydedildi.") }
         }
     }
 
