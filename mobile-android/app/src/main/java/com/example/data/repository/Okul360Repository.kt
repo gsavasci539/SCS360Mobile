@@ -128,7 +128,6 @@ class Okul360Repository(private val context: Context) {
     private val localClasses = mutableListOf<ClassGroup>()
     private val localRoles = mutableListOf<RoleDefinition>()
     private val localUsers = mutableListOf<AppUser>()
-    private val localResources = mutableListOf<SchoolResource>()
     private val localRfidCards = mutableListOf<RfidCard>()
     private val localDevices = mutableListOf<HardwareDevice>()
     private val localAnnouncements = mutableListOf<Announcement>()
@@ -532,38 +531,6 @@ class Okul360Repository(private val context: Context) {
             class_occupancies = occupancies,
             branch_performances = branchPerfs
         )
-    }
-
-    // Resources Management
-    suspend fun getResources(): List<SchoolResource> = requestContext {
-        try {
-            apiService.getResources()
-        } catch (failure: Exception) { throw failure }
-    }
-
-    suspend fun addResource(resource: SchoolResource): SchoolResource = requestContext {
-        try {
-            val created = apiService.createResource(resource)
-            localResources.add(created)
-            created
-        } catch (failure: Exception) { throw failure }
-    }
-
-    suspend fun updateResource(resource: SchoolResource): SchoolResource = requestContext {
-        try {
-            val updated = apiService.updateResource(resource.id, resource)
-            val idx = localResources.indexOfFirst { it.id == resource.id }
-            if (idx >= 0) localResources[idx] = updated else localResources.add(updated)
-            updated
-        } catch (failure: Exception) { throw failure }
-    }
-
-    suspend fun deleteResource(resourceId: String): Boolean = requestContext {
-        try {
-            apiService.deleteResource(resourceId)
-            localResources.removeAll { it.id == resourceId }
-            true
-        } catch (failure: Exception) { throw failure }
     }
 
     // Roles & Permissions Management
@@ -1192,7 +1159,6 @@ val DEFAULT_SEEDED_CLASSES: List<ClassGroup> = emptyList()
 val DEFAULT_SEEDED_ROLES: List<RoleDefinition> = emptyList()
 val DEFAULT_SEEDED_USERS: List<AppUser> = emptyList()
 val DEFAULT_SEEDED_ANNOUNCEMENTS: List<Announcement> = emptyList()
-val DEFAULT_SEEDED_RESOURCES: List<SchoolResource> = emptyList()
 val DEFAULT_SEEDED_RFID_CARDS: List<RfidCard> = emptyList()
 val DEFAULT_SEEDED_DEVICES: List<HardwareDevice> = emptyList()
 val DEFAULT_SEEDED_EXPENSES: List<Expense> = emptyList()

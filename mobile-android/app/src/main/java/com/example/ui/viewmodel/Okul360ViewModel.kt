@@ -138,8 +138,6 @@ data class Okul360UiState(
     val isReportsLoading: Boolean = false,
 
     // Resources Sub-Module
-    val resources: List<SchoolResource> = emptyList(),
-    val isResourcesLoading: Boolean = false,
 
     // Roles & Permissions Sub-Module
     val roles: List<RoleDefinition> = emptyList(),
@@ -525,7 +523,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             if (allowed("notification.read")) { loadTemplates(); loadOutboxLogs() }
             if (allowed("daily_reports.read", "academic.read")) loadDailyReports()
             if (allowed("report.read")) loadReports()
-            if (allowed("inventory.read")) loadResources()
             if (allowed("users.read")) { loadRoles(); loadUsers() }
             if (allowed("settings.read")) { loadRfidCards(); loadHardwareDevices(); checkSystemHealth() }
             if (actor.is_super_admin == true) loadAiAnalyticsData()
@@ -1318,40 +1315,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             _uiState.update { it.copy(isReportsLoading = true) }
             val data = repository.getReportsData()
             _uiState.update { it.copy(reportsData = data, isReportsLoading = false) }
-        }
-    }
-
-    // Resources Actions
-    fun loadResources() {
-        viewModelScope.launch(requestFailures) {
-            _uiState.update { it.copy(isResourcesLoading = true) }
-            val list = repository.getResources()
-            _uiState.update { it.copy(resources = list, isResourcesLoading = false) }
-        }
-    }
-
-    fun addResource(name: String, category: String, location: String, status: String, quantity: Int, notes: String?) {
-        viewModelScope.launch(requestFailures) {
-            val res = SchoolResource(
-                id = "res-${UUID.randomUUID()}",
-                name = name,
-                type = category,
-                branch_id = _uiState.value.selectedBranchId,
-                capacity_or_serial = "$quantity Adet / $location",
-                status = status,
-                notes = notes
-            )
-            repository.addResource(res)
-            _uiState.update { it.copy(toastMessage = "${res.name} kaynağı eklendi.") }
-            loadResources()
-        }
-    }
-
-    fun deleteResource(resourceId: String) {
-        viewModelScope.launch(requestFailures) {
-            repository.deleteResource(resourceId)
-            _uiState.update { it.copy(toastMessage = "Kaynak silindi.") }
-            loadResources()
         }
     }
 

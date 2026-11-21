@@ -554,29 +554,6 @@ interface Okul360ApiService {
     @DELETE("daily-reports/{report_id}")
     suspend fun deleteDailyReport(@Path("report_id") reportId: String): Map<String, Any>
 
-    // School Resources
-    @GET("resources")
-    suspend fun getResources(
-        @Query("branch_id") branchId: String? = null
-    ): List<SchoolResource>
-
-    @GET("resources")
-    suspend fun getResourcesV1(
-        @Query("branch_id") branchId: String? = null
-    ): List<SchoolResource>
-
-    @POST("resources")
-    suspend fun createResource(@Body resource: SchoolResource): SchoolResource
-
-    @PUT("resources/{resource_id}")
-    suspend fun updateResource(
-        @Path("resource_id") resourceId: String,
-        @Body resource: SchoolResource
-    ): SchoolResource
-
-    @DELETE("resources/{resource_id}")
-    suspend fun deleteResource(@Path("resource_id") resourceId: String): Map<String, Any>
-
     // Reports
     @GET("reports/attendance")
     suspend fun getAttendanceReport(): Map<String, Any>

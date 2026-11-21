@@ -205,15 +205,7 @@ fun Okul360NavHost(
 
         // 8. Resources & Inventory Destination
         composable(Screen.Resources.route) {
-            ResourcesScreen(
-                state = state,
-                onAddResource = { name, cat, loc, status, qty, notes ->
-                    viewModel.addResource(name, cat, loc, status, qty, notes)
-                },
-                onDeleteResource = { id ->
-                    viewModel.deleteResource(id)
-                }
-            )
+            ResourcesScreen(state) { navController.popBackStack() }
         }
 
         // 9. Roles & Permissions Destination

@@ -945,15 +945,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                     currentSubScreen = SubScreen.AI_ANALYTICS
                                 }
                             )
-                            SubScreen.RESOURCES -> ResourcesScreen(
-                                state = state,
-                                onAddResource = { name, cat, loc, status, qty, notes ->
-                                    viewModel.addResource(name, cat, loc, status, qty, notes)
-                                },
-                                onDeleteResource = { id ->
-                                    viewModel.deleteResource(id)
-                                }
-                            )
+                            SubScreen.RESOURCES -> ResourcesScreen(state) { currentSubScreen = SubScreen.NONE }
                             SubScreen.ROLES -> RolesScreen(
                                 state = state,
                                 onRoleSelected = { viewModel.switchRole(it) },
