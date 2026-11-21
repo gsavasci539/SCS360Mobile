@@ -886,13 +886,6 @@ interface Okul360ApiService {
     @DELETE("guidance/{id}")
     suspend fun deleteGuidanceRecord(@Path("id") id: String): Map<String, Any>
 
-    // 7. Maaş & Bordro (Payroll)
-    @GET("payroll")
-    suspend fun getPayrollRecords(@Query("period") period: String? = null): List<PayrollRecord>
-
-    @POST("payroll")
-    suspend fun createPayrollRecord(@Body payroll: PayrollRecord): PayrollRecord
-
     // 8. Güvenlik & Denetim Logları (Security & Audit)
     @GET("security/audit-logs")
     suspend fun getAuditLogs(): List<AuditLogEntry>

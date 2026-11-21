@@ -60,6 +60,8 @@ fun RoleContextualAiCard(
         AiAnalyticsEngine.getPageAiAnalysis(screenName, role, state)
     }
 
+    if (insight.modelName.isBlank()) return
+
     // Role-specific gradient themes
     val (headerGradient, badgeBgColor, accentColor) = remember(role) {
         when (role) {

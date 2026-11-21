@@ -134,7 +134,6 @@ class Okul360Repository(private val context: Context) {
     private val localAnnouncements = mutableListOf<Announcement>()
     private val localConsents = mutableListOf<StudentConsent>()
     private val localGuidance = mutableListOf<GuidanceRecord>()
-    private val localPayrolls = mutableListOf<PayrollRecord>()
     private val localAuditLogs = mutableListOf<AuditLogEntry>()
 
     suspend fun ensureLocalSeedData() = requestContext {
@@ -919,24 +918,6 @@ class Okul360Repository(private val context: Context) {
         try { apiService.deleteGuidanceRecord(id) } catch (failure: Exception) { throw failure }
         localGuidance.removeAll { it.id == id }
         true
-    }
-
-    // 7. Personel Maaş & Bordro (Payroll)
-    suspend fun getPayrollRecords(period: String? = null): List<PayrollRecord> = requestContext {
-        try {
-            val remote = apiService.getPayrollRecords(period)
-            localPayrolls.clear()
-            localPayrolls.addAll(remote)
-            localPayrolls.toList()
-        } catch (failure: Exception) { throw failure }
-    }
-
-    suspend fun createPayrollRecord(record: PayrollRecord): PayrollRecord = requestContext {
-        try {
-            val res = apiService.createPayrollRecord(record)
-            localPayrolls.add(0, res)
-            res
-        } catch (failure: Exception) { throw failure }
     }
 
     // 8. Sistem Güvenlik & Denetim Logları (Security & Audit)

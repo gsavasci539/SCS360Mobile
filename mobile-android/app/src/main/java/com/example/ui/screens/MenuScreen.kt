@@ -164,7 +164,7 @@ fun MenuScreen(
                 MenuItemData("RFID & Cihazlar", "Turnike POS & Cihaz Ağ", Icons.Default.Contactless, Color(0xFFEDE9FE), Color(0xFF6D28D9), "${state.rfidCards.size}", onNavigateToRfidDevices),
                 MenuItemData("Raporlar & Analitik", "Mali & Katılım Çizelgesi", Icons.Default.BarChart, Color(0xFFCCFBF1), Color(0xFF0F766E), "Canlı", onNavigateToReports),
                 MenuItemData("Personel & İK", "Nöbet & İzin Talepleri", Icons.Default.Badge, Color(0xFFFCE7F3), Color(0xFFBE185D), "${state.dutyRosters.size}", onNavigateToStaff),
-                MenuItemData("Personel Bordro & Maaş", "Hakediş ve Ödemeler", Icons.Default.Payments, Color(0xFFE0E7FF), Color(0xFF4338CA), "${state.payrollRecords.size}", onNavigateToPayroll),
+                MenuItemData("Personel Bordro & Maaş", "Bordro, puantaj ve ek ders", Icons.Default.Payments, Color(0xFFE0E7FF), Color(0xFF4338CA), null, onNavigateToPayroll),
                 MenuItemData("Kullanıcılar", "${state.users.size} Personel & Rol", Icons.Default.ManageAccounts, Color(0xFFE0F2FE), Color(0xFF0369A1), null, onNavigateToUsers),
                 MenuItemData("Roller & Yetkiler", "Sistem İzin Matrisi", Icons.Default.Security, Color(0xFFFFEDD5), Color(0xFF9A3412), null, onNavigateToRoles),
                 MenuItemData("Güvenlik & Kapı Geçişleri", "Kimlik, geçiş ve denetim kayıtları", Icons.Default.Security, Color(0xFFEDE9FE), Color(0xFF6D28D9), null, onNavigateToSecurity),

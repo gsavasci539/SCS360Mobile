@@ -185,7 +185,6 @@ data class Okul360UiState(
 
     // 7. Okul360 Ek Modüller State
     val consents: List<StudentConsent> = emptyList(),
-    val payrollRecords: List<PayrollRecord> = emptyList(),
     val medicineRequests: List<MedicineRequest> = emptyList(),
     val excuseRequests: List<ExcuseRequest> = emptyList(),
     val debts: List<Debt> = emptyList(),
@@ -530,7 +529,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             if (allowed("users.read")) { loadRoles(); loadUsers() }
             if (allowed("settings.read")) { loadRfidCards(); loadHardwareDevices(); checkSystemHealth() }
             if (actor.is_super_admin == true) loadAiAnalyticsData()
-            if (allowed("payroll.read")) loadPayrollRecords()
             if (allowed("exam.read", "exam.write")) loadExams()
             refreshSubscriptionAccessStatus()
         }
@@ -2219,22 +2217,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     // ==========================================
     // Okul360 Yeni Modül Metotları
     // ==========================================
-
-    // 7. Payroll (Personel Bordro & Maaş)
-    fun loadPayrollRecords(period: String? = null) {
-        viewModelScope.launch(requestFailures) {
-            val list = repository.getPayrollRecords(period)
-            _uiState.update { it.copy(payrollRecords = list) }
-        }
-    }
-
-    fun createPayrollRecord(record: PayrollRecord) {
-        viewModelScope.launch(requestFailures) {
-            repository.createPayrollRecord(record)
-            loadPayrollRecords()
-            _uiState.update { it.copy(toastMessage = "Maaş/bordro kaydı oluşturuldu.") }
-        }
-    }
 
     // 9. Sınıf Transfer & Taksit Planı & Excel İçe/Dışa Aktarma
     fun transferStudentToClass(studentId: String, fromClassId: String, toClassId: String, reason: String) {

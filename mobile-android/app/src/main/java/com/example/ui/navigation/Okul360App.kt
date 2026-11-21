@@ -1164,11 +1164,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             SubScreen.CLUBS -> ClubsScreen(state, onNavigateBack = { currentSubScreen = SubScreen.NONE })
                             SubScreen.SURVEYS -> SurveysScreen(state, onNavigateBack = { currentSubScreen = SubScreen.NONE })
                             SubScreen.TUTORING -> TutoringScreen(state) { currentSubScreen = SubScreen.NONE }
-                            SubScreen.PAYROLL -> PayrollScreen(
-                                state = state,
-                                onNavigateBack = { currentSubScreen = SubScreen.NONE },
-                                onCreatePayroll = { record -> viewModel.createPayrollRecord(record) }
-                            )
+                            SubScreen.PAYROLL -> PayrollScreen(state) { currentSubScreen = SubScreen.NONE }
                             SubScreen.SECURITY -> SecurityAuditScreen(
                                 state = state,
                                 onNavigateBack = { currentSubScreen = SubScreen.NONE },

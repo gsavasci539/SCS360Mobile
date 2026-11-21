@@ -626,7 +626,6 @@ object AiAnalyticsEngine {
         val branchName = state.branches.find { it.id == state.selectedBranchId }?.name ?: "Tüm Şubeler"
         val activeClasses = state.classes.size
         val activeReports = state.dailyReports.size
-        val activeStaff = (state.dutyRosters.size + state.payrollRecords.size).coerceAtLeast(1)
 
         val upperScreen = screenName.uppercase()
 
@@ -703,8 +702,7 @@ object AiAnalyticsEngine {
                         keyMetrics = listOf(
                             MetricPair("Günlük Devam", "%${String.format(Locale.US, "%.1f", attRate)}"),
                             MetricPair("Aktif Sınıf", "$activeClasses Şube"),
-                            MetricPair("Öğretmen Raporu", "$activeReports Adet"),
-                            MetricPair("Personel Durumu", "$activeStaff Aktif")
+                            MetricPair("Öğretmen Raporu", "$activeReports Adet")
                         ),
                         highlights = listOf(
                             "Tüm sınıfların sabah yoklamaları ilk ders saatinde eksiksiz tamamlandı.",
@@ -1512,29 +1510,14 @@ object AiAnalyticsEngine {
                 }
             }
 
-            // ================= STAFF & PAYROLL =================
             upperScreen.contains("STAFF") || upperScreen.contains("PERSONEL") || upperScreen.contains("PAYROLL") || upperScreen.contains("MAAS") -> {
                 PageAiInsight(
-                    title = "Personel Performans, Yük & Bordro Analizi",
-                    subtitle = "$branchName genelinde 28 eğitim ve idari personelin verimlilik dengesi",
-                    summary = "Öğretmen başına ortalama ders saati 22.4 saat ile ideal aralıktadır. Personel devamlılığı %99.2 olup SGK ve bordro tahakkukları eksiksiz senkronize edilmiştir.",
-                    keyMetrics = listOf(
-                        MetricPair("Aktif Personel", "$activeStaff Kişi"),
-                        MetricPair("Haftalık Ort. Ders", "22.4 Saat"),
-                        MetricPair("Personel Devamı", "%99.2"),
-                        MetricPair("Bordro Tahakkuku", "₺${String.format(Locale.US, "%,.0f", (activeStaff * 42000.0))}")
-                    ),
-                    highlights = listOf(
-                        "Öğretmen eğitim seminerlerine katılım oranı %100 gerçekleşti.",
-                        "Öğrenci-öğretmen etkileşim puanı veli anketinde 4.8/5 olarak ölçüldü."
-                    ),
-                    recommendations = listOf(
-                        "Ay sonu bordro ödemeleri için otomatik banka dosya transferi tetiklenebilir."
-                    ),
-                    quickActionTitle = "Bordro İcmalini İncele",
-                    quickActionType = "VIEW_PAYROLL_SUMMARY",
-                    riskLevel = "HEALTHY",
-                    confidenceScore = 98,
+                    title = "Personel analizi",
+                    subtitle = branchName,
+                    summary = "Bu ekranda doğrulanmış analiz bulunmuyor.",
+                    riskLevel = "UNKNOWN",
+                    confidenceScore = 0,
+                    modelName = "",
                     roleBadge = roleBadgeText
                 )
             }
