@@ -299,16 +299,7 @@ fun Okul360NavHost(
 
         // 15. Transport & Bus Tracking Destination
         composable(Screen.Transport.route) {
-            TransportScreen(
-                state = state,
-                onNavigateBack = { navController.popBackStack() },
-                onStudentCheckIn = { routeId, studentId, isMorning, isBoarded ->
-                    viewModel.updateBusStudentCheckIn(routeId, studentId, isMorning, isBoarded)
-                },
-                onUpdateTelemetry = { routeId, lat, lng, speed, passedStop, nextStop, eta ->
-                    viewModel.updateBusLiveTelemetry(routeId, lat, lng, speed, passedStop, nextStop, eta)
-                }
-            )
+            TransportScreen(state) { navController.popBackStack() }
         }
 
         // 16. Canteen & Digital Wallet Destination

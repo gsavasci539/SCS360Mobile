@@ -37,7 +37,7 @@ internal class NativeDismissalClient(selectedBranch: String) {
     private suspend fun call(path: String, query: Map<String, String?> = emptyMap(), method: String = "GET",
         body: JSONObject? = null): Any = scope.io {
         val url = (base + "dismissal/" + path).toHttpUrl().newBuilder().apply {
-            if (method == "GET") branch?.let { addQueryParameter("branch_id", it) }
+            branch?.let { addQueryParameter("branch_id", it) }
             query.forEach { (key, value) -> value?.let { addQueryParameter(key, it) } }
         }.build()
         val request = Request.Builder().url(url).tag(NativeRequestScope::class.java, scope)

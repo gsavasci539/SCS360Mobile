@@ -1036,16 +1036,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onBack = { currentSubScreen = SubScreen.NONE }
                             )
                             SubScreen.APPOINTMENTS -> NativeAppointmentScreen(state, onBack = { currentSubScreen = SubScreen.NONE })
-                            SubScreen.TRANSPORT -> TransportScreen(
-                                state = state,
-                                onNavigateBack = { currentSubScreen = SubScreen.NONE },
-                                onStudentCheckIn = { routeId, studentId, isMorning, isBoarded ->
-                                    viewModel.updateBusStudentCheckIn(routeId, studentId, isMorning, isBoarded)
-                                },
-                                onUpdateTelemetry = { routeId, lat, lng, speed, passedStop, nextStop, eta ->
-                                    viewModel.updateBusLiveTelemetry(routeId, lat, lng, speed, passedStop, nextStop, eta)
-                                }
-                            )
+                            SubScreen.TRANSPORT -> TransportScreen(state) { currentSubScreen = SubScreen.NONE }
                             SubScreen.CANTEEN -> CanteenWalletScreen(
                                 state = state,
                                 onNavigateBack = { currentSubScreen = SubScreen.NONE },

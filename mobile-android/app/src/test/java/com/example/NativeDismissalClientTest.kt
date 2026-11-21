@@ -34,6 +34,7 @@ class NativeDismissalClientTest {
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/api/dismissal/") { exchange ->
             val uri = exchange.requestURI
+            check("branch_id=$branch" in uri.query.orEmpty())
             val payload = if (uri.path.endsWith("/verify-pickup")) {
                 val wire = JSONObject(exchange.requestBody.use { it.readBytes().decodeToString() })
                 received += wire

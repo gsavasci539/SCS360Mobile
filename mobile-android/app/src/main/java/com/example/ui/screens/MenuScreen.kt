@@ -138,7 +138,7 @@ fun MenuScreen(
                 MenuItemData("Revir & Sağlık", "Ateş, İlaç, Muayene", Icons.Default.MedicalServices, Color(0xFFFEE2E2), Color(0xFFDC2626), null, onNavigateToInfirmary),
                 MenuItemData("Öğrenci Teslim Masası", "Yetkili teslim ve kimlik doğrulama", Icons.Default.SupervisorAccount, Color(0xFFCCFBF1), Color(0xFF0F766E), null, onNavigateToDismissal),
                 MenuItemData("Dijital Kimlik (QR)", "Kartlı & QR Güvenlik", Icons.Default.QrCode2, Color(0xFFEDE9FE), Color(0xFF6D28D9), "QR", onNavigateToDigitalId),
-                MenuItemData("Servis & Ulaşım", "Canlı GPS & Biniş", Icons.Default.DirectionsBus, Color(0xFFFEF3C7), Color(0xFFB45309), "${state.busRoutes.size}", onNavigateToTransport),
+                MenuItemData("Servis & Ulaşım", "Rotalar, duraklar ve katılım", Icons.Default.DirectionsBus, Color(0xFFFEF3C7), Color(0xFFB45309), null, onNavigateToTransport),
                 MenuItemData("Kantin Cüzdan", "Temassız Harcama & POS", Icons.Default.AccountBalanceWallet, Color(0xFFDCFCE7), Color(0xFF15803D), "₺", onNavigateToCanteen),
                 MenuItemData("Kantin Görevlisi Paneli", "Satış POS & Menü", Icons.Default.Restaurant, Color(0xFFFFEDD5), Color(0xFFC2410C), "POS", onNavigateToCanteenPortal)
             )

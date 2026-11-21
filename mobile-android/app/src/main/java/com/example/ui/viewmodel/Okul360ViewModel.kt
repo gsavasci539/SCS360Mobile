@@ -2064,62 +2064,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // ==========================================
-    // 2. Transport & Bus Live Tracking Management
-    // ==========================================
-    fun updateBusStudentCheckIn(routeId: String, studentId: String, isMorning: Boolean, isBoarded: Boolean) {
-        val nowTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
-        _uiState.update { current ->
-            val updatedRoutes = current.busRoutes.map { route ->
-                if (route.id == routeId) {
-                    val updatedStudents = route.students.map { student ->
-                        if (student.student_id == studentId) {
-                            if (isMorning) {
-                                student.copy(morning_boarded = isBoarded, morning_boarded_at = if (isBoarded) nowTime else null)
-                            } else {
-                                student.copy(evening_boarded = isBoarded, evening_boarded_at = if (isBoarded) nowTime else null)
-                            }
-                        } else student
-                    }
-                    route.copy(students = updatedStudents)
-                } else route
-            }
-            current.copy(
-                busRoutes = updatedRoutes,
-                toastMessage = "Servis biniş durumu kaydedildi ($nowTime)."
-            )
-        }
-
-        val studentName = _uiState.value.busRoutes.flatMap { it.students }.find { it.student_id == studentId }?.student_name ?: "Öğrenci"
-        val tripLabel = if (isMorning) "Sabah Servisine" else "Akşam Servisine"
-        val statusLabel = if (isBoarded) "BİNDİ ✅" else "BİNMEDİ / İNDİ"
-
-        NotificationHelper.showPushNotification(
-            context = getApplication(),
-            title = "🚌 Servis Bildirimi",
-            message = "$studentName $tripLabel $statusLabel ($nowTime).",
-            channelId = NotificationHelper.CHANNEL_ANNOUNCEMENT
-        )
-    }
-
-    fun updateBusLiveTelemetry(routeId: String, lat: Double, lng: Double, speedKmh: Int, lastPassedStop: String, nextStop: String, etaMinutes: Int) {
-        _uiState.update { current ->
-            val updatedRoutes = current.busRoutes.map { route ->
-                if (route.id == routeId) {
-                    route.copy(
-                        current_latitude = lat,
-                        current_longitude = lng,
-                        current_speed_kmh = speedKmh,
-                        last_stop_passed = lastPassedStop,
-                        next_stop_name = nextStop,
-                        eta_minutes_to_next_stop = etaMinutes
-                    )
-                } else route
-            }
-            current.copy(busRoutes = updatedRoutes)
-        }
-    }
-
-    // ==========================================
     // 3. Canteen & Digital Wallet Management
     // ==========================================
     fun topupCanteenWallet(amount: Double, paymentMethodName: String = "Kredi Kartı") {
