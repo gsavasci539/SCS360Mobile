@@ -159,7 +159,6 @@ data class Okul360UiState(
     val pickupNotices: List<PickupNotice> = emptyList(),
 
     // Academic Schedule & Exams
-    val exams: List<ExamItem> = emptyList(),
     val timetableSlots: List<TimetableSlot> = emptyList(),
 
     // Direct Messaging & Parent-Teacher Chat State
@@ -489,17 +488,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         )
     }
 
-    fun triggerPaymentReminderPush(context: Context, invoice: Invoice) {
-        NotificationHelper.sendFinanceReminderPush(
-            context = context,
-            studentName = invoice.student_name,
-            amount = invoice.amount - invoice.paid_amount,
-            dueDate = invoice.due_date,
-            description = invoice.description
-        )
-        _uiState.update { it.copy(toastMessage = "${invoice.student_name} velisine anlık ödeme hatırlatma bildirimi iletildi.") }
-    }
-
     fun loadInitialData() {
         if (!_uiState.value.isLoggedIn) return
         if (_uiState.value.currentUser.is_super_admin == true && _uiState.value.workspaceOrganizationId == null) {
@@ -524,7 +512,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             if (allowed("users.read")) loadUsers()
             if (allowed("settings.read")) { loadRfidCards(); loadHardwareDevices(); checkSystemHealth() }
             if (actor.is_super_admin == true) loadAiAnalyticsData()
-            if (allowed("exam.read", "exam.write")) loadExams()
             refreshSubscriptionAccessStatus()
         }
     }
@@ -2174,40 +2161,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             }
             loadStudents()
             _uiState.update { it.copy(toastMessage = "Excel dosyasından $rowCount öğrenci başarıyla içe aktarıldı.") }
-        }
-    }
-
-    // ==========================================
-    // Sınavlar & Sınav Takvimi
-    // ==========================================
-    fun loadExams() {
-        viewModelScope.launch(requestFailures) {
-            val list = repository.getExams()
-            _uiState.update { it.copy(exams = list) }
-        }
-    }
-
-    fun createExam(exam: ExamItem) {
-        viewModelScope.launch(requestFailures) {
-            repository.createExam(exam)
-            loadExams()
-            _uiState.update { it.copy(toastMessage = "${exam.title} takvime eklendi.") }
-        }
-    }
-
-    fun updateExam(exam: ExamItem) {
-        viewModelScope.launch(requestFailures) {
-            repository.updateExam(exam)
-            loadExams()
-            _uiState.update { it.copy(toastMessage = "Sınav bilgileri güncellendi.") }
-        }
-    }
-
-    fun deleteExam(examId: String) {
-        viewModelScope.launch(requestFailures) {
-            repository.deleteExam(examId)
-            loadExams()
-            _uiState.update { it.copy(toastMessage = "Sınav kaydı silindi.") }
         }
     }
 

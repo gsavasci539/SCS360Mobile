@@ -822,19 +822,6 @@ interface Okul360ApiService {
     @GET("students/export-excel")
     suspend fun exportStudentsExcel(): Map<String, Any>
 
-    // 10. Sınavlar (Exams)
-    @GET("exams")
-    suspend fun getExams(): List<ExamItem>
-
-    @POST("exams")
-    suspend fun createExam(@Body exam: ExamItem): ExamItem
-
-    @PUT("exams/{id}")
-    suspend fun updateExam(@Path("id") id: String, @Body exam: ExamItem): ExamItem
-
-    @DELETE("exams/{id}")
-    suspend fun deleteExam(@Path("id") id: String): Map<String, Any>
-
     // 12. Veli Portalı İlaç & İzin (Parent Requests)
     @GET("parent/child/{id}/medicine-requests")
     suspend fun getChildMedicineRequests(@Path("id") childId: String): List<MedicineRequest>

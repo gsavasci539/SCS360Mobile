@@ -766,45 +766,6 @@ class Okul360Repository(private val context: Context) {
     }
 
     // ==========================================
-    // Sınavlar & Sınav Takvimi (Exams)
-    // ==========================================
-    private val localExams = mutableListOf<ExamItem>()
-
-    suspend fun getExams(): List<ExamItem> = requestContext {
-        try {
-            val remote = apiService.getExams()
-            localExams.clear()
-            localExams.addAll(remote)
-            remote
-        } catch (failure: Exception) { throw failure }
-    }
-
-    suspend fun createExam(exam: ExamItem): ExamItem = requestContext {
-        try {
-            val res = apiService.createExam(exam)
-            localExams.add(0, res)
-            res
-        } catch (failure: Exception) { throw failure }
-    }
-
-    suspend fun updateExam(exam: ExamItem): ExamItem = requestContext {
-        try {
-            apiService.updateExam(exam.id, exam)
-        } catch (failure: Exception) { throw failure }
-        val idx = localExams.indexOfFirst { it.id == exam.id }
-        if (idx >= 0) localExams[idx] = exam
-        exam
-    }
-
-    suspend fun deleteExam(examId: String): Boolean = requestContext {
-        try {
-            apiService.deleteExam(examId)
-        } catch (failure: Exception) { throw failure }
-        localExams.removeAll { it.id == examId }
-        true
-    }
-
-    // ==========================================
     // Veli Portalı İlaç & İzin Talepleri
     // ==========================================
     private val localMedicineRequests = mutableListOf<MedicineRequest>()

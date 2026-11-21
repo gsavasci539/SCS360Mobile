@@ -1,577 +1,272 @@
 package com.example.ui.screens
 
-import com.example.ui.components.ResponsiveTableScope
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.data.model.ExamItem
-import com.example.ui.components.CompactResponsiveCard
-import com.example.ui.components.CompactRowActionIcon
-import com.example.ui.components.CompactTableRow
+import com.example.data.remote.ExamClassChoice
+import com.example.data.remote.ExamsPage
+import com.example.data.remote.NativeExamsClient
+import com.example.data.remote.RegistryHttpException
+import com.example.data.remote.examText
 import com.example.ui.components.RoleContextualAiCard
-import com.example.ui.components.StickyTableHeaderRow
-import com.example.ui.components.TableColumnSpec
-import com.example.ui.components.isCompactCardMode
-import com.example.ui.components.rememberResolvedTableMode
-import com.example.ui.theme.*
+import com.example.ui.components.financePresentationScope
+import com.example.ui.navigation.NativeNavigationPolicy
 import com.example.ui.viewmodel.Okul360UiState
+import java.math.BigDecimal
+import java.time.LocalDate
+import java.time.LocalTime
+import java.util.UUID
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import org.json.JSONObject
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+private val examTypes = mapOf("QUIZ" to "Kısa sınav", "MIDTERM" to "Ara sınav", "FINAL" to "Dönem sonu",
+    "MAKEUP" to "Telafi", "PROJECT" to "Proje", "OTHER" to "Diğer")
+private val examStatuses = mapOf("" to "Tümü", "SCHEDULED" to "Planlandı", "COMPLETED" to "Tamamlandı", "CANCELLED" to "İptal")
+
 @Composable
-fun ExamsScreen(
-    state: Okul360UiState,
-    onBack: () -> Unit,
-    onCreateExam: (ExamItem) -> Unit,
-    onUpdateExam: (ExamItem) -> Unit,
-    onDeleteExam: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var selectedFilterType by remember { mutableStateOf("ALL") }
-    var selectedClassFilter by remember { mutableStateOf("ALL") }
-    var showCreateDialog by remember { mutableStateOf(false) }
-    var selectedExamForDetail by remember { mutableStateOf<ExamItem?>(null) }
-    var searchQuery by remember { mutableStateOf("") }
-    val tableModeState = rememberResolvedTableMode()
-    val isCardMode = isCompactCardMode(tableModeState.value)
-
-    val filteredExams = remember(state.exams, selectedFilterType, selectedClassFilter, searchQuery) {
-        state.exams.filter { exam ->
-            val matchesType = selectedFilterType == "ALL" || exam.exam_type.equals(selectedFilterType, ignoreCase = true)
-            val matchesClass = selectedClassFilter == "ALL" || exam.class_name.equals(selectedClassFilter, ignoreCase = true)
-            val matchesSearch = searchQuery.isBlank() ||
-                    exam.title.contains(searchQuery, ignoreCase = true) ||
-                    exam.course_name.contains(searchQuery, ignoreCase = true) ||
-                    exam.teacher_name.contains(searchQuery, ignoreCase = true)
-            matchesType && matchesClass && matchesSearch
+fun ExamsScreen(state: Okul360UiState, onBack: () -> Unit) {
+    val user = state.currentUser
+    if (!state.isLoggedIn || !NativeNavigationPolicy.has(user, "exam.read", "exam.write") ||
+        user.is_super_admin == true && state.workspaceOrganizationId.isNullOrBlank()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Sınavlar için yetkili kurum çalışma alanını açın.")
+            TextButton(onClick = onBack) { Text("Geri") }
         }
+        return
     }
-
-    val typeFilters = listOf(
-        "ALL" to "Tümü",
-        "YAZILI" to "Yazılı",
-        "DENEME" to "Deneme",
-        "QUIZ" to "Quiz",
-        "PROJE" to "Proje"
-    )
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Sınavlar & Akademik Takvim", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Text(
-                            "Yazılı, Deneme ve Değerlendirme Takibi",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { showCreateDialog = true }) {
-                        Icon(Icons.Default.AddCircle, contentDescription = "Sınav Ekle", tint = MaterialTheme.colorScheme.primary)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
-            )
-        },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { showCreateDialog = true },
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("Yeni Sınav Tanımla") },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = Color.White
-            )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            // Compact Search Bar
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = { Text("Ders, konu veya öğretmen ara...", fontSize = 13.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)) },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Temizle", modifier = Modifier.size(18.dp))
-                        }
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                shape = RoundedCornerShape(12.dp),
-                singleLine = true
-            )
-
-            // Filter Chips
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(typeFilters) { (key, label) ->
-                    FilterChip(
-                        selected = selectedFilterType == key,
-                        onClick = { selectedFilterType = key },
-                        label = { Text(label, fontSize = 12.sp) },
-                        leadingIcon = if (selectedFilterType == key) {
-                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                        } else null
-                    )
-                }
-            }
-
-            // Exams List (Summary Cards + AI Card + Exam Rows scroll together)
-            if (filteredExams.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Outlined.School,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text("Kriterlere uygun sınav kaydı bulunamadı.", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Yeni bir sınav oluşturmak için aşağıdaki butonu kullanabilirsiniz.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            } else {
-                ResponsiveTableScope() {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(top = 6.dp, bottom = 88.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        // Summary Cards inside scrollable feed
-                        item {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Card(
-                                    modifier = Modifier.weight(1f),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                                        Text("Toplam Sınav", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Text("${state.exams.size}", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                    }
-                                }
-                                Card(
-                                    modifier = Modifier.weight(1f),
-                                    colors = CardDefaults.cardColors(containerColor = SecondaryEmerald.copy(alpha = 0.15f)),
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                                        Text("Tamamlanan", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Text("${state.exams.count { it.is_completed }}", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = StatusGreen)
-                                    }
-                                }
-                                Card(
-                                    modifier = Modifier.weight(1f),
-                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFD97706).copy(alpha = 0.15f)),
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                                        Text("Yaklaşan", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Text("${state.exams.count { !it.is_completed }}", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD97706))
-                                    }
-                                }
-                            }
-                        }
-    
-                        item {
-                            RoleContextualAiCard(
-                                screenName = "EXAMS",
-                                state = state,
-                                modifier = Modifier.padding(horizontal = 12.dp),
-                                onQuickActionClick = { actionType ->
-                                    if (actionType == "CREATE_EXAM") {
-                                        showCreateDialog = true
-                                    }
-                                }
-                            )
-                        }
-    
-                        stickyHeader {
-                            StickyTableHeaderRow(
-                                columns = listOf(
-                                    TableColumnSpec("Sınav / Ders", 1.4f),
-                                    TableColumnSpec("Sınıf / Salon", 0.95f),
-                                    TableColumnSpec("Tarih / Saat", 1.1f),
-                                    TableColumnSpec("İşlem", 0.75f, TextAlign.End)
-                                ),
-                                totalCount = filteredExams.size,
-                                viewModeState = tableModeState
-                            )
-                        }
-    
-                        itemsIndexed(filteredExams, key = { _, it -> it.id }) { index, exam ->
-                            if (isCardMode) {
-                                ExamItemCard(
-                                    exam = exam,
-                                    onClick = { selectedExamForDetail = exam },
-                                    onToggleComplete = {
-                                        onUpdateExam(exam.copy(is_completed = !exam.is_completed))
-                                    },
-                                    onDelete = { onDeleteExam(exam.id) },
-                                    modifier = Modifier.padding(horizontal = 12.dp)
-                                )
-                            } else {
-                                CompactTableRow(
-                                    index = index,
-                                    onClick = { selectedExamForDetail = exam },
-                                    modifier = Modifier.padding(horizontal = 12.dp)
-                                ) {
-                                    Column(modifier = Modifier.weight(1.4f).padding(end = 6.dp)) {
-                                        Text(exam.title, fontWeight = FontWeight.Bold, fontSize = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text("${exam.course_name} • ${exam.typeDisplayName} (%${exam.weight_percentage})", fontSize = 10.5.sp, color = Color(exam.typeColorHex), fontWeight = FontWeight.SemiBold, maxLines = 1)
-                                    }
-                                    Column(modifier = Modifier.weight(0.95f).padding(end = 6.dp)) {
-                                        Text(exam.class_name, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1)
-                                        Text(exam.classroom, fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    }
-                                    Column(modifier = Modifier.weight(1.1f).padding(end = 6.dp)) {
-                                        Text(exam.date, fontSize = 11.5.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-                                        Text(exam.time, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                                    }
-                                    Row(
-                                        modifier = Modifier.weight(0.75f),
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        CompactRowActionIcon(
-                                            icon = if (exam.is_completed) Icons.Default.CheckCircle else Icons.Outlined.CheckCircle,
-                                            contentDescription = "Tamamlandı İşaretle",
-                                            tint = if (exam.is_completed) StatusGreen else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            containerColor = if (exam.is_completed) StatusGreen.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant,
-                                            onClick = { onUpdateExam(exam.copy(is_completed = !exam.is_completed)) }
-                                        )
-                                        CompactRowActionIcon(
-                                            icon = Icons.Outlined.Delete,
-                                            contentDescription = "Sil",
-                                            tint = MaterialTheme.colorScheme.error,
-                                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
-                                            onClick = { onDeleteExam(exam.id) }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Exam Detail Dialog
-    selectedExamForDetail?.let { exam ->
-        AlertDialog(
-            onDismissRequest = { selectedExamForDetail = null },
-            icon = { Icon(Icons.Default.Assignment, contentDescription = null, tint = Color(exam.typeColorHex)) },
-            title = { Text(exam.title, fontWeight = FontWeight.Bold, fontSize = 16.sp) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Ders: ${exam.course_name} (${exam.typeDisplayName})", fontWeight = FontWeight.SemiBold)
-                    Text("Sınıf & Şube: ${exam.class_name} • Derslik: ${exam.classroom}")
-                    Text("Tarih & Saat: ${exam.date} | ${exam.time}")
-                    Text("Süre: ${exam.duration_minutes} Dakika • Ağırlık: %${exam.weight_percentage}")
-                    Text("Öğretmen: ${exam.teacher_name}")
-                    if (exam.topics.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text("Sınav Kapsamı & Konuları:", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                        exam.topics.forEach { topic ->
-                            Text("• $topic", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        if (exam.is_completed) "Durum: Sınav Yapıldı / Notlar Girildi" else "Durum: Henüz Yapılmadı / Bekliyor",
-                        color = if (exam.is_completed) StatusGreen else Color(0xFFD97706),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { selectedExamForDetail = null }) {
-                    Text("Kapat")
-                }
-            }
-        )
-    }
-
-    // Create Exam Dialog
-    if (showCreateDialog) {
-        var newTitle by remember { mutableStateOf("") }
-        var newCourse by remember { mutableStateOf("Matematik") }
-        var newType by remember { mutableStateOf("YAZILI") }
-        var newClass by remember { mutableStateOf("8-A") }
-        var newDate by remember { mutableStateOf("2026-05-25") }
-        var newTime by remember { mutableStateOf("09:30 - 10:15") }
-        var newClassroom by remember { mutableStateOf("Derslik 101") }
-        var newTeacher by remember { mutableStateOf("Ahmet Yılmaz") }
-        var newDuration by remember { mutableStateOf("45") }
-        var newWeight by remember { mutableStateOf("30") }
-        var newTopicsText by remember { mutableStateOf("1. Ünite Tekrarı, Soru Çözümü") }
-
-        AlertDialog(
-            onDismissRequest = { showCreateDialog = false },
-            title = { Text("Yeni Sınav Oluştur", fontWeight = FontWeight.Bold) },
-            text = {
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    item {
-                        OutlinedTextField(
-                            value = newTitle,
-                            onValueChange = { newTitle = it },
-                            label = { Text("Sınav Başlığı") },
-                            placeholder = { Text("Örn: 2. Dönem 1. Yazılı") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    item {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = newCourse,
-                                onValueChange = { newCourse = it },
-                                label = { Text("Ders") },
-                                modifier = Modifier.weight(1f)
-                            )
-                            OutlinedTextField(
-                                value = newClass,
-                                onValueChange = { newClass = it },
-                                label = { Text("Sınıf") },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                    item {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = newType,
-                                onValueChange = { newType = it },
-                                label = { Text("Tür (YAZILI/DENEME/QUIZ)") },
-                                modifier = Modifier.weight(1f)
-                            )
-                            OutlinedTextField(
-                                value = newDuration,
-                                onValueChange = { newDuration = it },
-                                label = { Text("Süre (dk)") },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                    item {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = newDate,
-                                onValueChange = { newDate = it },
-                                label = { Text("Tarih") },
-                                modifier = Modifier.weight(1f)
-                            )
-                            OutlinedTextField(
-                                value = newTime,
-                                onValueChange = { newTime = it },
-                                label = { Text("Saat Aralığı") },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                    item {
-                        OutlinedTextField(
-                            value = newClassroom,
-                            onValueChange = { newClassroom = it },
-                            label = { Text("Derslik / Salon") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    item {
-                        OutlinedTextField(
-                            value = newTeacher,
-                            onValueChange = { newTeacher = it },
-                            label = { Text("Gözetmen / Sorumlu Öğretmen") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    item {
-                        OutlinedTextField(
-                            value = newTopicsText,
-                            onValueChange = { newTopicsText = it },
-                            label = { Text("Kapsam / Konular (virgülle ayırın)") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (newTitle.isNotBlank()) {
-                            val topics = newTopicsText.split(",").map { it.trim() }.filter { it.isNotBlank() }
-                            onCreateExam(
-                                ExamItem(
-                                    id = "exam-${System.currentTimeMillis()}",
-                                    title = newTitle,
-                                    course_name = newCourse,
-                                    exam_type = newType.uppercase(),
-                                    date = newDate,
-                                    time = newTime,
-                                    classroom = newClassroom,
-                                    class_name = newClass,
-                                    teacher_name = newTeacher,
-                                    duration_minutes = newDuration.toIntOrNull() ?: 40,
-                                    topics = topics,
-                                    weight_percentage = newWeight.toIntOrNull() ?: 30,
-                                    is_completed = false
-                                )
-                            )
-                            showCreateDialog = false
-                        }
-                    }
-                ) {
-                    Text("Kaydet & Yayınla")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCreateDialog = false }) {
-                    Text("Vazgeç")
-                }
-            }
-        )
+    key(financePresentationScope(state), state.serverBaseUrl) {
+        ExamsWorkspace(state, remember { NativeExamsClient(state.selectedBranchId) }, NativeNavigationPolicy.has(user, "exam.write"), onBack)
     }
 }
 
 @Composable
-fun ExamItemCard(
-    exam: ExamItem,
-    onClick: () -> Unit,
-    onToggleComplete: () -> Unit,
-    onDelete: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    CompactResponsiveCard(
-        onClick = onClick,
-        modifier = modifier
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.weight(1f).padding(end = 6.dp)
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = Color(exam.typeColorHex).copy(alpha = 0.14f)
-                ) {
-                    Text(
-                        text = exam.typeDisplayName,
-                        color = Color(exam.typeColorHex),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 10.sp,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-                Text(
-                    text = exam.title,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.5.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                CompactRowActionIcon(
-                    icon = if (exam.is_completed) Icons.Default.CheckCircle else Icons.Outlined.CheckCircle,
-                    contentDescription = "Tamamlandı İşaretle",
-                    tint = if (exam.is_completed) StatusGreen else MaterialTheme.colorScheme.onSurfaceVariant,
-                    containerColor = if (exam.is_completed) StatusGreen.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant,
-                    onClick = onToggleComplete
-                )
-                CompactRowActionIcon(
-                    icon = Icons.Outlined.Delete,
-                    contentDescription = "Sil",
-                    tint = MaterialTheme.colorScheme.error,
-                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
-                    onClick = onDelete
-                )
-            }
+private fun ExamsWorkspace(state: Okul360UiState, client: NativeExamsClient, canWrite: Boolean, onBack: () -> Unit) {
+    var page by remember { mutableIntStateOf(1) }
+    var search by remember { mutableStateOf("") }
+    var status by remember { mutableStateOf("") }
+    var showStatus by remember { mutableStateOf(false) }
+    var revision by remember { mutableIntStateOf(0) }
+    var editing by remember { mutableStateOf(false) }
+    var target by remember { mutableStateOf<JSONObject?>(null) }
+    var cancelled by remember { mutableStateOf<JSONObject?>(null) }
+    var grading by remember { mutableStateOf<JSONObject?>(null) }
+    var notice by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val coroutine = rememberCoroutineScope()
+    val data by key(page, search, status, revision) { produceState<Result<ExamsPage<JSONObject>>?>(null) {
+        value = examResult {
+            if (search.isNotBlank()) delay(250)
+            client.list(page, search, status)
         }
+    } }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "${exam.course_name} • ${exam.class_name} (%${exam.weight_percentage})",
-                fontSize = 11.5.sp,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f).padding(end = 6.dp)
-            )
-            Text(
-                text = "${exam.date} • ${exam.time} • ${exam.classroom}",
-                fontSize = 10.5.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+    fun write(operation: suspend () -> String) {
+        if (busy) return
+        busy = true
+        notice = null
+        error = null
+        coroutine.launch {
+            try {
+                notice = operation()
+                revision++
+            } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                error = if (failure is RegistryHttpException && failure.code == 409)
+                    "Sınav değişti veya bu işlem artık geçerli değil. Güncel kaydı yeniden açın."
+                else "Sınav kaydı doğrulanamadı."
+            } finally { busy = false }
         }
     }
+
+    val exam = grading
+    if (exam != null) {
+        key(exam.getString("id")) {
+            NativeExamRoster(client, exam, canWrite, onChanged = { revision++ }, onBack = { grading = null })
+        }
+        return
+    }
+
+    val rows = data?.getOrNull()?.rows.orEmpty()
+    LazyColumn(Modifier.fillMaxSize().testTag("native_exams_list"), contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item {
+            Text("Sınavlar ve karne", style = MaterialTheme.typography.headlineSmall)
+            TextButton(onClick = onBack, enabled = !busy) { Text("Geri") }
+            notice?.let { Text(it) }
+            if (canWrite) Button(onClick = { editing = true; target = null; error = null; notice = null }, enabled = !busy) {
+                Text("Yeni sınav")
+            }
+            ExamField(search, { search = it; page = 1 }, "Sınav ara", 200, !busy)
+            TextButton(onClick = { showStatus = true }, enabled = !busy) { Text("Sınav durumu · ${examStatuses[status]}") }
+            TextButton(onClick = { revision++ }, enabled = !busy) { Text("Listeyi yenile") }
+            RoleContextualAiCard(screenName = "EXAMS", state = state)
+            when {
+                data == null -> Text("Sınavlar yükleniyor…")
+                data?.isFailure == true -> Text("Sınav listesi alınamadı.")
+                rows.isEmpty() -> Text("Bu kapsamda sınav bulunamadı.")
+            }
+        }
+        items(rows, key = { it.getString("id") }) { row ->
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(row.getString("title"), style = MaterialTheme.typography.titleMedium)
+                    row.examText("class_name")?.let { Text(it) }
+                    Text(listOfNotNull(row.examText("exam_date"), row.examText("start_time")?.take(5)).joinToString(" · "))
+                    Text(examStatuses[row.getString("status")] ?: row.getString("status"))
+                    row.examText("max_score")?.let { Text("Tam puan $it") }
+                    TextButton(onClick = { grading = row }, enabled = !busy) { Text("Notlar ve karneler") }
+                    if (canWrite && row.getString("status") != "CANCELLED") {
+                        TextButton(onClick = { editing = true; target = row; error = null }, enabled = !busy) { Text("Sınavı düzenle") }
+                        TextButton(onClick = { cancelled = row; error = null }, enabled = !busy) { Text("Sınavı iptal et") }
+                    }
+                }
+            }
+        }
+        if (page > 1 || data?.getOrNull()?.more == true) item {
+            if (page > 1) TextButton(onClick = { page-- }, enabled = !busy) { Text("Önceki sayfa") }
+            if (data?.getOrNull()?.more == true) TextButton(onClick = { page++ }, enabled = !busy) { Text("Sonraki sayfa") }
+        }
+    }
+
+    if (showStatus) AlertDialog(onDismissRequest = { showStatus = false }, title = { Text("Sınav durumu") }, text = {
+        Column {
+            examStatuses.forEach { (code, label) ->
+                TextButton(onClick = { status = code; page = 1; showStatus = false }) { Text(label) }
+            }
+        }
+    }, confirmButton = { TextButton(onClick = { showStatus = false }) { Text("Kapat") } })
+
+    if (editing) key(target?.getString("id")) {
+        NativeExamEditor(client, target, busy, error, onClose = { editing = false }) { room, requestId, form ->
+            write {
+                client.save(target, room, requestId, form)
+                editing = false
+                "Sınav kaydı doğrulandı."
+            }
+        }
+    }
+    cancelled?.let { row ->
+        AlertDialog(onDismissRequest = { if (!busy) cancelled = null }, title = { Text("Sınavı iptal et") },
+            text = { Column { Text(row.getString("title")); Text("Not geçmişi korunur."); error?.let { Text(it) } } },
+            confirmButton = { Button(onClick = { write { client.cancel(row.getString("id")); cancelled = null; "Sınav iptali doğrulandı." } },
+                enabled = !busy) { Text("İptali onayla") } },
+            dismissButton = { TextButton(onClick = { cancelled = null }, enabled = !busy) { Text("Vazgeç") } })
+    }
+}
+
+@Composable
+private fun NativeExamEditor(
+    client: NativeExamsClient, current: JSONObject?, busy: Boolean, error: String?, onClose: () -> Unit,
+    onSave: (ExamClassChoice, UUID, JSONObject) -> Unit
+) {
+    var title by remember { mutableStateOf(current?.examText("title").orEmpty()) }
+    var date by remember { mutableStateOf(current?.examText("exam_date").orEmpty()) }
+    var start by remember { mutableStateOf(current?.examText("start_time")?.take(5).orEmpty()) }
+    var duration by remember { mutableStateOf(current?.examText("duration_minutes") ?: "60") }
+    var maximum by remember { mutableStateOf(if (current == null) "100" else current.examText("max_score").orEmpty()) }
+    var weight by remember { mutableStateOf(if (current == null) "1" else current.examText("weight").orEmpty()) }
+    var description by remember { mutableStateOf(current?.examText("description").orEmpty()) }
+    var type by remember { mutableStateOf(current?.examText("exam_type") ?: "QUIZ") }
+    var room by remember { mutableStateOf(current?.let {
+        val branch = it.examText("branch_id") ?: return@let null
+        ExamClassChoice(it.getString("class_id"), it.examText("class_name") ?: "Kayıtlı sınıf", branch)
+    }) }
+    var chooseRoom by remember { mutableStateOf(false) }
+    var chooseType by remember { mutableStateOf(false) }
+    val attempts = remember { mutableMapOf<String, UUID>() }
+    val locked = (current?.optInt("result_count") ?: 0) > 0
+    val day = runCatching { LocalDate.parse(date.trim()) }.getOrNull()
+    val time = runCatching { LocalTime.parse(start.trim()) }.getOrNull()
+    val minutes = duration.trim().toIntOrNull()
+    val max = examDecimal(maximum)
+    val ratio = examDecimal(weight)
+    val valid = title.isNotBlank() && room != null && day != null && (start.isBlank() || time != null) &&
+        minutes != null && minutes in 15..300 && max != null && max > BigDecimal.ZERO && max <= BigDecimal("999.99") &&
+        ratio != null && ratio in BigDecimal.ZERO..BigDecimal("2")
+
+    AlertDialog(onDismissRequest = { if (!busy) onClose() }, title = { Text(if (current == null) "Yeni sınav" else "Sınavı düzenle") },
+        text = { Column(Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            ExamField(title, { title = it }, "Sınav adı", 255, !busy)
+            TextButton(onClick = { chooseRoom = true }, enabled = !busy && !locked) { Text(room?.name ?: "Sınıf seçin") }
+            TextButton(onClick = { chooseType = true }, enabled = !busy) { Text(examTypes[type] ?: type) }
+            ExamField(date, { date = it }, "Tarih (YYYY-AA-GG)", 10, !busy)
+            ExamField(start, { start = it }, "Saat (SS:DD)", 5, !busy)
+            ExamField(duration, { duration = it }, "Süre (dakika)", 3, !busy)
+            ExamField(maximum, { maximum = it }, "Tam puan", 8, !busy && !locked)
+            ExamField(weight, { weight = it }, "Ağırlık", 8, !busy)
+            ExamField(description, { description = it }, "Açıklama", 1000, !busy)
+            if (locked) Text("Not girilmiş sınavın sınıfı ve tam puanı korunur.")
+            error?.let { Text(it) }
+        } },
+        confirmButton = { Button(enabled = valid && !busy, onClick = {
+            val classroom = requireNotNull(room)
+            val form = JSONObject().put("class_id", classroom.id).put("title", title.trim()).put("exam_type", type)
+                .put("exam_date", requireNotNull(day).toString()).put("start_time", time?.toString() ?: JSONObject.NULL)
+                .put("duration_minutes", requireNotNull(minutes)).put("max_score", requireNotNull(max).toPlainString())
+                .put("weight", requireNotNull(ratio).toPlainString()).put("description", description.trim().ifBlank { null } ?: JSONObject.NULL)
+            current?.examText("teacher_id")?.let { form.put("teacher_id", it) }
+            current?.examText("subject_id")?.let { form.put("subject_id", it) }
+            onSave(classroom, attempts.getOrPut(form.toString(), UUID::randomUUID), form)
+        }) { Text("Sınavı kaydet") } },
+        dismissButton = { TextButton(onClick = onClose, enabled = !busy) { Text("Vazgeç") } })
+
+    if (chooseRoom) ExamClassPicker(client, current?.examText("id"), onClose = { chooseRoom = false }) {
+        room = it
+        chooseRoom = false
+    }
+    if (chooseType) AlertDialog(onDismissRequest = { chooseType = false }, title = { Text("Sınav türü") },
+        text = { Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
+            examTypes.forEach { (code, name) -> TextButton(onClick = { type = code; chooseType = false }) { Text(name) } }
+        } }, confirmButton = { TextButton(onClick = { chooseType = false }) { Text("Kapat") } })
+}
+
+@Composable
+private fun ExamClassPicker(client: NativeExamsClient, examId: String?, onClose: () -> Unit, onChoose: (ExamClassChoice) -> Unit) {
+    var source by remember { mutableStateOf("") }
+    var page by remember { mutableIntStateOf(1) }
+    var revision by remember { mutableIntStateOf(0) }
+    val data by key(source, page, revision) { produceState<Result<ExamsPage<ExamClassChoice>>?>(null) {
+        value = examResult { if (source.isNotBlank()) delay(250); client.classes(page, source, examId) }
+    } }
+    val rows = data?.getOrNull()?.rows.orEmpty()
+    AlertDialog(onDismissRequest = onClose, title = { Text("Sınıf seçin") }, text = {
+        Column {
+            ExamField(source, { source = it; page = 1 }, "Sınıf ara", 200, true)
+            if (data == null) Text("Sınıflar yükleniyor…")
+            else if (data?.isFailure == true) TextButton(onClick = { revision++ }) { Text("Sınıfları yeniden yükle") }
+            else if (rows.isEmpty()) Text("Yetkili sınıf bulunamadı.")
+            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 220.dp)) {
+                items(rows, key = { it.id }) { item -> TextButton(onClick = { onChoose(item) }) { Text(item.name) } }
+            }
+            if (page > 1) TextButton(onClick = { page-- }) { Text("Önceki sayfa") }
+            if (data?.getOrNull()?.more == true) TextButton(onClick = { page++ }) { Text("Sonraki sayfa") }
+        }
+    }, confirmButton = { TextButton(onClick = onClose) { Text("Kapat") } })
+}
+
+@Composable
+internal fun ExamField(value: String, onChange: (String) -> Unit, label: String, maxLength: Int, enabled: Boolean) {
+    OutlinedTextField(value, { onChange(it.take(maxLength)) }, Modifier.fillMaxWidth(), enabled = enabled,
+        label = { Text(label) }, singleLine = maxLength < 1000)
+}
+
+internal fun examDecimal(value: String): BigDecimal? = value.trim().replace(',', '.').toBigDecimalOrNull()
+    ?.takeIf { it.scale() in 0..2 }
+
+internal suspend fun <T> examResult(load: suspend () -> T): Result<T> = try {
+    Result.success(load())
+} catch (failure: Exception) {
+    if (failure is CancellationException) throw failure
+    Result.failure(failure)
 }

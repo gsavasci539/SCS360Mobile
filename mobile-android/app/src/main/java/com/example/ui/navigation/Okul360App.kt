@@ -1069,13 +1069,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onNavigateBack = { currentSubScreen = SubScreen.NONE },
                                 onNavigateToDismissal = { currentSubScreen = SubScreen.DISMISSAL }
                             )
-                            SubScreen.EXAMS -> ExamsScreen(
-                                state = state,
-                                onBack = { currentSubScreen = SubScreen.NONE },
-                                onCreateExam = { exam -> viewModel.createExam(exam) },
-                                onUpdateExam = { exam -> viewModel.updateExam(exam) },
-                                onDeleteExam = { id -> viewModel.deleteExam(id) }
-                            )
+                            SubScreen.EXAMS -> ExamsScreen(state) { currentSubScreen = SubScreen.NONE }
                             SubScreen.OUTBOX -> OutboxBroadcastScreen(state) { currentSubScreen = SubScreen.NONE }
                             SubScreen.AI_CHAT_AUDIT -> AiChatAuditScreen(
                                 state = state,

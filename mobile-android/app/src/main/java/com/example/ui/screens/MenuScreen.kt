@@ -99,7 +99,7 @@ fun MenuScreen(
         listOf(
             MenuItemData("Veliler", "Veli, öğrenci ve giriş hesabı bağları", Icons.Default.FamilyRestroom, Color(0xFFEDE9FE), Color(0xFF7C3AED), null, onNavigateToParents),
             MenuItemData("Sınıflar & Şubeler", "${state.classes.size} Sınıf", Icons.Default.School, Color(0xFFDBEAFE), Color(0xFF1D4ED8), "${state.classes.size}", onNavigateToClasses),
-            MenuItemData("Sınavlar & Takvim", "${state.exams.size} Sınav", Icons.Default.Assessment, Color(0xFFFEE2E2), Color(0xFFDC2626), "${state.exams.size}", onNavigateToExams),
+            MenuItemData("Sınavlar ve karne", "Takvim ve notlar", Icons.Default.Assessment, Color(0xFFFEE2E2), Color(0xFFDC2626), null, onNavigateToExams),
             MenuItemData("Ders Programı", "Haftalık Derslik & Saat", Icons.Default.CalendarMonth, Color(0xFFE0F2FE), Color(0xFF0284C7), null, onNavigateToSchedule),
             MenuItemData("Dijital Karne", "Notlar ve PDF Çıktı", Icons.Default.WorkspacePremium, Color(0xFFF3E8FF), Color(0xFF7C3AED), "MEB", onNavigateToReportCard),
             MenuItemData("Ders Materyalleri", "Ders notları ve dosyalar", Icons.Default.MenuBook, Color(0xFFE0E7FF), Color(0xFF4338CA), null, onNavigateToCourseMaterials),
