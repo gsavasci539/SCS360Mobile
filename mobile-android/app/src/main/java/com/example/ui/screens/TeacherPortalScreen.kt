@@ -64,8 +64,6 @@ fun TeacherPortalScreen(
     onUpdateAttendanceStatus: (String, String) -> Unit,
     onMarkAllPresent: () -> Unit,
     onSaveDailyReport: (DailyReportDraft) -> Unit,
-    onMarkMedicineGiven: (String) -> Unit,
-    onApproveLeave: (String) -> Unit,
     onSelectConversation: (String?) -> Unit = {},
     onOpenThemeConfig: () -> Unit = {},
     onRoleSelected: (UserRole) -> Unit = {},
@@ -608,7 +606,8 @@ private fun TeacherDiaryFillTab(
                                 val actStr = selectedActivities.joinToString(", ")
                                 onOpenAiNarrativeGenerator(student.studentName, breakfast, sleepMinutes?.let { "$it Dakika" }.orEmpty(), mood, actStr)
                             },
-                            enabled = canWrite && currentStudent != null && !state.dailyReportSaving,
+                            enabled = canWrite && currentStudent != null && !state.dailyReportSaving &&
+                                (breakfast.isNotBlank() || sleepMinutes != null || mood.isNotBlank() || selectedActivities.isNotEmpty()),
                             colors = ButtonDefaults.filledTonalButtonColors(
                                 containerColor = Color(0xFFEDE9FE),
                                 contentColor = Color(0xFF6D28D9)
@@ -618,7 +617,7 @@ private fun TeacherDiaryFillTab(
                         ) {
                             Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("✨ AI Not Üret", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("Gözlemlerden taslak", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -677,181 +676,6 @@ private fun MealOptionRow(mealTitle: String, currentVal: String, enabled: Boolea
 
 // -------------------------------------------------------------
 // 3. TEACHER NOTICES TAB (Velilerden Gelen Bildirimler)
-// -------------------------------------------------------------
-@Composable
-private fun TeacherNoticesTab(
-    state: Okul360UiState,
-    onMarkMedicineGiven: (String) -> Unit,
-    onApproveLeave: (String) -> Unit
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        item {
-            Text(
-                text = "🔔 Velilerden Gelen Talepler",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Black,
-                color = BrandNavy
-            )
-            Text(
-                text = "Gün içi ilaç, izin ve teslim alma bildirimleri",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        // Section: Medicine Notices
-        item {
-            Text("💊 İlaç Takip Bildirimleri", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = PrimaryBlue)
-        }
-
-        if (state.medicineNotices.isEmpty()) {
-            item {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color.White,
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Bugün için bekleyen ilaç bildirimi bulunmuyor.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(14.dp))
-                }
-            }
-        } else {
-            items(state.medicineNotices) { med ->
-                val isGiven = med.status == "GIVEN"
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color.White,
-                    shape = RoundedCornerShape(14.dp),
-                    tonalElevation = 1.dp,
-                    shadowElevation = 1.dp
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text(med.student_name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = BrandNavy)
-                            Surface(
-                                color = if (isGiven) SecondaryEmerald.copy(alpha = 0.15f) else AccentAmber.copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(6.dp)
-                            ) {
-                                Text(
-                                    text = if (isGiven) "VERİLDİ" else "BEKLİYOR",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isGiven) SecondaryEmerald else AccentAmber,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text("İlaç: ${med.medicine_name} (${med.dose}) - Saat: ${med.time_to_give}", fontSize = 13.sp, color = BrandNavy)
-                        Text("Talimat: ${med.instructions}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        
-                        if (!isGiven) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Button(
-                                onClick = { onMarkMedicineGiven(med.id) },
-                                colors = ButtonDefaults.buttonColors(containerColor = SecondaryEmerald),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("İlaç Verildi Olarak İşaretle", fontSize = 12.sp)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Section: Leave Notices
-        item {
-            Spacer(modifier = Modifier.height(6.dp))
-            Text("📅 İzin & Mazeret Talepleri", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = AccentAmber)
-        }
-
-        if (state.leaveNotices.isEmpty()) {
-            item {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color.White,
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Bekleyen izin talebi bulunmuyor.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(14.dp))
-                }
-            }
-        } else {
-            items(state.leaveNotices) { leave ->
-                val isApproved = leave.status == "APPROVED"
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color.White,
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(leave.student_name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = BrandNavy)
-                            Text("${leave.start_date} - ${leave.end_date}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Text("Mazeret: ${leave.reason_type}", fontSize = 13.sp, color = BrandNavy)
-                        Text("Veli Notu: ${leave.parent_note}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        
-                        if (!isApproved) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedButton(
-                                onClick = { onApproveLeave(leave.id) },
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                            ) {
-                                Text("Talebi Onayla", fontSize = 12.sp)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Section: Pickup Authorizations
-        item {
-            Spacer(modifier = Modifier.height(6.dp))
-            Text("🚗 Teslim Alma Yetkilileri", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF7C3AED))
-        }
-
-        if (state.pickupNotices.isEmpty()) {
-            item {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color.White,
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Bugün için özel teslim alma bildirimi yok.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(14.dp))
-                }
-            }
-        } else {
-            items(state.pickupNotices) { pick ->
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color.White,
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text(pick.student_name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = BrandNavy)
-                        Text("Teslim Alacak Kişi: ${pick.authorized_person_name} (${pick.relationship})", fontSize = 13.sp, color = BrandNavy)
-                        Text("Telefon: ${pick.phone}", fontSize = 12.sp, color = PrimaryBlue)
-                    }
-                }
-            }
-        }
-    }
-}
-
-// -------------------------------------------------------------
-// 4. TEACHER SCHEDULE TAB
-// -------------------------------------------------------------
-// -------------------------------------------------------------
-// 5. TEACHER CLASS & PROFILE TAB
 // -------------------------------------------------------------
 @Composable
 private fun TeacherClassStudentsTab(

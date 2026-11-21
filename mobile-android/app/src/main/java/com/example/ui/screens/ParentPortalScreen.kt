@@ -89,11 +89,7 @@ fun ParentPortalScreen(
     state: Okul360UiState,
     onRoleSelected: (UserRole) -> Unit,
     onPayInvoice: (String, Double, String) -> Unit,
-    onSubmitMedicine: (String, String, String, String, String) -> Unit,
-    onSubmitLeave: (String, String, String, String, String) -> Unit,
-    onSubmitPickup: (String, String, String, String) -> Unit,
     onOpenThemeConfig: () -> Unit = {},
-    onOpenAiWeeklyDigest: ((Student) -> Unit)? = null,
     onOpenChatbot: (() -> Unit)? = null,
     onOpenConsents: () -> Unit = {},
     onOpenTransport: () -> Unit = {},
@@ -530,7 +526,6 @@ fun ParentPortalScreen(
                         student = currentChild,
                         state = state,
                         currentUser = state.currentUser,
-                        onOpenAiWeeklyDigest = onOpenAiWeeklyDigest,
                         showChildDetails = !limitedToModules,
                         onLogout = onLogout
                     )
@@ -621,7 +616,6 @@ internal fun ParentDiaryAndGrowthTab(
     student: Student,
     state: Okul360UiState,
     currentUser: User,
-    onOpenAiWeeklyDigest: ((Student) -> Unit)? = null,
     showChildDetails: Boolean = true,
     onLogout: () -> Unit
 ) {

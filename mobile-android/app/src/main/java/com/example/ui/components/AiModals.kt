@@ -551,11 +551,11 @@ fun AiNarrativeGeneratorModal(
     activeNarrative: AiDailyNarrative?,
     onApplyToDailyReport: ((String) -> Unit)? = null
 ) {
-    var studentName by remember { mutableStateOf("Ali Demir") }
-    var meal by remember { mutableStateOf("Tam Bitirdi (Sebze ve Çorba)") }
-    var sleep by remember { mutableStateOf("1.5 Saat Rahat Uyudu") }
-    var mood by remember { mutableStateOf("Neşeli & Paylaşımcı") }
-    var activities by remember { mutableStateOf("Parmak Boyası ve Blok İnşası") }
+    var studentName by remember { mutableStateOf("") }
+    var meal by remember { mutableStateOf("") }
+    var sleep by remember { mutableStateOf("") }
+    var mood by remember { mutableStateOf("") }
+    var activities by remember { mutableStateOf("") }
     var customNote by remember { mutableStateOf("") }
 
     val clipboardManager = LocalClipboardManager.current
@@ -598,13 +598,13 @@ fun AiNarrativeGeneratorModal(
                     ) {
                         Column {
                             Text(
-                                text = "📝 AI Pedagojik Karne Metni Üretici",
+                                text = "Günlük karne taslağı",
                                 fontWeight = FontWeight.Black,
                                 fontSize = 17.sp,
                                 color = Color.White
                             )
                             Text(
-                                text = "Velilere hitap eden sıcak, profesyonel bülten notu üretin.",
+                                text = "Öğretmenin girdiği gözlemlerden bir taslak oluşturun.",
                                 fontSize = 12.sp,
                                 color = Color(0xFFFFEDD5)
                             )
@@ -648,7 +648,17 @@ fun AiNarrativeGeneratorModal(
                         shape = RoundedCornerShape(12.dp)
                     )
 
+                    OutlinedTextField(
+                        value = sleep, onValueChange = { sleep = it },
+                        label = { Text("Uyku") }, modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = customNote, onValueChange = { customNote = it },
+                        label = { Text("Öğretmen notu") }, modifier = Modifier.fillMaxWidth()
+                    )
+
                     Button(
+                        enabled = studentName.isNotBlank() && listOf(meal, sleep, mood, activities, customNote).any { it.isNotBlank() },
                         onClick = {
                             onGenerate(studentName, meal, sleep, mood, activities, customNote.ifBlank { null })
                         },
@@ -658,7 +668,7 @@ fun AiNarrativeGeneratorModal(
                     ) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("✨ Pedagojik Günlük Notu Üret", fontWeight = FontWeight.Bold)
+                        Text("Taslağı oluştur", fontWeight = FontWeight.Bold)
                     }
 
                     if (activeNarrative != null) {
@@ -675,7 +685,7 @@ fun AiNarrativeGeneratorModal(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "🌟 Üretilen Karne Metni:",
+                                        text = "Gözlem taslağı",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp,
                                         color = Color(0xFF9A3412)

@@ -1403,135 +1403,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun submitMedicineNotice(studentId: String, medicineName: String, dose: String, time: String, instructions: String) {
-        val student = _uiState.value.students.find { it.id == studentId }
-        val studentName = student?.full_name ?: "Öğrenci"
-        val notice = MedicineNotice(
-            id = "med-${UUID.randomUUID()}",
-            student_id = studentId,
-            student_name = studentName,
-            medicine_name = medicineName,
-            dose = dose,
-            time_to_give = time,
-            instructions = instructions,
-            date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-        )
-        NotificationHelper.sendMedicineReminderPush(
-            context = getApplication(),
-            studentName = studentName,
-            medicineName = "$medicineName ($dose)",
-            time = time
-        )
-        viewModelScope.launch(requestFailures) {
-            repository.requestChildMedicine(
-                studentId,
-                MedicineRequest(
-                    id = notice.id,
-                    student_id = studentId,
-                    student_name = studentName,
-                    medicine_name = medicineName,
-                    dosage = dose,
-                    intake_time = time,
-                    parent_notes = instructions
-                )
-            )
-        }
-        _uiState.update {
-            it.copy(
-                medicineNotices = it.medicineNotices + notice,
-                toastMessage = "$medicineName ilacı için öğretmene bildirim iletildi."
-            )
-        }
-    }
-
-    fun submitLeaveNotice(studentId: String, startDate: String, endDate: String, reason: String, note: String) {
-        val student = _uiState.value.students.find { it.id == studentId }
-        val studentName = student?.full_name ?: "Öğrenci"
-        val notice = LeaveNotice(
-            id = "leave-${UUID.randomUUID()}",
-            student_id = studentId,
-            student_name = studentName,
-            start_date = startDate,
-            end_date = endDate,
-            reason_type = reason,
-            parent_note = note
-        )
-        viewModelScope.launch(requestFailures) {
-            repository.requestChildExcuse(
-                studentId,
-                ExcuseRequest(
-                    id = notice.id,
-                    student_id = studentId,
-                    student_name = studentName,
-                    reason_type = reason,
-                    start_date = startDate,
-                    end_date = endDate,
-                    description = note,
-                    status = "PENDING"
-                )
-            )
-        }
-        _uiState.update {
-            it.copy(
-                leaveNotices = it.leaveNotices + notice,
-                toastMessage = "İzin ve mazeret talebi okul idaresine iletildi."
-            )
-        }
-    }
-
-    fun submitPickupNotice(studentId: String, personName: String, relationship: String, phone: String) {
-        val student = _uiState.value.students.find { it.id == studentId }
-        val studentName = student?.full_name ?: "Öğrenci"
-        val notice = PickupNotice(
-            id = "pickup-${UUID.randomUUID()}",
-            student_id = studentId,
-            student_name = studentName,
-            authorized_person_name = personName,
-            relationship = relationship,
-            phone = phone,
-            date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-        )
-        _uiState.update {
-            it.copy(
-                pickupNotices = it.pickupNotices + notice,
-                toastMessage = "Teslim alacak yetkili ($personName) okul güvenliğine ve öğretmene iletildi."
-            )
-        }
-    }
-
-    fun markMedicineGiven(noticeId: String) {
-        val targetNotice = _uiState.value.medicineNotices.find { it.id == noticeId }
-        if (targetNotice != null) {
-            NotificationHelper.sendMedicineReminderPush(
-                context = getApplication(),
-                studentName = targetNotice.student_name,
-                medicineName = "${targetNotice.medicine_name} (${targetNotice.dose}) ilacı verildi",
-                time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
-            )
-        }
-        _uiState.update { state ->
-            val updated = state.medicineNotices.map {
-                if (it.id == noticeId) it.copy(status = "GIVEN") else it
-            }
-            state.copy(
-                medicineNotices = updated,
-                toastMessage = "İlaç verildi olarak kaydedildi ve veliye push bildirim iletildi."
-            )
-        }
-    }
-
-    fun approveLeaveNotice(noticeId: String) {
-        _uiState.update { state ->
-            val updated = state.leaveNotices.map {
-                if (it.id == noticeId) it.copy(status = "APPROVED") else it
-            }
-            state.copy(
-                leaveNotices = updated,
-                toastMessage = "İzin talebi onaylandı."
-            )
-        }
-    }
-
     fun saveStudentDailyReport(draft: DailyReportDraft) {
         val state = _uiState.value
         if (!state.isLoggedIn || state.dailyReportSaving || !com.example.ui.navigation.NativeNavigationPolicy.has(
@@ -1710,51 +1581,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun generateAiStudentChurnRisk() {
-        viewModelScope.launch(requestFailures) {
-            _uiState.update { it.copy(isAiLoading = true, aiLoadingMessage = "Gemini 3.5 Flash: Devamsızlık, aidat ve duygu trendi ile riskli öğrenciler taranıyor...") }
-            delay(800)
-            val current = _uiState.value
-            val churnList = AiAnalyticsEngine.generateStudentChurnRiskReport(
-                students = current.students,
-                attendances = current.attendanceRecords,
-                invoices = current.invoices
-            )
-            val summaryReport = AiAnalysisReport(
-                id = "ai-churn-${System.currentTimeMillis()}",
-                target_role = "OWNER",
-                report_type = "STUDENT_CHURN_RISK",
-                title = "📉 AI Öğrenci Ayrılma & Kayıp Riski Raporu",
-                subtitle = "Erken müdahale gerektiren ${churnList.size} riskli öğrenci tespit edildi",
-                created_at = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date()),
-                model_name = "Gemini 3.5 Flash Churn",
-                summary = "Kurum genelinde ${current.students.size} öğrenci taranmış, devamsızlık artışı ve ödeme gecikmesi eşleşmesiyle ${churnList.size} öğrencide ayrılma riski öngörülmüştür.",
-                key_findings = churnList.map { "${it.student_name} (${it.class_name}): ${it.primary_reason}" },
-                recommendations = listOf(
-                    "Tespit edilen öğrenciler için rehberlik servisine otomatik bildirim iletildi.",
-                    "Sınıf öğretmenleri ile bireysel veli randevuları koordine edilmeli.",
-                    "Devamsızlık yapan öğrencilere ders telafi föyleri yönlendirilmeli."
-                ),
-                risk_score = 45,
-                risk_level = "Orta / Dikkat",
-                metrics = mapOf(
-                    "Taranan Öğrenci" to "${current.students.size}",
-                    "Riskli Öğrenci" to "${churnList.size}",
-                    "Kritik Alarm" to "${churnList.count { it.risk_score >= 70 }}"
-                )
-            )
-            _uiState.update {
-                it.copy(
-                    isAiLoading = false,
-                    churnRiskList = churnList,
-                    activeAiReport = summaryReport,
-                    showAiReportModal = true,
-                    toastMessage = "📉 AI Kayıp Riski analizi tamamlandı."
-                )
-            }
-        }
-    }
-
     fun generateAiTeacherDailyNarrative(
         studentName: String,
         meal: String,
@@ -1764,27 +1590,16 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         customNote: String? = null,
         onResult: (String) -> Unit = {}
     ) {
-        viewModelScope.launch(requestFailures) {
-            _uiState.update { it.copy(isAiLoading = true, aiLoadingMessage = "Gemini 3.5 Flash: $studentName için pedagojik günlük bülten notu üretiliyor...") }
-            delay(700)
-            val narrative = AiAnalyticsEngine.generateTeacherDailyNarrative(
-                studentName = studentName,
-                mealStatus = meal,
-                sleepStatus = sleep,
-                mood = mood,
-                activities = activities,
-                customTeacherNote = customNote
-            )
-            _uiState.update {
-                it.copy(
-                    isAiLoading = false,
-                    activeDailyNarrative = narrative,
-                    showAiNarrativeModal = true,
-                    toastMessage = "✨ $studentName için karne notu oluşturuldu."
-                )
-            }
-            onResult(narrative.narrative_text)
+        val narrative = try {
+            AiAnalyticsEngine.generateTeacherDailyNarrative(studentName, meal, sleep, mood, activities, customNote)
+        } catch (failure: IllegalArgumentException) {
+            _uiState.update { it.copy(toastMessage = failure.message) }
+            return
         }
+        _uiState.update {
+            it.copy(activeDailyNarrative = narrative, showAiNarrativeModal = true)
+        }
+        onResult(narrative.narrative_text)
     }
 
     fun generateAiTeacherHomework(
@@ -1828,26 +1643,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             mood = mood,
             activities = activities
         )
-    }
-
-    fun generateAiParentWeeklyDigest(student: Student) {
-        viewModelScope.launch(requestFailures) {
-            _uiState.update { it.copy(isAiLoading = true, aiLoadingMessage = "Gemini 3.5 Flash: ${student.first_name} için haftalık pedagojik karne sentezleniyor...") }
-            delay(850)
-            val current = _uiState.value
-            val digest = AiAnalyticsEngine.generateParentWeeklyDigest(
-                student = student,
-                dailyReports = current.dailyReports
-            )
-            _uiState.update {
-                it.copy(
-                    isAiLoading = false,
-                    activeAiParentDigest = digest,
-                    showAiParentDigestModal = true,
-                    toastMessage = "🌟 ${student.first_name} için Haftalık AI Gelişim Raporu hazırlandı."
-                )
-            }
-        }
     }
 
     fun openAiReportDetail(report: AiAnalysisReport) {

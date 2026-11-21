@@ -99,16 +99,23 @@ private fun InstitutionConsents(organization: String, canWrite: Boolean, onNavig
         }
     }
 
+    // Compose one set of list items before the lazy layout measures it.
+    val showingDecisions = decisionsTab
+    val pending = loading
+    val loadError = failure
+    val decisionRows = decisions
+    val documentRows = documents
+    val totalRows = if (showingDecisions) decisionRows.size else documentRows.size
     LazyColumn(
         Modifier.fillMaxSize().testTag("consent_records"),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item {
+        item(key = "heading") {
             TextButton(onClick = onNavigateBack) { Text("Geri") }
             Text("Veli Onay Masası", style = MaterialTheme.typography.headlineSmall)
         }
-        item {
+        item(key = "filters") {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 FilterChip(!decisionsTab, enabled = !busy, onClick = { decisionsTab = false; reload(0) }, label = { Text("İzin belgeleri") })
                 FilterChip(decisionsTab, enabled = !busy, onClick = { decisionsTab = true; reload(0) }, label = { Text("Veli kararları") })
@@ -123,14 +130,14 @@ private fun InstitutionConsents(organization: String, canWrite: Boolean, onNavig
             }
         }
         when {
-            loading -> item { Text("İzin kayıtları yükleniyor…") }
-            failure != null -> item {
-                Text(failure.orEmpty())
+            pending -> item(key = "loading") { Text("İzin kayıtları yükleniyor…") }
+            loadError != null -> item(key = "error") {
+                Text(loadError)
                 OutlinedButton(onClick = { reload() }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Yeniden yükle") }
             }
-            decisionsTab -> {
-                if (decisions.isEmpty()) item { Text("Kayıtlı veli kararı bulunamadı.") }
-                items(decisions.take(CONSENT_PAGE_SIZE), key = { it.id }) { decision ->
+            showingDecisions -> {
+                if (decisionRows.isEmpty()) item(key = "empty-decisions") { Text("Kayıtlı veli kararı bulunamadı.") }
+                items(decisionRows.take(CONSENT_PAGE_SIZE), key = { "decision-${it.id}" }) { decision ->
                     OutlinedCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             decision.documentTitle?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
@@ -151,8 +158,8 @@ private fun InstitutionConsents(organization: String, canWrite: Boolean, onNavig
                 }
             }
             else -> {
-                if (documents.isEmpty()) item { Text("İzin belgesi bulunamadı.") }
-                items(documents.take(CONSENT_PAGE_SIZE), key = { it.id }) { document ->
+                if (documentRows.isEmpty()) item(key = "empty-documents") { Text("İzin belgesi bulunamadı.") }
+                items(documentRows.take(CONSENT_PAGE_SIZE), key = { "document-${it.id}" }) { document ->
                     OutlinedCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(document.title, style = MaterialTheme.typography.titleMedium)
@@ -166,15 +173,14 @@ private fun InstitutionConsents(organization: String, canWrite: Boolean, onNavig
                 }
             }
         }
-        if (!loading && failure == null) {
-            val itemCount = if (decisionsTab) decisions.size else documents.size
-            item {
+        if (!pending && loadError == null) {
+            item(key = "pagination") {
                 Column {
                     Text("Sayfa ${page + 1}")
                     OutlinedButton(enabled = page > 0 && !busy, onClick = { reload(page - 1) }, modifier = Modifier.heightIn(min = 48.dp)) {
                         Text("Önceki")
                     }
-                    OutlinedButton(enabled = itemCount > CONSENT_PAGE_SIZE && !busy, onClick = { reload(page + 1) },
+                    OutlinedButton(enabled = totalRows > CONSENT_PAGE_SIZE && !busy, onClick = { reload(page + 1) },
                         modifier = Modifier.heightIn(min = 48.dp)) { Text("Sonraki") }
                 }
             }

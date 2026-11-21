@@ -222,7 +222,7 @@ class NativeConsentUiTest {
         val state = Okul360UiState(isLoggedIn = true, currentUser = user, selectedRole = UserRole.PARENT, parentChildren = listOf(child))
         compose.setContent {
             Okul360Theme {
-                ParentPortalScreen(state, {}, { _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _ -> },
+                ParentPortalScreen(state, {}, { _, _, _ -> },
                     chatbotTab = ParentNavTab.CONSENTS, chatbotStudentId = child.id, onLogout = {})
             }
         }

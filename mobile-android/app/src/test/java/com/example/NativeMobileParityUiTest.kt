@@ -209,7 +209,7 @@ class NativeMobileParityUiTest {
         compose.setContent {
             val scope = rememberCoroutineScope()
             Okul360Theme {
-                ParentPortalScreen(state, {}, { _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _ -> },
+                ParentPortalScreen(state, {}, { _, _, _ -> },
                     chatbotTab = ParentNavTab.PAYMENTS, chatbotStudentId = child.id, onRefresh = { portalReloads++ },
                     onRefreshInvoices = { studentId ->
                         refreshedChildren.add(studentId)
@@ -471,7 +471,7 @@ class NativeMobileParityUiTest {
         compose.setContent {
             val scope = rememberCoroutineScope()
             Okul360Theme {
-                ParentPortalScreen(state, {}, { _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _ -> },
+                ParentPortalScreen(state, {}, { _, _, _ -> },
                     onRefreshInvoices = { studentId ->
                         refreshed.add(studentId)
                         state = state.copy(parentInvoiceStates = state.parentInvoiceStates + (studentId to ParentInvoiceLoadState.LOADING))
@@ -573,7 +573,7 @@ class NativeMobileParityUiTest {
         val refreshed = mutableListOf<String>()
         compose.setContent {
             Okul360Theme {
-                ParentPortalScreen(state, {}, { _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _ -> },
+                ParentPortalScreen(state, {}, { _, _, _ -> },
                     onRefreshInvoices = { refreshed.add(it) }, onLogout = {})
             }
         }
@@ -643,7 +643,7 @@ class NativeMobileParityUiTest {
     @Test fun parentPortalDoesNotTreatLegacyNameOrPhoneMatchesAsChildren() {
         val user = User(id = id(1), full_name = "Synthetic Parent", roles = listOf(UserRoleInfo("parent")))
         val foreign = Student(id = id(7), first_name = "Foreign child", parent_name = user.full_name)
-        compose.setContent { Okul360Theme { ParentPortalScreen(Okul360UiState(isLoggedIn = true, currentUser = user, selectedRole = UserRole.PARENT, students = listOf(foreign)), {}, { _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _ -> }, onLogout = {}) } }
+        compose.setContent { Okul360Theme { ParentPortalScreen(Okul360UiState(isLoggedIn = true, currentUser = user, selectedRole = UserRole.PARENT, students = listOf(foreign)), {}, { _, _, _ -> }, onLogout = {}) } }
         try { compose.onNodeWithText("Kayıtlı Öğrenci Bulunamadı").assertExists() }
         catch (failure: AssertionError) { println(compose.onRoot(useUnmergedTree = true).printToString()); throw failure }
         compose.onAllNodesWithText("Foreign child", substring = true).assertCountEquals(0)
@@ -745,7 +745,7 @@ class NativeMobileParityUiTest {
             parentInvoiceSnapshots = mapOf(child.id to snapshot))
         compose.setContent {
             Okul360Theme {
-                ParentPortalScreen(state, {}, { _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _ -> }, onLogout = {})
+                ParentPortalScreen(state, {}, { _, _, _ -> }, onLogout = {})
             }
         }
         compose.onNodeWithTag("parent_invoices").performScrollToNode(hasText("Makbuz İncele"))
@@ -847,7 +847,7 @@ class NativeMobileParityUiTest {
         var opened = 0
         compose.setContent {
             Okul360Theme {
-                ParentPortalScreen(state, {}, { _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _, _ -> }, { _, _, _, _ -> },
+                ParentPortalScreen(state, {}, { _, _, _ -> },
                     chatbotTab = ParentNavTab.MESSAGING, chatbotStudentId = id(7),
                     onChatbotDestinationOpened = { opened++ }, onLogout = {})
             }

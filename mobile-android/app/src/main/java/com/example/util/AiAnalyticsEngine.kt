@@ -188,9 +188,7 @@ object AiAnalyticsEngine {
         return result
     }
 
-    /**
-     * 4. Öğretmen: Yapay Zeka Otomatik Günlük Karne Metni Üretici
-     */
+    /** Builds a draft from observations supplied by the teacher. */
     fun generateTeacherDailyNarrative(
         studentName: String,
         mealStatus: String,
@@ -199,42 +197,17 @@ object AiAnalyticsEngine {
         activities: String,
         customTeacherNote: String? = null
     ): AiDailyNarrative {
-        val mealText = when {
-            mealStatus.contains("Tam", ignoreCase = true) || mealStatus.contains("ALL", ignoreCase = true) -> "öğünlerinin tamamını çok iştahlı ve neşeyle tüketti"
-            mealStatus.contains("Yarım", ignoreCase = true) || mealStatus.contains("HALF", ignoreCase = true) -> "öğle yemeğinde ana yemeğini bitirdi, ara öğününde biraz meyve tercih etti"
-            else -> "öğün saatlerinde beslenmesi öğretmen gözetiminde desteklendi"
-        }
-
-        val sleepText = when {
-            sleepStatus.contains("Uyudu", ignoreCase = true) || sleepStatus.contains("WELL", ignoreCase = true) -> "öğle uykusuna rahatça dalarak dinlenmiş ve enerjik şekilde uyandı"
-            sleepStatus.contains("Az", ignoreCase = true) || sleepStatus.contains("SHORT", ignoreCase = true) -> "dinlenme saatinde sakin bir şekilde dinlendi"
-            else -> "uyku saatini sessiz kitap inceleme ve dinlenme köşesinde geçirdi"
-        }
-
-        val moodText = when {
-            mood.contains("Neşeli", ignoreCase = true) || mood.contains("HAPPY", ignoreCase = true) -> "günün tamamında çok neşeli, arkadaş canlısı ve enerjikti"
-            mood.contains("Sakin", ignoreCase = true) || mood.contains("CALM", ignoreCase = true) -> "sınıf içi aktivitelere odaklı, sakin ve huzurlu bir gün geçirdi"
-            mood.contains("Huzursuz", ignoreCase = true) -> "sabah saatlerinde biraz ilgi arayışındaydı ancak oyun saatinde hızla keyfi yerine geldi"
-            else -> "arkadaşlarıyla grup oyunlarında uyumlu ve aktifti"
-        }
-
-        val actText = if (activities.isNotBlank()) "Özellikle $activities etkinliklerinde yaratıcılığı ve motor becerileriyle öne çıktı." else "Günün yaratıcı drama ve sanat çalışmalarına ilgiyle katıldı."
-
-        val extraNote = if (!customTeacherNote.isNullOrBlank()) " Öğretmen Notu: $customTeacherNote" else ""
-
-        val fullNarrative = "$studentName bugün $moodText. Yemek saatinde $mealText ve $sleepText. $actText$extraNote"
-
+        require(studentName.isNotBlank()) { "Öğrenci adını girin." }
+        val observations = listOf(
+            "Yemek" to mealStatus, "Uyku" to sleepStatus, "Duygu durumu" to mood,
+            "Etkinlikler" to activities, "Öğretmen notu" to customTeacherNote.orEmpty(),
+        ).filter { (_, value) -> value.isNotBlank() }
+        require(observations.isNotEmpty()) { "En az bir gözlem girin." }
         return AiDailyNarrative(
-            student_id = "std-${studentName.hashCode()}",
-            student_name = studentName,
-            date = dateOnlyFormat.format(Date()),
-            narrative_text = fullNarrative,
-            tone = "Pedagojik & Şefkatli",
-            mood_detected = mood,
-            suggested_activities = listOf(
-                "Akşam evde günün resmi hakkında sohbet etme",
-                "Birlikte 15 dakika kitap okuma saati"
-            )
+            student_name = studentName.trim(),
+            narrative_text = observations.joinToString("\n") { (label, value) -> "$label: ${value.trim()}" },
+            tone = "Gözlem taslağı",
+            mood_detected = mood.trim(),
         )
     }
 

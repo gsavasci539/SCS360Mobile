@@ -136,8 +136,7 @@ class NativeParentDayUiTest {
                 currentUser = User(id = "parent", permissions = listOf("parent.view_attendance")), parentChildren = attendanceChildren))
             compose.setContent {
                 Okul360Theme {
-                    ParentPortalScreen(state.value, {}, { _, _, _ -> }, { _, _, _, _, _ -> },
-                        { _, _, _, _, _ -> }, { _, _, _, _ -> }, onLogout = {})
+                    ParentPortalScreen(state.value, {}, { _, _, _ -> }, onLogout = {})
                 }
             }
             compose.waitUntil(10_000) { compose.onAllNodesWithText("Bu ay için yoklama kaydı yok.").fetchSemanticsNodes().isNotEmpty() }

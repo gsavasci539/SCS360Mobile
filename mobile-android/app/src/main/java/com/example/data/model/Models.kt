@@ -1032,13 +1032,13 @@ data class AiAnalysisReport(
 
 @JsonClass(generateAdapter = true)
 data class AiDailyNarrative(
-    val student_id: String = "std-1",
-    val student_name: String = "Ali Demir",
-    val date: String = "2026-08-30",
-    val narrative_text: String = "Ali bugün grup oyunlarında oldukça paylaşımcı ve neşeliydi. Öğle yemeğinde sebze çorbasını severek bitirdi. Sanat etkinliğinde renk uyumu ve odaklanması takdire şayandı.",
-    val tone: String = "Pedagojik & Şefkatli",
-    val mood_detected: String = "Mutlu & Dingin",
-    val suggested_activities: List<String> = listOf("Akşam serbest boyama", "Birlikte masal dinleme")
+    val student_id: String = "",
+    val student_name: String = "",
+    val date: String = "",
+    val narrative_text: String = "",
+    val tone: String = "",
+    val mood_detected: String = "",
+    val suggested_activities: List<String> = emptyList(),
 )
 
 @JsonClass(generateAdapter = true)
