@@ -14,6 +14,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.net.InetSocketAddress
+import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -113,14 +114,12 @@ class NativeApiScopeTest {
     @Test fun oldOperationCannotCreateAWritingCallWithTheNewActorsToken() = runBlocking {
         val calls = AtomicInteger()
         withServer({ e -> calls.incrementAndGet(); reply(e, 200, "{}") }) { url ->
-            val api = ApiClientProvider.createService(url)
+            ApiClientProvider.createService(url)
             ApiClientProvider.interceptor.setSession("synthetic-actor-A")
-            val scope = ApiClientProvider.interceptor.captureScope()
+            val surveys = NativeSurveyClient(UUID(91, 1).toString())
             val failure = runCatching {
-                scope.io {
-                    ApiClientProvider.interceptor.setSession("synthetic-actor-B")
-                    api.participateSurvey("synthetic-survey", mapOf("answers" to emptyMap<String, String>()))
-                }
+                ApiClientProvider.interceptor.setSession("synthetic-actor-B")
+                surveys.submit(UUID(91, 2).toString(), JSONObject())
             }.exceptionOrNull()
             assertTrue(failure is CancellationException)
             assertEquals(0, calls.get())
@@ -167,16 +166,28 @@ class NativeApiScopeTest {
             ApiClientProvider.interceptor.setSession("synthetic-token")
             val context = ApplicationProvider.getApplicationContext<Context>()
             val repo = Okul360Repository(context)
+            val surveys = NativeSurveyClient(UUID(91, 1).toString())
             var failures = 0
             val operations: List<suspend () -> Any?> = listOf(
                 { repo.getConsents("synthetic-student") },
                 { repo.createGuidanceRecord(GuidanceRecord()) },
                 { repo.approveConsent("synthetic-consent", "Synthetic parent") },
-                { repo.participateSurvey("synthetic-survey", emptyMap()) },
+                { surveys.submit(UUID(91, 2).toString(), JSONObject()) },
                 { repo.forgotPassword("user@example.test") }
             )
             for (operation in operations) {
-                try { operation(); fail("Unavailable API must not produce a local success") } catch (_: retrofit2.HttpException) { failures++ }
+                try {
+                    operation()
+                    fail("Unavailable API must not produce a local success")
+                } catch (failure: Exception) {
+                    val status = when (failure) {
+                        is retrofit2.HttpException -> failure.code()
+                        is RegistryHttpException -> failure.code
+                        else -> throw failure
+                    }
+                    assertEquals(503, status)
+                    failures++
+                }
             }
             assertEquals(operations.size, failures)
         }

@@ -886,16 +886,6 @@ interface Okul360ApiService {
     @DELETE("guidance/{id}")
     suspend fun deleteGuidanceRecord(@Path("id") id: String): Map<String, Any>
 
-    // 5. Anketler (Surveys)
-    @GET("surveys")
-    suspend fun getSurveys(): List<SchoolSurvey>
-
-    @POST("surveys")
-    suspend fun createSurvey(@Body survey: SchoolSurvey): SchoolSurvey
-
-    @POST("surveys/{id}/participate")
-    suspend fun participateSurvey(@Path("id") surveyId: String, @Body body: Map<String, Any>): Map<String, Any>
-
     // 6. Birebir Etüt (Tutoring)
     @GET("tutoring")
     suspend fun getTutoringSessions(@Query("student_id") studentId: String? = null): List<TutoringSession>

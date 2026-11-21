@@ -119,7 +119,7 @@ fun MenuScreen(
             MenuItemData("Duyurular & Bildirim", "${state.announcements.size} Duyuru", Icons.Default.Campaign, Color(0xFFF3E8FF), Color(0xFF7E22CE), "${state.announcements.size}", onNavigateToCommunication),
             MenuItemData("Özel Mesajlaşma", "Sohbetler", Icons.Default.ChatBubbleOutline, Color(0xFFD1FAE5), Color(0xFF059669), onClick = onNavigateToDirectMessaging),
             MenuItemData("Veli Randevuları", "Birebir Görüşmeler", Icons.Default.EventAvailable, Color(0xFFE0F2FE), Color(0xFF0369A1), "${state.appointments.size}", onNavigateToAppointments),
-            MenuItemData("Anketler & Memnuniyet", "${state.surveys.size} Anket", Icons.Default.Poll, Color(0xFFFCE7F3), Color(0xFFBE185D), null, onNavigateToSurveys),
+            MenuItemData("Anketler & Memnuniyet", "Anket ve yanıt kayıtları", Icons.Default.Poll, Color(0xFFFCE7F3), Color(0xFFBE185D), null, onNavigateToSurveys),
             MenuItemData("Bildirim Merkezi", "${state.notifications.count { !it.is_read }} Yeni Uyarı", Icons.Default.Notifications, Color(0xFFDBEAFE), Color(0xFF2563EB), "${state.notifications.count { !it.is_read }}", onNavigateToNotifications)
         )
     }

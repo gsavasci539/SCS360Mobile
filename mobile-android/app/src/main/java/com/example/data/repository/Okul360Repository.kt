@@ -134,7 +134,6 @@ class Okul360Repository(private val context: Context) {
     private val localAnnouncements = mutableListOf<Announcement>()
     private val localConsents = mutableListOf<StudentConsent>()
     private val localGuidance = mutableListOf<GuidanceRecord>()
-    private val localSurveys = mutableListOf<SchoolSurvey>()
     private val localTutoring = mutableListOf<TutoringSession>()
     private val localPayrolls = mutableListOf<PayrollRecord>()
     private val localAuditLogs = mutableListOf<AuditLogEntry>()
@@ -920,39 +919,6 @@ class Okul360Repository(private val context: Context) {
     suspend fun deleteGuidanceRecord(id: String): Boolean = requestContext {
         try { apiService.deleteGuidanceRecord(id) } catch (failure: Exception) { throw failure }
         localGuidance.removeAll { it.id == id }
-        true
-    }
-
-    // 5. Anketler & Memnuniyet (Surveys)
-    suspend fun getSurveys(): List<SchoolSurvey> = requestContext {
-        try {
-            val remote = apiService.getSurveys()
-            localSurveys.clear()
-            localSurveys.addAll(remote)
-            localSurveys.toList()
-        } catch (failure: Exception) { throw failure }
-    }
-
-    suspend fun createSurvey(survey: SchoolSurvey): SchoolSurvey = requestContext {
-        try {
-            val res = apiService.createSurvey(survey)
-            localSurveys.add(0, res)
-            res
-        } catch (failure: Exception) { throw failure }
-    }
-
-    suspend fun participateSurvey(surveyId: String, answers: Map<String, Any>): Boolean = requestContext {
-        try {
-            apiService.participateSurvey(surveyId, answers)
-        } catch (failure: Exception) { throw failure }
-        val idx = localSurveys.indexOfFirst { it.id == surveyId }
-        if (idx >= 0) {
-            val s = localSurveys[idx]
-            localSurveys[idx] = s.copy(
-                is_participated = true,
-                total_responses = s.total_responses + 1
-            )
-        }
         true
     }
 

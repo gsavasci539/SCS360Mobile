@@ -279,7 +279,6 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onOpenAiWeeklyDigest = { std -> viewModel.generateAiParentWeeklyDigest(std) },
                                 onOpenChatbot = { showChatbotDialog = true },
                                 onOpenConsents = { currentSubScreen = SubScreen.CONSENTS },
-                                onOpenSurveys = { currentSubScreen = SubScreen.SURVEYS },
                                 onOpenTransport = { currentSubScreen = SubScreen.TRANSPORT },
                                 onOpenDismissal = { currentSubScreen = SubScreen.DISMISSAL },
                                 onLogout = { viewModel.logout() }
@@ -1176,12 +1175,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onNavigateBack = { currentSubScreen = SubScreen.NONE }
                             )
                             SubScreen.CLUBS -> ClubsScreen(state, onNavigateBack = { currentSubScreen = SubScreen.NONE })
-                            SubScreen.SURVEYS -> SurveysScreen(
-                                state = state,
-                                onNavigateBack = { currentSubScreen = SubScreen.NONE },
-                                onParticipate = { id, answers -> viewModel.participateSurvey(id, answers) },
-                                onCreateSurvey = { s -> viewModel.createSurvey(s) }
-                            )
+                            SubScreen.SURVEYS -> SurveysScreen(state, onNavigateBack = { currentSubScreen = SubScreen.NONE })
                             SubScreen.TUTORING -> TutoringScreen(
                                 state = state,
                                 onNavigateBack = { currentSubScreen = SubScreen.NONE },

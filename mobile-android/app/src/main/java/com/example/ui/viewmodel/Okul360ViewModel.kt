@@ -185,7 +185,6 @@ data class Okul360UiState(
 
     // 7. Okul360 Ek Modüller State
     val consents: List<StudentConsent> = emptyList(),
-    val surveys: List<SchoolSurvey> = emptyList(),
     val tutoringSessions: List<TutoringSession> = emptyList(),
     val payrollRecords: List<PayrollRecord> = emptyList(),
     val broadcastJobs: List<BroadcastJob> = emptyList(),
@@ -563,7 +562,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             if (allowed("users.read")) { loadRoles(); loadUsers() }
             if (allowed("settings.read")) { loadRfidCards(); loadHardwareDevices(); checkSystemHealth() }
             if (actor.is_super_admin == true) loadAiAnalyticsData()
-            if (allowed("surveys.read", "surveys.respond")) loadSurveys()
             if (allowed("tutoring.read")) loadTutoringSessions()
             if (allowed("payroll.read")) loadPayrollRecords()
             if (allowed("exam.read", "exam.write")) loadExams()
@@ -2285,30 +2283,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     // ==========================================
     // Okul360 Yeni Modül Metotları
     // ==========================================
-
-    // 5. Surveys (Anketler)
-    fun loadSurveys() {
-        viewModelScope.launch(requestFailures) {
-            val list = repository.getSurveys()
-            _uiState.update { it.copy(surveys = list) }
-        }
-    }
-
-    fun participateSurvey(surveyId: String, answers: Map<String, Any>) {
-        viewModelScope.launch(requestFailures) {
-            repository.participateSurvey(surveyId, answers)
-            loadSurveys()
-            _uiState.update { it.copy(toastMessage = "Anket yanıtlarınız kaydedildi, teşekkür ederiz!") }
-        }
-    }
-
-    fun createSurvey(survey: SchoolSurvey) {
-        viewModelScope.launch(requestFailures) {
-            repository.createSurvey(survey)
-            loadSurveys()
-            _uiState.update { it.copy(toastMessage = "Yeni anket yayına alındı.") }
-        }
-    }
 
     // 6. Tutoring (Birebir Etüt)
     fun loadTutoringSessions(studentId: String? = null) {
