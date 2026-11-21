@@ -886,16 +886,6 @@ interface Okul360ApiService {
     @DELETE("guidance/{id}")
     suspend fun deleteGuidanceRecord(@Path("id") id: String): Map<String, Any>
 
-    // 4. Öğrenci Kulüpleri (Clubs)
-    @GET("clubs")
-    suspend fun getClubs(): List<SchoolClub>
-
-    @POST("clubs")
-    suspend fun createClub(@Body club: SchoolClub): SchoolClub
-
-    @POST("clubs/{id}/enroll")
-    suspend fun enrollInClub(@Path("id") clubId: String, @Body body: Map<String, String>): Map<String, Any>
-
     // 5. Anketler (Surveys)
     @GET("surveys")
     suspend fun getSurveys(): List<SchoolSurvey>

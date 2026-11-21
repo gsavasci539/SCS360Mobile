@@ -109,7 +109,7 @@ fun MenuScreen(
             MenuItemData("İzin Belgeleri", "Muvafakatname Onayları", Icons.Default.FactCheck, Color(0xFFDCFCE7), Color(0xFF15803D), null, onNavigateToConsents),
             MenuItemData("Rehberlik & PDR", "Psikolojik Danışmanlık", Icons.Default.Psychology, Color(0xFFF3E8FF), Color(0xFF7C3AED), null, onNavigateToGuidance),
             MenuItemData("Birebir Etüt", "Kişisel Takviye Dersler", Icons.Default.EventAvailable, Color(0xFFE0F2FE), Color(0xFF0284C7), null, onNavigateToTutoring),
-            MenuItemData("Kulüpler & Etkinlik", "${state.schoolClubs.size} Kulüp", Icons.Default.Groups, Color(0xFFFFEDD5), Color(0xFFC2410C), "${state.schoolClubs.size}", onNavigateToClubs)
+            MenuItemData("Kulüpler & Etkinlik", "Kulüp, üyelik ve etkinlik kayıtları", Icons.Default.Groups, Color(0xFFFFEDD5), Color(0xFFC2410C), null, onNavigateToClubs)
         )
     }
 

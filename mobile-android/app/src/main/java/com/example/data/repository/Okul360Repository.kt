@@ -134,7 +134,6 @@ class Okul360Repository(private val context: Context) {
     private val localAnnouncements = mutableListOf<Announcement>()
     private val localConsents = mutableListOf<StudentConsent>()
     private val localGuidance = mutableListOf<GuidanceRecord>()
-    private val localClubs = mutableListOf<SchoolClub>()
     private val localSurveys = mutableListOf<SchoolSurvey>()
     private val localTutoring = mutableListOf<TutoringSession>()
     private val localPayrolls = mutableListOf<PayrollRecord>()
@@ -922,39 +921,6 @@ class Okul360Repository(private val context: Context) {
         try { apiService.deleteGuidanceRecord(id) } catch (failure: Exception) { throw failure }
         localGuidance.removeAll { it.id == id }
         true
-    }
-
-    // 4. Öğrenci Kulüpleri (Clubs)
-    suspend fun getClubs(): List<SchoolClub> = requestContext {
-        try {
-            val remote = apiService.getClubs()
-            localClubs.clear()
-            localClubs.addAll(remote)
-            localClubs.toList()
-        } catch (failure: Exception) { throw failure }
-    }
-
-    suspend fun enrollInClub(clubId: String, studentId: String): Boolean = requestContext {
-        try {
-            apiService.enrollInClub(clubId, mapOf("student_id" to studentId))
-        } catch (failure: Exception) { throw failure }
-        val idx = localClubs.indexOfFirst { it.id == clubId }
-        if (idx >= 0) {
-            val club = localClubs[idx]
-            localClubs[idx] = club.copy(
-                is_enrolled = !club.is_enrolled,
-                enrolled_count = if (!club.is_enrolled) club.enrolled_count + 1 else (club.enrolled_count - 1).coerceAtLeast(0)
-            )
-        }
-        true
-    }
-
-    suspend fun createClub(club: SchoolClub): SchoolClub = requestContext {
-        try {
-            val res = apiService.createClub(club)
-            localClubs.add(0, res)
-            res
-        } catch (failure: Exception) { throw failure }
     }
 
     // 5. Anketler & Memnuniyet (Surveys)

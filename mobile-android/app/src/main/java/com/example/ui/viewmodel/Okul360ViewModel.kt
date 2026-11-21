@@ -185,7 +185,6 @@ data class Okul360UiState(
 
     // 7. Okul360 Ek Modüller State
     val consents: List<StudentConsent> = emptyList(),
-    val schoolClubs: List<SchoolClub> = emptyList(),
     val surveys: List<SchoolSurvey> = emptyList(),
     val tutoringSessions: List<TutoringSession> = emptyList(),
     val payrollRecords: List<PayrollRecord> = emptyList(),
@@ -564,7 +563,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             if (allowed("users.read")) { loadRoles(); loadUsers() }
             if (allowed("settings.read")) { loadRfidCards(); loadHardwareDevices(); checkSystemHealth() }
             if (actor.is_super_admin == true) loadAiAnalyticsData()
-            if (allowed("clubs.read")) loadClubs()
             if (allowed("surveys.read", "surveys.respond")) loadSurveys()
             if (allowed("tutoring.read")) loadTutoringSessions()
             if (allowed("payroll.read")) loadPayrollRecords()
@@ -2287,30 +2285,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     // ==========================================
     // Okul360 Yeni Modül Metotları
     // ==========================================
-
-    // 4. Clubs (Kulüpler)
-    fun loadClubs() {
-        viewModelScope.launch(requestFailures) {
-            val list = repository.getClubs()
-            _uiState.update { it.copy(schoolClubs = list) }
-        }
-    }
-
-    fun enrollInClub(clubId: String, studentId: String) {
-        viewModelScope.launch(requestFailures) {
-            repository.enrollInClub(clubId, studentId)
-            loadClubs()
-            _uiState.update { it.copy(toastMessage = "Kulüp kaydı güncellendi.") }
-        }
-    }
-
-    fun createClub(club: SchoolClub) {
-        viewModelScope.launch(requestFailures) {
-            repository.createClub(club)
-            loadClubs()
-            _uiState.update { it.copy(toastMessage = "Yeni öğrenci kulübü açıldı.") }
-        }
-    }
 
     // 5. Surveys (Anketler)
     fun loadSurveys() {

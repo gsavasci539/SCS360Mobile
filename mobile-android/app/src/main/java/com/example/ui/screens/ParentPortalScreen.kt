@@ -68,6 +68,7 @@ enum class ParentNavTab(
     TODAY("Bugün", Icons.Default.Face, Icons.Outlined.Face),
     MATERIALS("Materyal", Icons.Default.MenuBook, Icons.Outlined.MenuBook),
     HOMEWORK("Ödevler", Icons.Default.Assignment, Icons.Outlined.Assignment),
+    ACTIVITIES("Etkinlikler", Icons.Default.Groups, Icons.Outlined.Groups),
     MESSAGING("İletişim", Icons.Default.ChatBubble, Icons.Outlined.ChatBubble),
     PAYMENTS("Ödemeler", Icons.Default.CreditCard, Icons.Outlined.CreditCard),
     CONSENTS("İzin belgeleri", Icons.Default.FactCheck, Icons.Outlined.FactCheck),
@@ -94,7 +95,6 @@ fun ParentPortalScreen(
     onOpenAiWeeklyDigest: ((Student) -> Unit)? = null,
     onOpenChatbot: (() -> Unit)? = null,
     onOpenConsents: () -> Unit = {},
-    onOpenClubs: () -> Unit = {},
     onOpenSurveys: () -> Unit = {},
     onOpenTransport: () -> Unit = {},
     onOpenDismissal: () -> Unit = {},
@@ -126,7 +126,7 @@ fun ParentPortalScreen(
         if (canReadAttendance) add(ParentNavTab.DIARY)
         if (canReadFinances) add(ParentNavTab.PAYMENTS)
     } else ParentNavTab.entries.filter { tab ->
-        canReadConsents || tab !in setOf(ParentNavTab.CONSENTS, ParentNavTab.HOMEWORK, ParentNavTab.MATERIALS)
+        canReadConsents || tab !in setOf(ParentNavTab.CONSENTS, ParentNavTab.HOMEWORK, ParentNavTab.MATERIALS, ParentNavTab.ACTIVITIES)
     }
     // The parent portal endpoint has already authorized every relationship.
     val parentChildren = state.parentChildren
@@ -501,13 +501,13 @@ fun ParentPortalScreen(
                         onPayClicked = { invoice -> balanceChanged = false; checkoutRequest = ParentCheckoutRequest(invoice) },
                         onNavigateToPayments = { selectedTab = ParentNavTab.PAYMENTS },
                         onOpenConsents = onOpenConsents,
-                        onOpenClubs = onOpenClubs,
                         onOpenSurveys = onOpenSurveys,
                         onOpenTransport = onOpenTransport,
                         onOpenDismissal = onOpenDismissal
                     )
                     ParentNavTab.MATERIALS -> CourseMaterialsScreen(state, child = currentChild.id)
                     ParentNavTab.HOMEWORK -> key(presentationScope, currentChild.id) { ParentHomeworkPane(currentChild.id, currentChild.full_name) }
+                    ParentNavTab.ACTIVITIES -> ClubsScreen(state, child = currentChild.id)
                     ParentNavTab.MESSAGING -> key(presentationScope, currentChild.id) { ParentVerifiedMessagingPane(currentChild.id, state.currentUser) }
                     ParentNavTab.PAYMENTS -> ParentPaymentsTab(
                         student = currentChild,
@@ -594,7 +594,6 @@ private fun ParentTodayTab(
     onPayClicked: (Invoice) -> Unit,
     onNavigateToPayments: () -> Unit,
     onOpenConsents: () -> Unit = {},
-    onOpenClubs: () -> Unit = {},
     onOpenSurveys: () -> Unit = {},
     onOpenTransport: () -> Unit = {},
     onOpenDismissal: () -> Unit = {}
