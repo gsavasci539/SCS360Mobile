@@ -27,6 +27,10 @@ object NativeNavigationPolicy {
 
     fun canReadParentChildProfile(user: User) = has(user, "parent.view_children", "parent.view_daily_report")
     fun canReadParentFinances(user: User) = has(user, "parent.view_finances", "parent.view_finance")
+    fun canCompleteRoleCatalogue(user: User, workspace: String?): Boolean =
+        if (user.is_super_admin == true) !workspace.isNullOrBlank()
+        else !user.organization_id.isNullOrBlank() && has(user, "users.write") && has(user, "role.write") &&
+            user.roles.any { it.is_active && it.slug in setOf("owner", "org_admin") }
     fun tab(user: User, tab: MainTab): Boolean = when (tab) {
         MainTab.HOME, MainTab.OTHER -> true
         MainTab.STUDENTS -> has(user, "students.read", "student.read")
@@ -46,7 +50,8 @@ object NativeNavigationPolicy {
         SubScreen.DIRECT_MESSAGING -> has(user, "messaging.read")
         SubScreen.REPORTS -> has(user, "report.read")
         SubScreen.RESOURCES -> has(user, "inventory.read")
-        SubScreen.ROLES, SubScreen.USERS, SubScreen.STAFF -> has(user, "users.read")
+        SubScreen.ROLES -> has(user, "users.read", "role.read", "role.write")
+        SubScreen.USERS, SubScreen.STAFF -> has(user, "users.read")
         SubScreen.DAILY_REPORTS -> has(user, "daily_reports.read", "academic.read", "daily_reports.write", "academic.write")
         SubScreen.DIGITAL_ID_CARD -> has(user, "security.read")
         SubScreen.APPOINTMENTS -> has(user, "appointments.read")

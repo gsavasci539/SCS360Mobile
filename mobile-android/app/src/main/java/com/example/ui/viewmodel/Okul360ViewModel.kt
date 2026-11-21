@@ -140,7 +140,6 @@ data class Okul360UiState(
     // Resources Sub-Module
 
     // Roles & Permissions Sub-Module
-    val roles: List<RoleDefinition> = emptyList(),
 
     // Users Sub-Module
     val users: List<AppUser> = emptyList(),
@@ -236,7 +235,6 @@ data class Okul360UiState(
     val selectedAnalyticsTimeframe: String = "Son 30 Gün",
     val selectedAnalyticsTab: Int = 0
 ) {
-    val roleDefinitions: List<RoleDefinition> get() = roles
     val communicationTemplates: List<CommunicationTemplate> get() = templates
 }
 
@@ -523,7 +521,7 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             if (allowed("notification.read")) { loadTemplates(); loadOutboxLogs() }
             if (allowed("daily_reports.read", "academic.read")) loadDailyReports()
             if (allowed("report.read")) loadReports()
-            if (allowed("users.read")) { loadRoles(); loadUsers() }
+            if (allowed("users.read")) loadUsers()
             if (allowed("settings.read")) { loadRfidCards(); loadHardwareDevices(); checkSystemHealth() }
             if (actor.is_super_admin == true) loadAiAnalyticsData()
             if (allowed("exam.read", "exam.write")) loadExams()
@@ -1315,38 +1313,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             _uiState.update { it.copy(isReportsLoading = true) }
             val data = repository.getReportsData()
             _uiState.update { it.copy(reportsData = data, isReportsLoading = false) }
-        }
-    }
-
-    // Roles Actions
-    fun loadRoles() {
-        viewModelScope.launch(requestFailures) {
-            val r = repository.getRoles()
-            _uiState.update { it.copy(roles = r) }
-        }
-    }
-
-    fun createRole(name: String, code: String, desc: String) {
-        viewModelScope.launch(requestFailures) {
-            val r = RoleDefinition("role-${UUID.randomUUID()}", name, code, desc, listOf("STUDENTS_VIEW", "ATTENDANCE_TAKE"), false, 0xFF0D9488)
-            repository.addRole(r)
-            _uiState.update { it.copy(toastMessage = "${r.name} rolü tanımlandı.") }
-            loadRoles()
-        }
-    }
-
-    fun deleteRole(roleId: String) {
-        viewModelScope.launch(requestFailures) {
-            repository.deleteRole(roleId)
-            _uiState.update { it.copy(toastMessage = "Rol silindi.") }
-            loadRoles()
-        }
-    }
-
-    fun togglePermission(roleId: String, permCode: String, isGranted: Boolean = true) {
-        viewModelScope.launch(requestFailures) {
-            repository.toggleRolePermission(roleId, permCode)
-            loadRoles()
         }
     }
 
@@ -2654,41 +2620,16 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun ensureStandardRolesForOrganization() {
-        val standardCatalog = listOf(
-            Triple("Kurum Sahibi", "OWNER", "Kurumun tüm idari, finansal ve abonelik yetkilerine sahiptir"),
-            Triple("Kurum Yöneticisi", "ADMIN", "Kurum genelinde şube, kullanıcı, öğrenci ve akademik süreçleri yönetir"),
-            Triple("Şube Yöneticisi", "BRANCH_ADMIN", "Atandığı şubedeki sınıf, öğrenci, yoklama ve günlük operasyonları yönetir"),
-            Triple("Öğretmen", "TEACHER", "Ders, yoklama, ödev, sınav ve veli görüşmelerini yürütür"),
-            Triple("Veli", "PARENT", "Kendi öğrencisinin devamsızlık, karne, servis, izin ve ödeme bilgilerini görüntüler"),
-            Triple("Muhasebe", "ACCOUNTANT", "Tahsilat, fatura, taksit, gider, bordro ve mali raporları yönetir"),
-            Triple("Personel", "STAFF", "İdari ve destek operasyonlarını yürütür"),
-            Triple("Kantin", "CANTEEN", "Kantin POS satışı, ürün yönetimi ve öğrenci cüzdan bakiye işlemlerini yürütür"),
-            Triple("Güvenlik", "SECURITY", "Öğrenci kimlik/QR doğrulama, kapı geçişleri ve öğrenci teslim masasını yönetir"),
-            Triple("Kütüphane", "LIBRARIAN", "Kitap envanteri, ödünç verme ve iade süreçlerini yönetir"),
-            Triple("Servis", "BUS_DRIVER", "Atanmış servis rotası, durak, öğrenci biniş/iniş yoklaması ve canlı konum bildirir")
-        )
-        _uiState.update { state ->
-            val existingNames = state.roles.map { it.name.lowercase() }.toSet()
-            val missingRoles = standardCatalog.mapIndexedNotNull { idx, (rName, rCode, rDesc) ->
-                if (rName.lowercase() !in existingNames) {
-                    RoleDefinition(
-                        id = "std-role-$rCode-$idx",
-                        name = rName,
-                        code = rCode,
-                        description = rDesc,
-                        permissions = listOf("org.read", "students.read"),
-                        is_system = true
-                    )
-                } else null
+        val snapshot = _uiState.value
+        val actor = snapshot.currentUser
+        if (!NativeNavigationPolicy.canCompleteRoleCatalogue(actor, snapshot.workspaceOrganizationId)) return
+        val organization = if (actor.is_super_admin == true) snapshot.workspaceOrganizationId else actor.organization_id
+        viewModelScope.launch(requestFailures) {
+            val created = com.example.data.remote.NativeInstitutionRoleClient(requireNotNull(organization)).completeCatalogue()
+            _uiState.update { state ->
+                state.copy(toastMessage = if (created == 0) "Standart kurum rolleri doğrulandı."
+                    else "$created eksik standart kurum rolü eklendi ve doğrulandı.")
             }
-            state.copy(
-                roles = state.roles + missingRoles,
-                toastMessage = if (missingRoles.isEmpty()) {
-                    "11 standart kurum rolünün tamamı zaten tanımlı (idempotent kontrol tamamlandı)."
-                } else {
-                    "${missingRoles.size} eksik standart kurum rolü eklendi (Toplam 11 standart rol hazır)."
-                }
-            )
         }
     }
 

@@ -576,34 +576,7 @@ interface Okul360ApiService {
     @POST("reports/overdue-debts/remind")
     suspend fun remindOverdueDebts(@Body body: Map<String, Any>): Map<String, Any>
 
-    // Roles, Users & Permissions
-    @GET("roles")
-    suspend fun getRoles(): List<RoleDefinition>
-
-    @GET("roles")
-    suspend fun getRolesV1(): List<RoleDefinition>
-
-    @POST("roles")
-    suspend fun createRole(@Body role: RoleDefinition): RoleDefinition
-
-    @GET("roles/{role_id}")
-    suspend fun getRoleById(@Path("role_id") roleId: String): RoleDefinition
-
-    @PUT("roles/{role_id}")
-    suspend fun updateRole(
-        @Path("role_id") roleId: String,
-        @Body role: RoleDefinition
-    ): RoleDefinition
-
-    @DELETE("roles/{role_id}")
-    suspend fun deleteRole(@Path("role_id") roleId: String): Map<String, Any>
-
-    @GET("roles/{role_id}/permissions")
-    suspend fun getRolePermissions(@Path("role_id") roleId: String): List<String>
-
-    @GET("permissions")
-    suspend fun getPermissions(): List<String>
-
+    // Users
     @GET("users")
     suspend fun getUsers(): List<AppUser>
 

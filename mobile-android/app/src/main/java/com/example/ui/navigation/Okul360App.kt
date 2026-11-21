@@ -946,19 +946,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 }
                             )
                             SubScreen.RESOURCES -> ResourcesScreen(state) { currentSubScreen = SubScreen.NONE }
-                            SubScreen.ROLES -> RolesScreen(
-                                state = state,
-                                onRoleSelected = { viewModel.switchRole(it) },
-                                onTogglePermission = { roleId, permCode, isGranted ->
-                                    viewModel.togglePermission(roleId, permCode, isGranted)
-                                },
-                                onCreateRole = { name, code, desc ->
-                                    viewModel.createRole(name, code, desc)
-                                },
-                                onDeleteRole = { id ->
-                                    viewModel.deleteRole(id)
-                                }
-                            )
+                            SubScreen.ROLES -> RolesScreen(state) { currentSubScreen = SubScreen.NONE }
                             SubScreen.USERS -> UsersScreen(
                                 state = state,
                                 onAddUser = { full, email, role, phone, branch, password ->

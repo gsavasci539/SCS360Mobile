@@ -126,7 +126,6 @@ class Okul360Repository(private val context: Context) {
     private val localOrganizations = mutableListOf<Organization>()
     private val localBranches = mutableListOf<Branch>()
     private val localClasses = mutableListOf<ClassGroup>()
-    private val localRoles = mutableListOf<RoleDefinition>()
     private val localUsers = mutableListOf<AppUser>()
     private val localRfidCards = mutableListOf<RfidCard>()
     private val localDevices = mutableListOf<HardwareDevice>()
@@ -531,54 +530,6 @@ class Okul360Repository(private val context: Context) {
             class_occupancies = occupancies,
             branch_performances = branchPerfs
         )
-    }
-
-    // Roles & Permissions Management
-    suspend fun getRoles(): List<RoleDefinition> = requestContext {
-        try {
-            apiService.getRoles()
-        } catch (failure: Exception) { throw failure }
-    }
-
-    suspend fun addRole(role: RoleDefinition): RoleDefinition = requestContext {
-        try {
-            val created = apiService.createRole(role)
-            localRoles.add(created)
-            created
-        } catch (failure: Exception) { throw failure }
-    }
-
-    suspend fun updateRole(role: RoleDefinition): RoleDefinition = requestContext {
-        try {
-            val updated = apiService.updateRole(role.id, role)
-            val idx = localRoles.indexOfFirst { it.id == role.id }
-            if (idx >= 0) localRoles[idx] = updated else localRoles.add(updated)
-            updated
-        } catch (failure: Exception) { throw failure }
-    }
-
-    suspend fun deleteRole(roleId: String): Boolean = requestContext {
-        try {
-            apiService.deleteRole(roleId)
-            localRoles.removeAll { it.id == roleId }
-            true
-        } catch (failure: Exception) { throw failure }
-    }
-
-    suspend fun toggleRolePermission(roleId: String, permissionCode: String): Boolean = requestContext {
-        try {
-            val role = apiService.getRoleById(roleId)
-            val currentPerms = role.permissions.toMutableList()
-            if (currentPerms.contains(permissionCode)) {
-                currentPerms.remove(permissionCode)
-            } else {
-                currentPerms.add(permissionCode)
-            }
-            apiService.updateRole(roleId, role.copy(permissions = currentPerms))
-            val idx = localRoles.indexOfFirst { it.id == roleId }
-            if (idx >= 0) localRoles[idx] = localRoles[idx].copy(permissions = currentPerms)
-            true
-        } catch (failure: Exception) { throw failure }
     }
 
     // App Users Management
@@ -1156,7 +1107,6 @@ val DEFAULT_SEEDED_INVOICES: List<Invoice> = emptyList()
 val DEFAULT_SEEDED_ORGANIZATIONS: List<Organization> = emptyList()
 val DEFAULT_SEEDED_BRANCHES: List<Branch> = emptyList()
 val DEFAULT_SEEDED_CLASSES: List<ClassGroup> = emptyList()
-val DEFAULT_SEEDED_ROLES: List<RoleDefinition> = emptyList()
 val DEFAULT_SEEDED_USERS: List<AppUser> = emptyList()
 val DEFAULT_SEEDED_ANNOUNCEMENTS: List<Announcement> = emptyList()
 val DEFAULT_SEEDED_RFID_CARDS: List<RfidCard> = emptyList()

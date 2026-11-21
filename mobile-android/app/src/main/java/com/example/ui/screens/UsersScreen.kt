@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.AppUser
 import com.example.data.model.Branch
 import com.example.data.model.UserRole
+import com.example.ui.navigation.NativeNavigationPolicy
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.Okul360UiState
 
@@ -90,27 +91,27 @@ fun UsersScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = NeutralTextSecondary
                     )
-                    Row(
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        OutlinedButton(
+                        if (NativeNavigationPolicy.canCompleteRoleCatalogue(state.currentUser, state.workspaceOrganizationId)) OutlinedButton(
                             onClick = onEnsureStandardRoles,
-                            modifier = Modifier.weight(1f).testTag("ensure_standard_roles_btn"),
+                            modifier = Modifier.fillMaxWidth().testTag("ensure_standard_roles_btn"),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                         ) {
                             Icon(Icons.Default.VerifiedUser, contentDescription = null, modifier = Modifier.size(15.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Eksik Standart Rolleri Ekle (11)", fontSize = 11.sp, maxLines = 1)
+                            Text("Eksik standart rolleri ekle")
                         }
                         FilledTonalButton(
                             onClick = { showParentLinkDialog = true },
-                            modifier = Modifier.weight(1f).testTag("open_parent_link_dialog_btn"),
+                            modifier = Modifier.fillMaxWidth().testTag("open_parent_link_dialog_btn"),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                         ) {
                             Icon(Icons.Default.FamilyRestroom, contentDescription = null, modifier = Modifier.size(15.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Veli Giriş Hesabı Bağla", fontSize = 11.sp, maxLines = 1)
+                            Text("Veli giriş hesabı bağla")
                         }
                     }
                 }

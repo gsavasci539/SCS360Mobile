@@ -210,19 +210,7 @@ fun Okul360NavHost(
 
         // 9. Roles & Permissions Destination
         composable(Screen.Roles.route) {
-            RolesScreen(
-                state = state,
-                onRoleSelected = { viewModel.switchRole(it) },
-                onTogglePermission = { roleId, permCode, isGranted ->
-                    viewModel.togglePermission(roleId, permCode, isGranted)
-                },
-                onCreateRole = { name, code, desc ->
-                    viewModel.createRole(name, code, desc)
-                },
-                onDeleteRole = { id ->
-                    viewModel.deleteRole(id)
-                }
-            )
+            RolesScreen(state) { navController.popBackStack() }
         }
 
         // 10. Staff & Users Management Destination
@@ -237,7 +225,8 @@ fun Okul360NavHost(
                 },
                 onResetPassword = { id, newPass ->
                     viewModel.resetUserPassword(id, newPass)
-                }
+                },
+                onEnsureStandardRoles = viewModel::ensureStandardRolesForOrganization
             )
         }
 
