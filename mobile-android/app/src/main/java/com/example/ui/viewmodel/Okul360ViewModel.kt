@@ -9,6 +9,8 @@ import com.example.data.repository.Okul360Repository
 import com.example.data.remote.ParentChildOptionsModule
 import com.example.data.remote.ParentInvoiceSnapshot
 import com.example.data.remote.SaasApi
+import com.example.data.remote.TenantBillingUser
+import com.example.data.remote.TenantMembershipDraft
 import com.example.ui.navigation.NativeNavigationPolicy
 import android.content.Context
 import com.example.util.NetworkMonitor
@@ -2136,24 +2138,36 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         catch (_: Exception) { "Kurum oluşturma sonucu doğrulanamadı. Aynı kurum ve sahip bilgileriyle tekrar deneyin; sonucu web kurum listesinden de kontrol edebilirsiniz." }
     }
 
-    suspend fun updateTenantSubscription(orgId: String, planId: String, periodStart: String, periodEnd: String): String? {
-        val tenant = _uiState.value.platformTenants.find { it.organization_id == orgId }
-            ?: return "Kurum kaydı bulunamadı; listeyi yenileyin."
-        val api = com.example.data.remote.SaasApi()
-        return try {
-            api.updateMembership(tenant, planId, periodStart, periodEnd)
-            if (!api.current()) return "Oturum değişti; listeyi yeniden açın."
-            refreshSubscriptionAccessStatus()
-            null
-        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
-        catch (_: Exception) { "Üyelik güncellemesi sunucuda doğrulanamadı. Bilgileri kontrol edin veya listeyi yenileyin." }
+    suspend fun loadTenantBillingUsers(orgId: String): List<TenantBillingUser> {
+        check(_uiState.value.currentUser.is_super_admin == true) { "Platform oturumu gerekli." }
+        return SaasApi().tenantBillingUsers(orgId)
     }
 
-    fun toggleTenantActive(orgId: String, isActive: Boolean) {
-        viewModelScope.launch(requestFailures) {
-            val api = com.example.data.remote.SaasApi()
-            try { api.request("platform/tenants/${java.util.UUID.fromString(orgId)}/status", "PATCH", org.json.JSONObject().put("is_active", isActive)); refreshSubscriptionAccessStatus() }
-            catch (e: Exception) { if (api.current()) _uiState.update { it.copy(toastMessage = "Kurum durumu sunucuda değiştirilemedi.") } }
+    suspend fun updateTenantSubscription(orgId: String, draft: TenantMembershipDraft): String? {
+        val tenant = _uiState.value.platformTenants.find { it.organization_id == orgId }
+            ?: return "Kurum kaydı bulunamadı; listeyi yenileyin."
+        return saveTenantChange("Üyelik kaydı doğrulandı.") { updateMembership(tenant, draft) }
+    }
+
+    suspend fun toggleTenantActive(orgId: String, isActive: Boolean): String? =
+        saveTenantChange("Kurum hesap durumu doğrulandı.") { setTenantActive(orgId, isActive) }
+
+    private suspend fun saveTenantChange(message: String, change: suspend SaasApi.() -> PlatformTenantSummary): String? {
+        if (_uiState.value.currentUser.is_super_admin != true) return "Platform oturumu gerekli."
+        val api = SaasApi()
+        return try {
+            val saved = api.change()
+            if (!api.current()) return "Oturum değişti. Kurum listesini yeniden açın."
+            _uiState.update { state ->
+                state.copy(platformTenants = state.platformTenants.map { if (it.organization_id == saved.organization_id) saved else it },
+                    toastMessage = message)
+            }
+            refreshSubscriptionAccessStatus(showSuccess = false)
+            null
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            "Kurum değişikliği doğrulanamadı. Bilgileri kontrol edin veya listeyi yenileyin."
         }
     }
 
@@ -2239,17 +2253,22 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     // ==========================================
     // Nov 4, 2026: Root Scoped Tenant Workspace, Hosted SaaS Checkout, PAID_REVIEW, Refund, Public Signup, Contacts & Standard Roles
     // ==========================================
-    fun openTenantWorkspace(orgId: String, orgName: String) {
-        viewModelScope.launch(requestFailures) {
-            val api = com.example.data.remote.SaasApi()
-            try {
-                val row = api.request("platform/tenants/${java.util.UUID.fromString(orgId)}/workspace") as org.json.JSONObject
-                if (api.current()) {
-                    com.example.data.remote.ApiClientProvider.interceptor.workspaceOrganizationId = row.getString("id")
-                    _uiState.update { freshState(it, workspace = row.getString("id"), workspaceName = row.getString("name")).copy(toastMessage = "Kurum çalışma alanı seçildi.") }
-                    loadInitialData()
-                }
-            } catch (e: Exception) { if (api.current()) _uiState.update { it.copy(toastMessage = "Kurum seçimi doğrulanamadı.") } }
+    suspend fun openTenantWorkspace(orgId: String): String? {
+        if (_uiState.value.currentUser.is_super_admin != true) return "Platform oturumu gerekli."
+        val api = SaasApi()
+        return try {
+            val id = UUID.fromString(orgId).toString()
+            val row = api.request("platform/tenants/$id/workspace") as org.json.JSONObject
+            val name = row.getString("name")
+            check(api.current() && row.getString("id") == id && name.isNotBlank())
+            com.example.data.remote.ApiClientProvider.interceptor.workspaceOrganizationId = id
+            _uiState.update { freshState(it, workspace = id, workspaceName = name).copy(toastMessage = "Kurum çalışma alanı seçildi.") }
+            loadInitialData()
+            null
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            "Kurum seçimi doğrulanamadı."
         }
     }
 

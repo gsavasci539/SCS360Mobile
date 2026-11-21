@@ -20,6 +20,8 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.*
 import com.example.data.remote.PlatformInvoiceDraft
 import com.example.data.remote.PlatformInvoiceOperation
+import com.example.data.remote.TenantBillingUser
+import com.example.data.remote.TenantMembershipDraft
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -33,11 +35,12 @@ fun PlatformSaasScreen(
     invoices: List<SubscriptionInvoice>,
     onCreatePlan: suspend (SubscriptionPlan) -> String?,
     onCreateTenantWithOwner: suspend (com.example.data.remote.TenantProvisionDraft) -> String?,
-    onUpdateTenantSubscription: suspend (orgId: String, planId: String, periodStart: String, periodEnd: String) -> String?,
-    onToggleTenantActive: (orgId: String, isActive: Boolean) -> Unit,
+    onUpdateTenantSubscription: suspend (orgId: String, draft: TenantMembershipDraft) -> String?,
+    onToggleTenantActive: suspend (orgId: String, isActive: Boolean) -> String?,
     onSaveInvoice: suspend (SubscriptionInvoice, PlatformInvoiceDraft) -> String?,
     onCheckInvoiceStatus: suspend (SubscriptionInvoice) -> String? = { "Ödeme durumu sorgulanamıyor." },
-    onOpenTenantWorkspace: (orgId: String, orgName: String) -> Unit = { _, _ -> },
+    onOpenTenantWorkspace: suspend (String) -> String? = { "Kurum çalışma alanı kullanılamıyor." },
+    loadTenantBillingUsers: suspend (String) -> List<TenantBillingUser> = { emptyList() },
     onUpdatePlan: suspend (SubscriptionPlan) -> String? = { "Paket düzenleme kullanılamıyor." }
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -51,6 +54,20 @@ fun PlatformSaasScreen(
     var failedPlanAction by remember { mutableStateOf<Pair<String, String>?>(null) }
     var checkingInvoiceId by remember { mutableStateOf<String?>(null) }
     var failedInvoiceStatus by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var tenantActionId by remember { mutableStateOf<String?>(null) }
+    var tenantActionError by remember { mutableStateOf<Pair<String, String>?>(null) }
+    fun runTenantAction(id: String, action: suspend () -> String?) {
+        if (tenantActionId != null) return
+        tenantActionId = id
+        tenantActionError = null
+        actionScope.launch {
+            try {
+                tenantActionError = action()?.let { id to it }
+            } finally {
+                tenantActionId = null
+            }
+        }
+    }
 
     if (currentUserRole != UserRole.SUPERADMIN) {
         Box(
@@ -220,14 +237,15 @@ fun PlatformSaasScreen(
 
                                 Spacer(modifier = Modifier.height(12.dp))
                                 FilledTonalButton(
-                                    onClick = { onOpenTenantWorkspace(tenant.organization_id, tenant.organization_name) },
+                                    enabled = tenantActionId == null,
+                                    onClick = { runTenantAction(tenant.organization_id) { onOpenTenantWorkspace(tenant.organization_id) } },
                                     modifier = Modifier.fillMaxWidth().testTag("open_tenant_workspace_${tenant.organization_id}"),
                                     shape = RoundedCornerShape(10.dp)
                                 ) {
                                     Icon(Icons.Default.Launch, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        "Kurum Çalışma Alanını Aç (X-SCS360-Organization-Id)",
+                                        "Kurum çalışma alanını aç",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -238,6 +256,7 @@ fun PlatformSaasScreen(
                                     horizontalArrangement = Arrangement.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     OutlinedButton(
                                         onClick = { editingTenant = tenant },
+                                        enabled = tenantActionId == null,
                                         modifier = Modifier.testTag("edit_tenant_sub_${tenant.organization_id}")
                                     ) {
                                         Icon(Icons.Default.EditCalendar, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -246,7 +265,12 @@ fun PlatformSaasScreen(
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Button(
-                                        onClick = { onToggleTenantActive(tenant.organization_id, !tenant.is_active) },
+                                        enabled = tenantActionId == null,
+                                        onClick = {
+                                            runTenantAction(tenant.organization_id) {
+                                                onToggleTenantActive(tenant.organization_id, !tenant.is_active)
+                                            }
+                                        },
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = if (tenant.is_active) StatusError else StatusSuccess
                                         ),
@@ -257,6 +281,9 @@ fun PlatformSaasScreen(
                                             fontSize = 12.sp
                                         )
                                     }
+                                }
+                                tenantActionError?.takeIf { it.first == tenant.organization_id }?.let {
+                                    Text(it.second, color = MaterialTheme.colorScheme.error)
                                 }
                             }
                         }
@@ -507,7 +534,7 @@ fun PlatformSaasScreen(
     }
 
     editingTenant?.let { tenant ->
-        MembershipEditorDialog(tenant, plans, onUpdateTenantSubscription, onDismiss = { editingTenant = null })
+        MembershipEditorDialog(tenant, plans, loadTenantBillingUsers, onUpdateTenantSubscription, onDismiss = { editingTenant = null })
     }
 
     invoiceAction?.let { (invoice, operation) ->

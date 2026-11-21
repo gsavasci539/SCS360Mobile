@@ -9,6 +9,7 @@ import com.example.data.remote.TenantProvisionDraft
 import com.example.data.remote.TenantProvisioner
 import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.runBlocking
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
@@ -24,6 +25,8 @@ class TenantProvisionerTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val plan = "00000000-0000-4000-8000-000000000001"
     private val actor = "00000000-0000-4000-8000-000000000002"
+    private val org = "00000000-0000-4000-8000-000000000003"
+    private val owner = "00000000-0000-4000-8000-000000000004"
     private val draft = TenantProvisionDraft("Synthetic institution", "Synthetic", "Owner", "owner@example.test", "Synthetic password", plan)
     private fun login(id: String) { ApiClientProvider.interceptor.authToken = "synthetic-session"; SessionManager(context).saveSession(User(id = id, role = "SUPERADMIN", is_super_admin = true)) }
 
@@ -34,18 +37,30 @@ class TenantProvisionerTest {
         val rows = mutableListOf<JSONObject>()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/api/platform/tenants") { exchange ->
-            assertEquals("POST", exchange.requestMethod)
             assertEquals("Bearer synthetic-session", exchange.requestHeaders.getFirst("Authorization"))
             assertNull(exchange.requestHeaders.getFirst("X-SCS360-Organization-Id"))
+            if (exchange.requestMethod == "GET") {
+                assertEquals("record_id=$org&limit=1", exchange.requestURI.rawQuery)
+                val requested = rows.last()
+                val saved = JSONObject().put("id", org).put("name", requested.getString("name")).put("owner_user_id", owner)
+                    .put("package", JSONObject().put("id", plan)).put("period_end", requested.optString("period_end", "2026-12-11T00:00:00+00:00"))
+                    .put("period_start", requested.optString("period_start", "2026-11-11T00:00:00+00:00"))
+                val result = JSONObject().put("success", true).put("data", JSONArray().put(saved)).toString().toByteArray()
+                exchange.responseHeaders.add("Content-Type", "application/json")
+                exchange.sendResponseHeaders(200, result.size.toLong())
+                exchange.responseBody.use { it.write(result) }
+                return@createContext
+            }
+            assertEquals("POST", exchange.requestMethod)
             val body = JSONObject(exchange.requestBody.bufferedReader().use { it.readText() })
             rows.add(body)
             // The first reply is deliberately ambiguous; the next attempt must
             // reuse the durable id even with a completely new client object.
             val status = if (rows.size == 1) 500 else if (body.getString("owner_email") != draft.email) 409 else 200
             val result = JSONObject().put("success", true).put("data", JSONObject()
-                .put("organization_id", "00000000-0000-4000-8000-000000000003")
-                .put("owner_user_id", "00000000-0000-4000-8000-000000000004")
-                .put("owner_email", draft.email).put("period_end", "2026-12-11T00:00:00+00:00"))
+                .put("organization_id", org)
+                .put("owner_user_id", owner)
+                .put("owner_email", draft.email).put("period_end", body.optString("period_end", "2026-12-11T00:00:00+00:00")))
                 .toString().toByteArray()
             exchange.responseHeaders.add("Content-Type", "application/json")
             exchange.sendResponseHeaders(status, result.size.toLong())
@@ -117,5 +132,14 @@ class TenantProvisionerTest {
         }
         assertEquals(0, rows.size)
         assertTrue(context.getSharedPreferences("tenant_provision_v1", Context.MODE_PRIVATE).all.isEmpty())
+    }
+
+    @Test fun explicitMembershipDatesAreSentAndReadBack() = withServer { _, rows ->
+        val dated = draft.copy(periodStart = "2026-11-12", periodEnd = "2026-12-12T03:00:00+03:00")
+        assertTrue(runCatching { TenantProvisioner(context).create(dated) }.isFailure)
+        assertEquals(org, TenantProvisioner(context).create(dated).getString("organization_id"))
+        assertEquals(1, rows.map { it.getString("request_id") }.toSet().size)
+        assertEquals("2026-11-12T00:00:00Z", rows.last().getString("period_start"))
+        assertEquals("2026-12-12T00:00:00Z", rows.last().getString("period_end"))
     }
 }

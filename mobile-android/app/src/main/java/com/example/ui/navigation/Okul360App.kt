@@ -1068,19 +1068,19 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onCreateTenantWithOwner = { draft ->
                                     viewModel.createTenantWithOwner(draft)
                                 },
-                                onUpdateTenantSubscription = { orgId, planId, periodStart, periodEnd ->
-                                    viewModel.updateTenantSubscription(orgId, planId, periodStart, periodEnd)
-                                },
-                                onToggleTenantActive = { orgId, isActive ->
-                                    viewModel.toggleTenantActive(orgId, isActive)
-                                },
+                                onUpdateTenantSubscription = viewModel::updateTenantSubscription,
+                                onToggleTenantActive = viewModel::toggleTenantActive,
                                 onSaveInvoice = viewModel::savePlatformInvoiceOperation,
                                 onCheckInvoiceStatus = { invoice -> viewModel.checkSaasCheckoutStatus(invoice, platform = true) },
-                                onOpenTenantWorkspace = { orgId, orgName ->
-                                    viewModel.openTenantWorkspace(orgId, orgName)
-                                    currentSubScreen = SubScreen.NONE
-                                    currentTab = MainTab.HOME
+                                onOpenTenantWorkspace = { orgId ->
+                                    viewModel.openTenantWorkspace(orgId).also { error ->
+                                        if (error == null) {
+                                            currentSubScreen = SubScreen.NONE
+                                            currentTab = MainTab.HOME
+                                        }
+                                    }
                                 },
+                                loadTenantBillingUsers = viewModel::loadTenantBillingUsers,
                                 onUpdatePlan = viewModel::savePlatformPlan
                             )
                             SubScreen.SUBSCRIPTION_BILLING -> SubscriptionBillingScreen(

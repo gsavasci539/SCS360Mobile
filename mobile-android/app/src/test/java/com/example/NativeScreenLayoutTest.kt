@@ -76,8 +76,8 @@ class NativeScreenLayoutTest {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(size) then DeviceConfigurationOverride.FontScale(2f)) {
                 Okul360Theme { AppContentWrapper { key(size) {
                     PlatformSaasScreen(UserRole.SUPERADMIN, plans = emptyList(), tenants = emptyList(), invoices = emptyList(),
-                        onCreatePlan = { null }, onCreateTenantWithOwner = { null }, onUpdateTenantSubscription = { _, _, _, _ -> null },
-                        onToggleTenantActive = { _, _ -> }, onSaveInvoice = { _, _ -> null })
+                        onCreatePlan = { null }, onCreateTenantWithOwner = { null }, onUpdateTenantSubscription = { _, _ -> null },
+                        onToggleTenantActive = { _, _ -> null }, onSaveInvoice = { _, _ -> null })
                 } } }
             }
         }
@@ -103,7 +103,7 @@ class NativeScreenLayoutTest {
                         plans = listOf(SubscriptionPlan(id = "synthetic-plan", name = "Uzun adı olan örnek paket")),
                         tenants = listOf(PlatformTenantSummary(organization_id = "synthetic-org", organization_name = "Uzun adı olan örnek eğitim kurumu")),
                         invoices = emptyList(), onCreatePlan = { null }, onCreateTenantWithOwner = { null },
-                        onUpdateTenantSubscription = { _, _, _, _ -> null }, onToggleTenantActive = { _, _ -> },
+                        onUpdateTenantSubscription = { _, _ -> null }, onToggleTenantActive = { _, _ -> null },
                         onSaveInvoice = { _, _ -> null })
                     else StudentsScreen(state, onSearchChange = {}, onFilterClassChange = {}, onSelectStudent = {}, onOpenAddStudent = {},
                         onUpdateStudent = {}, onDeleteStudent = {})

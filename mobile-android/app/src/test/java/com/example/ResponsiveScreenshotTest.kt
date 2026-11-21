@@ -46,7 +46,7 @@ class ResponsiveScreenshotTest {
             Okul360Theme { AppContentWrapper {
                 PlatformSaasScreen(UserRole.SUPERADMIN, plans = listOf(SubscriptionPlan(id = "synthetic-plan", name = "Örnek paket")),
                     tenants = emptyList(), invoices = emptyList(), onCreatePlan = { null }, onCreateTenantWithOwner = { null },
-                    onUpdateTenantSubscription = { _, _, _, _ -> null }, onToggleTenantActive = { _, _ -> }, onSaveInvoice = { _, _ -> null })
+                    onUpdateTenantSubscription = { _, _ -> null }, onToggleTenantActive = { _, _ -> null }, onSaveInvoice = { _, _ -> null })
             } }
         } }
         compose.onRoot().captureRoboImage("../../output/native-responsive-root-font2-20261111.png")
@@ -58,8 +58,8 @@ class ResponsiveScreenshotTest {
         compose.setContent { DeviceConfigurationOverride(DeviceConfigurationOverride.FontScale(2f)) {
             Okul360Theme { AppContentWrapper {
                 PlatformSaasScreen(UserRole.SUPERADMIN, plans = emptyList(), tenants = emptyList(), invoices = emptyList(),
-                    onCreatePlan = { null }, onCreateTenantWithOwner = { null }, onUpdateTenantSubscription = { _, _, _, _ -> null },
-                    onToggleTenantActive = { _, _ -> }, onSaveInvoice = { _, _ -> null })
+                    onCreatePlan = { null }, onCreateTenantWithOwner = { null }, onUpdateTenantSubscription = { _, _ -> null },
+                    onToggleTenantActive = { _, _ -> null }, onSaveInvoice = { _, _ -> null })
             } }
         } }
         compose.onNodeWithTag("platform_list_0").performScrollToNode(hasTestTag("create_tenant_btn"))

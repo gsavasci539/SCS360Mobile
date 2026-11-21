@@ -1619,7 +1619,9 @@ data class PlatformTenantSummary(
     val student_limit: Int = 0,
     val active_users: Int = 0,
     val user_limit: Int = 0,
-    val period_start: String = ""
+    val period_start: String = "",
+    val admin_status: String? = null,
+    val billing_owner_id: String? = null
 )
 
 // ==========================================

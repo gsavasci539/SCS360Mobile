@@ -25,13 +25,15 @@ fun TenantCreateDialog(plans: List<SubscriptionPlan>, onCreate: suspend (TenantP
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var planId by remember { mutableStateOf("") }
+    var periodStart by remember { mutableStateOf("") }
+    var periodEnd by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     AlertDialog(onDismissRequest = { if (!busy) onDismiss() }, title = { Text("Kurum ve sahip hesabı oluştur") },
         text = {
             Column(Modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Dönem seçilen pakete göre sunucuda başlar. Bu işlem kurum, sahip hesabı ve üyelik oluşturur.")
+                Text("Tarih girilmezse sunucu seçilen paketin dönemini kullanır.")
                 OutlinedTextField(name, { name = it }, enabled = !busy, label = { Text("Kurum adı") }, singleLine = true, modifier = Modifier.testTag("tenant_name"))
                 OutlinedTextField(first, { first = it }, enabled = !busy, label = { Text("Sahibin adı") }, singleLine = true, modifier = Modifier.testTag("tenant_first"))
                 OutlinedTextField(last, { last = it }, enabled = !busy, label = { Text("Sahibin soyadı") }, singleLine = true, modifier = Modifier.testTag("tenant_last"))
@@ -44,15 +46,20 @@ fun TenantCreateDialog(plans: List<SubscriptionPlan>, onCreate: suspend (TenantP
                         label = { Text(plan.name) }, modifier = Modifier.testTag("tenant_plan_${plan.id}"))
                 }
                 if (plans.none { it.is_active }) Text("Yeni üyeliğe açık paket bulunmuyor.")
+                OutlinedTextField(periodStart, { periodStart = it }, enabled = !busy,
+                    label = { Text("Dönem başlangıcı (isteğe bağlı)") }, singleLine = true)
+                OutlinedTextField(periodEnd, { periodEnd = it }, enabled = !busy,
+                    label = { Text("Dönem bitişi (isteğe bağlı)") }, singleLine = true)
+                if (periodStart.isNotBlank() || periodEnd.isNotBlank()) Text("YYYY-AA-GG veya saat dilimli tarih girin.")
                 error?.let { Text(it, modifier = Modifier.testTag("tenant_error")) }
             }
         },
         confirmButton = {
             Button(enabled = !busy && plans.any { it.id == planId && it.is_active }, modifier = Modifier.testTag("tenant_create"), onClick = {
                 if (!busy) {
-                    val draft = TenantProvisionDraft(name, first, last, email, password, planId)
+                    val draft = TenantProvisionDraft(name, first, last, email, password, planId, periodStart, periodEnd)
                     try { draft.body(UUID(0, 0).toString()) }
-                    catch (_: Exception) { error = "Kurum, sahip bilgileri, parola ve paketi kontrol edin."; return@Button }
+                    catch (_: Exception) { error = "Kurum, sahip bilgileri, paket ve tarihleri kontrol edin."; return@Button }
                     busy = true; error = null
                     scope.launch {
                         try {

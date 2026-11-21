@@ -8,9 +8,11 @@ import com.example.data.model.UserRoleInfo
 import com.example.data.model.PlatformTenantSummary
 import com.example.data.remote.ApiClientProvider
 import com.example.data.remote.SaasApi
+import com.example.data.remote.TenantMembershipDraft
 import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
+import org.json.JSONArray
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -44,18 +46,45 @@ class SaasApiTest {
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         val organization = "00000000-0000-4000-8000-000000000002"
         val plan = "00000000-0000-4000-8000-000000000001"
+        val billingUser = "00000000-0000-4000-8000-000000000003"
         var captured: JSONObject? = null
         var method = ""
         var header = ""
         var reject = false
+        var stale = false
+        var active = false
+        var owner: String? = null
+        fun respond(exchange: com.sun.net.httpserver.HttpExchange, payload: Any, status: Int = 200) {
+            val bytes = JSONObject().put("success", status == 200).put("data", payload).toString().toByteArray()
+            exchange.responseHeaders.add("Content-Type", "application/json")
+            exchange.sendResponseHeaders(status, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+        server.createContext("/api/platform/tenants") { exchange ->
+            assertEquals("record_id=$organization&limit=1", exchange.requestURI.rawQuery)
+            val saved = JSONObject().put("id", organization).put("name", "Synthetic institution").put("is_active", active)
+                .put("access", JSONObject().put("status", if (active) "ACTIVE" else "SUSPENDED"))
+                .put("package", JSONObject().put("id", plan)).put("admin_status", if (active) "ACTIVE" else "SUSPENDED")
+                .put("owner_user_id", owner ?: JSONObject.NULL).put("period_start", "2026-11-01T00:00:00+00:00")
+                .put("period_end", if (stale) "2026-11-30T00:00:00+00:00" else "2026-12-01T00:00:00+00:00")
+            respond(exchange, JSONArray().put(saved))
+        }
+        server.createContext("/api/platform/tenants/$organization/status") { exchange ->
+            assertEquals("PATCH", exchange.requestMethod)
+            active = JSONObject(exchange.requestBody.bufferedReader().use { it.readText() }).getBoolean("is_active")
+            respond(exchange, JSONObject().put("id", organization).put("is_active", active))
+        }
+        server.createContext("/api/platform/tenants/$organization/users") { exchange ->
+            respond(exchange, JSONArray().put(JSONObject().put("id", billingUser).put("name", "Synthetic user").put("email", "billing@example.test")))
+        }
         server.createContext("/api/platform/tenants/$organization/subscription") { exchange ->
             method = exchange.requestMethod
             header = exchange.requestHeaders.getFirst("Authorization")
             captured = JSONObject(exchange.requestBody.bufferedReader().use { it.readText() })
-            val body = """{"success":true,"data":{"status":"SUSPENDED"}}""".toByteArray()
-            exchange.responseHeaders.add("Content-Type", "application/json")
-            exchange.sendResponseHeaders(if (reject) 403 else 200, body.size.toLong())
-            exchange.responseBody.use { it.write(body) }
+            val saved = JSONObject(captured!!.toString()).put("organization_id", organization)
+            if (saved.has("owner_user_id")) owner = if (saved.isNull("owner_user_id")) null else saved.getString("owner_user_id")
+            saved.put("owner_user_id", owner ?: JSONObject.NULL)
+            respond(exchange, saved, if (reject) 403 else 200)
         }
         server.start()
         try {
@@ -64,15 +93,27 @@ class SaasApiTest {
             ApiClientProvider.interceptor.workspaceOrganizationId = null
             val tenant = PlatformTenantSummary(organization_id = organization, is_active = false, access_status = "SUSPENDED", period_end = "old-server-value")
             val api = SaasApi()
-            val result = api.updateMembership(tenant, plan, "2026-11-01", "2026-12-01")
-            assertEquals("SUSPENDED", result.getString("status"))
+            val draft = TenantMembershipDraft(plan, "2026-11-01", "2026-12-01", "SUSPENDED", null)
+            stale = true
+            assertTrue(runCatching { api.updateMembership(tenant, draft) }.isFailure)
+            stale = false
+            val result = api.updateMembership(tenant, draft)
+            assertEquals("SUSPENDED", result.admin_status)
+            assertEquals("2026-12-01T00:00:00+00:00", result.period_end)
             assertEquals("PUT", method)
             assertEquals("Bearer synthetic-session", header)
             assertEquals(setOf("plan_id", "period_start", "period_end", "admin_status"), captured!!.keys().asSequence().toSet())
             assertEquals(plan, captured!!.getString("plan_id"))
             assertEquals("SUSPENDED", captured!!.getString("admin_status"))
+            assertEquals(billingUser, api.tenantBillingUsers(organization).single().id)
+            val assigned = api.updateMembership(tenant, draft.copy(billingOwnerId = billingUser))
+            assertEquals(billingUser, assigned.billing_owner_id)
+            assertEquals(billingUser, captured!!.getString("owner_user_id"))
+            assertNull(api.updateMembership(assigned, draft).billing_owner_id)
+            assertTrue(captured!!.isNull("owner_user_id") && captured!!.has("owner_user_id"))
+            assertTrue(api.setTenantActive(organization, true).is_active)
             reject = true
-            try { api.updateMembership(tenant, plan, "2026-11-01", "2026-12-01"); fail("A rejected update must never become success") }
+            try { api.updateMembership(tenant, draft); fail("A rejected update must never become success") }
             catch (_: IllegalStateException) { }
             assertEquals("old-server-value", tenant.period_end)
         } finally {

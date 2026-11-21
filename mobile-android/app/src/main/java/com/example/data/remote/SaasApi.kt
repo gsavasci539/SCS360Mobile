@@ -152,26 +152,70 @@ class SaasApi {
         }
         return saved
     }
-    suspend fun updateMembership(tenant: PlatformTenantSummary, planId: String, start: String, end: String): JSONObject {
+    suspend fun tenantRecord(organizationId: String): JSONObject {
+        val organization = UUID.fromString(organizationId).toString()
+        val rows = request("platform/tenants?record_id=$organization&limit=1") as JSONArray
+        check(rows.length() == 1) { "Kurum kaydı yeniden okunamadı." }
+        return rows.getJSONObject(0).also { check(it.getString("id") == organization) { "Kurum kimliği doğrulanamadı." } }
+    }
+
+    suspend fun tenantBillingUsers(organizationId: String): List<TenantBillingUser> {
+        val uuid = UUID.fromString(organizationId)
+        val rows = request("platform/tenants/$uuid/users") as JSONArray
+        return (0 until rows.length()).map(rows::getJSONObject).map {
+            TenantBillingUser(UUID.fromString(it.getString("id")).toString(), it.getString("name"), it.getString("email"))
+        }.distinctBy(TenantBillingUser::id)
+    }
+
+    suspend fun updateMembership(tenant: PlatformTenantSummary, draft: TenantMembershipDraft): PlatformTenantSummary {
         val organization = UUID.fromString(tenant.organization_id)
-        val body = membershipBody(tenant, planId, start, end)
-        return request("platform/tenants/$organization/subscription", "PUT", body) as JSONObject
+        val body = membershipBody(tenant, draft.planId, draft.periodStart, draft.periodEnd, draft.adminStatus, draft.billingOwnerId)
+        val written = request("platform/tenants/$organization/subscription", "PUT", body) as JSONObject
+        val expectedStart = body.getString("period_start")
+        val expectedEnd = body.getString("period_end")
+        val writtenOwner = if (written.isNull("owner_user_id")) null else written.getString("owner_user_id")
+        check(written.getString("organization_id") == organization.toString() && written.getString("plan_id") == draft.planId &&
+            written.getString("admin_status") == draft.adminStatus && writtenOwner == draft.billingOwnerId &&
+            membershipInstant(written.getString("period_start")) == membershipInstant(expectedStart) &&
+            membershipInstant(written.getString("period_end")) == membershipInstant(expectedEnd)) {
+            "Üyelik kayıt yanıtı doğrulanamadı."
+        }
+        val saved = tenant(tenantRecord(organization.toString()))
+        check(saved.plan_id == draft.planId && saved.admin_status == draft.adminStatus && saved.billing_owner_id == draft.billingOwnerId &&
+            membershipInstant(saved.period_start) == membershipInstant(expectedStart) &&
+            membershipInstant(saved.period_end) == membershipInstant(expectedEnd)) { "Sunucudan okunan üyelik doğrulanamadı." }
+        return saved
+    }
+
+    suspend fun setTenantActive(organizationId: String, active: Boolean): PlatformTenantSummary {
+        val organization = UUID.fromString(organizationId).toString()
+        val body = JSONObject().put("is_active", active)
+        val written = request("platform/tenants/$organization/status", "PATCH", body) as JSONObject
+        check(written.getString("id") == organization && written.getBoolean("is_active") == active) {
+            "Kurum durum yanıtı doğrulanamadı."
+        }
+        return tenant(tenantRecord(organization)).also { check(it.is_active == active) { "Kurum durumu doğrulanamadı." } }
     }
     companion object {
-        private fun membershipInstant(value: String): Instant {
+        internal fun membershipInstant(value: String): Instant {
             val text = value.trim()
             return if (Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(text)) LocalDate.parse(text).atStartOfDay().toInstant(ZoneOffset.UTC)
                 else OffsetDateTime.parse(text).toInstant()
         }
-        fun membershipBody(tenant: PlatformTenantSummary, planId: String, start: String, end: String): JSONObject {
+        fun membershipBody(tenant: PlatformTenantSummary, planId: String, start: String, end: String,
+            adminStatus: String = tenant.admin_status ?: if (!tenant.is_active || tenant.access_status == "SUSPENDED") "SUSPENDED" else "ACTIVE",
+            billingOwnerId: String? = tenant.billing_owner_id): JSONObject {
             val selectedPlan = UUID.fromString(planId)
             val from = membershipInstant(start)
             val until = membershipInstant(end)
             require(until > from) { "Bitiş tarihi başlangıçtan sonra olmalıdır." }
-            // Editing a period must not reopen an administratively suspended institution.
-            val status = if (!tenant.is_active || tenant.access_status == "SUSPENDED") "SUSPENDED" else "ACTIVE"
+            require(adminStatus in setOf("ACTIVE", "SUSPENDED")) { "Üyelik durumunu seçin." }
             return JSONObject().put("plan_id", selectedPlan.toString()).put("period_start", from.toString())
-                .put("period_end", until.toString()).put("admin_status", status)
+                .put("period_end", until.toString()).put("admin_status", adminStatus).apply {
+                    if (billingOwnerId != tenant.billing_owner_id) {
+                        put("owner_user_id", billingOwnerId?.let { UUID.fromString(it).toString() } ?: JSONObject.NULL)
+                    }
+                }
         }
         private fun period(row: JSONObject) = if (row.optInt("period_months") == 12) "YEARLY" else "MONTHLY"
         fun plan(row: JSONObject) = SubscriptionPlan(id = row.getString("id"), code = row.getString("code"), name = row.getString("name"),
@@ -206,10 +250,13 @@ class SaasApi {
             val state = row.getJSONObject("access")
             return PlatformTenantSummary(organization_id = row.getString("id"), organization_name = row.getString("name"), is_active = row.getBoolean("is_active"),
                 access_status = state.getString("status"), plan_id = pack.optString("id", ""), plan_name = pack.optString("name", ""), billing_period = period(pack),
-                period_end = if (state.isNull("period_end")) "" else state.optString("period_end"), grace_until = if (state.isNull("grace_end")) "" else state.optString("grace_end"),
+                period_end = if (!row.isNull("period_end")) row.getString("period_end") else if (state.isNull("period_end")) "" else state.optString("period_end"),
+                grace_until = if (state.isNull("grace_end")) "" else state.optString("grace_end"),
                 active_branches = usage.optInt("branch_limit"), active_students = usage.optInt("student_limit"), active_users = usage.optInt("user_limit"),
                 branch_limit = pack.optInt("branch_limit"), student_limit = pack.optInt("student_limit"), user_limit = pack.optInt("user_limit"),
-                period_start = if (row.isNull("period_start")) "" else row.optString("period_start"))
+                period_start = if (row.isNull("period_start")) "" else row.optString("period_start"),
+                admin_status = if (row.isNull("admin_status")) null else row.getString("admin_status"),
+                billing_owner_id = if (row.isNull("owner_user_id")) null else row.getString("owner_user_id"))
         }
     }
 }
