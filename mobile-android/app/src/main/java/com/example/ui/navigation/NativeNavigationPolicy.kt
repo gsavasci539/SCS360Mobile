@@ -48,7 +48,7 @@ object NativeNavigationPolicy {
         SubScreen.SURVEYS -> has(user, "surveys.read", "surveys.respond")
         SubScreen.TUTORING -> has(user, "tutoring.read")
         SubScreen.PAYROLL -> has(user, "payroll.read")
-        SubScreen.SECURITY -> has(user, "audit.read")
+        SubScreen.SECURITY -> has(user, "security.read", "audit.read")
         SubScreen.OUTBOX -> has(user, "notification.read")
         SubScreen.DISMISSAL -> has(user, "dismissal.read")
         SubScreen.AI_ANALYTICS -> user.is_super_admin == true || has(user, "dashboard.read")

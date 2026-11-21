@@ -209,7 +209,6 @@ data class Okul360UiState(
     val surveys: List<SchoolSurvey> = emptyList(),
     val tutoringSessions: List<TutoringSession> = emptyList(),
     val payrollRecords: List<PayrollRecord> = emptyList(),
-    val auditLogs: List<AuditLogEntry> = emptyList(),
     val broadcastJobs: List<BroadcastJob> = emptyList(),
     val messageTemplates: List<MessageTemplate> = emptyList(),
     val smsProviders: List<SmsProvider> = emptyList(),
@@ -241,59 +240,6 @@ data class Okul360UiState(
     val subscriptionPlans: List<SubscriptionPlan> = emptyList(),
     val subscriptionInvoices: List<SubscriptionInvoice> = emptyList(),
     val platformTenants: List<PlatformTenantSummary> = emptyList(),
-    val studentIdCards: List<StudentIdCardRecord> = listOf(
-        StudentIdCardRecord(
-            id = "idcard-1",
-            student_id = "std-1",
-            student_name = "Ali Demir",
-            student_number = "1042",
-            class_name = "8-A",
-            barcode = "SCS360-8A-1042-9F4A",
-            qr_record_id = "qr-rec-1042",
-            status = "ACTIVE"
-        ),
-        StudentIdCardRecord(
-            id = "idcard-2",
-            student_id = "std-2",
-            student_name = "Zeynep Yılmaz",
-            student_number = "1088",
-            class_name = "10-B",
-            barcode = "SCS360-10B-1088-3C7E",
-            qr_record_id = "qr-rec-1088",
-            status = "ACTIVE"
-        )
-    ),
-    val gateAccessLogs: List<GateAccessLog> = listOf(
-        GateAccessLog(
-            id = "gate-1",
-            student_id = "std-1",
-            student_name = "Ali Demir",
-            class_name = "8-A",
-            direction = "IN",
-            verification_method = "QR",
-            gate_name = "Ana Kampüs Turnike 1",
-            actor_name = "Kemal Kaya (Güvenlik)",
-            timestamp_utc = "2026-11-03 05:45 UTC",
-            adult_pickup_verified = false,
-            bus_permission_verified = false,
-            requires_anomaly_review = false
-        ),
-        GateAccessLog(
-            id = "gate-2",
-            student_id = "std-2",
-            student_name = "Zeynep Yılmaz",
-            class_name = "10-B",
-            direction = "IN",
-            verification_method = "BARCODE",
-            gate_name = "Ana Kampüs Turnike 2",
-            actor_name = "Kemal Kaya (Güvenlik)",
-            timestamp_utc = "2026-11-03 05:48 UTC",
-            adult_pickup_verified = false,
-            bus_permission_verified = false,
-            requires_anomaly_review = false
-        )
-    ),
-
     // ==========================================
     // 7. Yapay Zeka (AI / Gemini) State
     // ==========================================
@@ -642,7 +588,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             if (allowed("surveys.read", "surveys.respond")) loadSurveys()
             if (allowed("tutoring.read")) loadTutoringSessions()
             if (allowed("payroll.read")) loadPayrollRecords()
-            if (allowed("audit.read")) loadAuditLogs()
             if (allowed("exam.read", "exam.write")) loadExams()
             refreshSubscriptionAccessStatus()
         }
@@ -2855,14 +2800,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    // 8. Security & Audit Logs
-    fun loadAuditLogs() {
-        viewModelScope.launch(requestFailures) {
-            val list = repository.getAuditLogs()
-            _uiState.update { it.copy(auditLogs = list) }
-        }
-    }
-
     // 9. Sınıf Transfer & Taksit Planı & Excel İçe/Dışa Aktarma
     fun transferStudentToClass(studentId: String, fromClassId: String, toClassId: String, reason: String) {
         viewModelScope.launch(requestFailures) {
@@ -3228,78 +3165,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
 
     fun simulateAccessStatusChange(newStatus: String) {
         _uiState.update { it.copy(toastMessage = "Bu işlem web yönetim panelinden yapılmalıdır; yerel ödeme veya üyelik kaydı oluşturulmadı.") }
-    }
-
-    fun verifyGateAccess(studentId: String, direction: String, method: String, codeInput: String) {
-        val state = _uiState.value
-        val student = state.students.find { it.id == studentId }
-        val previousLogForStudent = state.gateAccessLogs.firstOrNull { it.student_id == studentId }
-        val hasDirectionAnomaly = previousLogForStudent != null && previousLogForStudent.direction == direction
-        val newGateLog = GateAccessLog(
-            id = "gate-${System.currentTimeMillis()}",
-            student_id = studentId,
-            student_name = student?.full_name ?: "Ali Demir",
-            class_name = student?.class_name ?: "8-A",
-            direction = direction,
-            verification_method = method,
-            gate_name = "Ana Kampüs Turnike 1",
-            actor_name = state.currentUser.full_name.ifBlank { "Kemal Kaya (Güvenlik)" },
-            timestamp_utc = "2026-11-03 16:00 UTC",
-            adult_pickup_verified = false,
-            bus_permission_verified = false,
-            requires_anomaly_review = hasDirectionAnomaly
-        )
-        _uiState.update { cur ->
-            cur.copy(
-                gateAccessLogs = listOf(newGateLog) + cur.gateAccessLogs,
-                toastMessage = if (hasDirectionAnomaly) {
-                    "Kapı geçişi kaydedildi (Ardışık $direction hareketi nedeniyle inceleme işaretlendi)."
-                } else {
-                    "Kapı geçişi ($method • $direction) doğrulandı."
-                }
-            )
-        }
-    }
-
-    fun issueStudentIdCard(studentId: String) {
-        val state = _uiState.value
-        val student = state.students.find { it.id == studentId } ?: state.students.firstOrNull()
-        val randomSuffix = (1000..9999).random().toString(16).uppercase()
-        val newCard = StudentIdCardRecord(
-            id = "idcard-${System.currentTimeMillis()}",
-            student_id = student?.id ?: "std-1",
-            student_name = student?.full_name ?: "Ali Demir",
-            student_number = student?.student_number ?: "1042",
-            class_name = student?.class_name ?: "8-A",
-            barcode = "SCS360-${(student?.class_name ?: "8A").replace("-", "")}-${student?.student_number ?: "1042"}-$randomSuffix",
-            qr_record_id = "qr-rec-${System.currentTimeMillis() % 100000}",
-            status = "ACTIVE",
-            issued_at = "2026-11-03 16:05 UTC",
-            issued_by = state.currentUser.full_name.ifBlank { "Kurum İdaresi" }
-        )
-        _uiState.update { cur ->
-            cur.copy(
-                studentIdCards = listOf(newCard) + cur.studentIdCards,
-                toastMessage = "Yeni SCS360 öğrenci kimliği (${newCard.barcode}) oluşturuldu."
-            )
-        }
-    }
-
-    fun revokeStudentIdCard(cardId: String) {
-        _uiState.update { cur ->
-            cur.copy(
-                studentIdCards = cur.studentIdCards.map {
-                    if (it.id == cardId) it.copy(status = "REVOKED") else it
-                },
-                toastMessage = "Öğrenci kimlik kartı iptal edildi."
-            )
-        }
-    }
-
-    fun downloadQrSvg(qrRecordId: String) {
-        _uiState.update {
-            it.copy(toastMessage = "Yetkili QR SVG ($qrRecordId) gizli token ifşa edilmeden indirildi.")
-        }
     }
 
     fun updateUserAccess(userId: String, roles: List<String>, branchIds: List<String>, status: String) {

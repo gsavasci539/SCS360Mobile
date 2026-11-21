@@ -167,7 +167,7 @@ fun MenuScreen(
                 MenuItemData("Personel Bordro & Maaş", "Hakediş ve Ödemeler", Icons.Default.Payments, Color(0xFFE0E7FF), Color(0xFF4338CA), "${state.payrollRecords.size}", onNavigateToPayroll),
                 MenuItemData("Kullanıcılar", "${state.users.size} Personel & Rol", Icons.Default.ManageAccounts, Color(0xFFE0F2FE), Color(0xFF0369A1), null, onNavigateToUsers),
                 MenuItemData("Roller & Yetkiler", "Sistem İzin Matrisi", Icons.Default.Security, Color(0xFFFFEDD5), Color(0xFF9A3412), null, onNavigateToRoles),
-                MenuItemData("Güvenlik & Kapı Geçişleri", "Turnike, QR & Denetim", Icons.Default.Security, Color(0xFFEDE9FE), Color(0xFF6D28D9), "${state.gateAccessLogs.size}", onNavigateToSecurity),
+                MenuItemData("Güvenlik & Kapı Geçişleri", "Kimlik, geçiş ve denetim kayıtları", Icons.Default.Security, Color(0xFFEDE9FE), Color(0xFF6D28D9), null, onNavigateToSecurity),
                 MenuItemData("Kaynaklar & Envanter", "Fiziksel Demirbaşlar", Icons.Default.Inventory2, Color(0xFFFEF3C7), Color(0xFF92400E), null, onNavigateToResources)
             )
         )

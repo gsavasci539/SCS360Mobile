@@ -1270,18 +1270,6 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             SubScreen.SECURITY -> SecurityAuditScreen(
                                 state = state,
                                 onNavigateBack = { currentSubScreen = SubScreen.NONE },
-                                onVerifyGateAccess = { studentId, direction, method, codeInput ->
-                                    viewModel.verifyGateAccess(studentId, direction, method, codeInput)
-                                },
-                                onIssueIdCard = { studentId ->
-                                    viewModel.issueStudentIdCard(studentId)
-                                },
-                                onRevokeIdCard = { cardId ->
-                                    viewModel.revokeStudentIdCard(cardId)
-                                },
-                                onDownloadQrSvg = { qrRecordId ->
-                                    viewModel.downloadQrSvg(qrRecordId)
-                                },
                                 onNavigateToDismissal = { currentSubScreen = SubScreen.DISMISSAL }
                             )
                             SubScreen.EXAMS -> ExamsScreen(
