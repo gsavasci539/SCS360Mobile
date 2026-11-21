@@ -1,11 +1,14 @@
 package com.example.data.remote
 
+import android.content.Context
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.security.MessageDigest
+import java.util.Locale
 import java.util.UUID
 
 internal enum class InventoryRecords(val route: String, val label: String) {
@@ -22,10 +25,13 @@ internal data class InventoryChoices(
     val moreItems: Boolean, val moreUsers: Boolean
 )
 
-internal class NativeInventoryClient(selectedBranch: String) {
+internal class NativeInventoryClient(
+    selectedBranch: String, context: Context, private val actor: String, private val organization: String?, private val workspace: String?
+) {
     private val scope = ApiClientProvider.interceptor.captureScope()
     private val base = ApiClientProvider.activeBaseUrl
     private val http = ApiClientProvider.createOkHttpClient()
+    private val pending = context.getSharedPreferences("inventory_create_requests_v1", Context.MODE_PRIVATE)
     val activeBranch = selectedBranch.takeUnless { it.isBlank() || it == "all" }?.let(::uuid)
 
     private fun uuid(value: String) = UUID.fromString(value).toString()
@@ -81,13 +87,23 @@ internal class NativeInventoryClient(selectedBranch: String) {
     private suspend fun exact(kind: InventoryRecords, branch: String, record: String): JSONObject =
         records(kind, branch, uuid(record), 1, 0).single().also { check(it.getString("id") == record) }
 
-    suspend fun save(kind: InventoryRecords, selectedBranch: String, form: JSONObject) {
+    suspend fun save(kind: InventoryRecords, selectedBranch: String, form: JSONObject) = scope.io {
         val branch = requireNotNull(branch(selectedBranch))
         if (kind == InventoryRecords.ITEMS || kind == InventoryRecords.LOCATIONS) {
             require(form.getString("branch_id") == branch)
         }
-        val ack = call("inventory/${kind.route}", body = form) as JSONObject
-        val saved = exact(kind, branch, ack.getString("id"))
+        val values = JSONArray().put(base).put(actor).put(organization).put(workspace).put(branch).put(kind.route)
+        form.keys().asSequence().sorted().forEach { values.put(it).put(form.get(it)) }
+        val key = MessageDigest.getInstance("SHA-256").digest(values.toString().toByteArray(Charsets.UTF_8))
+            .joinToString("") { String.format(Locale.ROOT, "%02x", it.toInt() and 255) }
+        val requestId = synchronized(pendingLock) {
+            pending.getString(key, null)?.let(::uuid) ?: UUID.randomUUID().toString().also {
+                check(pending.edit().putString(key, it).commit()) { "Envanter istek kimliği saklanamadı" }
+            }
+        }
+        val ack = call("inventory/${kind.route}", body = JSONObject(form.toString()).put("request_id", requestId)) as JSONObject
+        check(ack.getString("id") == requestId)
+        val saved = exact(kind, branch, requestId)
         check(form.keys().asSequence().all { saved.has(it) && saved.text(it) == form.text(it) }) {
             "Kaydedilen envanter alanları doğrulanamadı"
         }
@@ -98,6 +114,7 @@ internal class NativeInventoryClient(selectedBranch: String) {
             InventoryRecords.LOCATIONS -> null
         }
         if (expectedStatus != null) check(saved.getString("status") == expectedStatus)
+        synchronized(pendingLock) { pending.edit().remove(key).apply() }
     }
 
     suspend fun finish(kind: InventoryRecords, row: JSONObject) {
@@ -115,4 +132,8 @@ internal class NativeInventoryClient(selectedBranch: String) {
     }
 
     private fun JSONObject.text(key: String) = if (isNull(key)) "" else getString(key)
+
+    private companion object {
+        val pendingLock = Any()
+    }
 }

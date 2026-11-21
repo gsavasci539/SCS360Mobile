@@ -8,6 +8,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.data.remote.InventoryChoice
 import com.example.data.remote.InventoryRecords
@@ -32,8 +33,10 @@ fun ResourcesScreen(state: Okul360UiState, onBack: () -> Unit) {
         }
         return
     }
+    val context = LocalContext.current.applicationContext
     key(financePresentationScope(state), state.serverBaseUrl) {
-        InventoryWorkspace(remember { NativeInventoryClient(state.selectedBranchId) },
+        InventoryWorkspace(remember { NativeInventoryClient(state.selectedBranchId, context, user.id,
+            user.organization_id, state.workspaceOrganizationId) },
             NativeNavigationPolicy.has(user, "inventory.write"), onBack)
     }
 }
