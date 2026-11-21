@@ -123,7 +123,9 @@ data class Branch(
     val email: String? = null,
     val student_count: Int = 0,
     val class_count: Int = 0,
-    val is_active: Boolean = true
+    val is_active: Boolean = true,
+    val city: String = "",
+    val capacity: Int = 0
 )
 
 @JsonClass(generateAdapter = true)
@@ -1212,17 +1214,20 @@ data class WeeklyLgsNetTrendData(
 // ==========================================
 @JsonClass(generateAdapter = true)
 data class Organization(
-    val id: String = "org-1",
-    val name: String = "SCS360 Eğitim Kurumları",
-    val code: String = "SCS360",
-    val tax_office: String = "Ataşehir Vergi Dairesi",
-    val tax_number: String = "3409182390",
-    val phone: String = "+90 216 555 0100",
-    val email: String = "yonetim@scs360.com",
-    val address: String = "Barbaros Mah. Mor Sümbül Sok. No: 12 Ataşehir / İstanbul",
-    val branch_count: Int = 4,
-    val student_count: Int = 1250,
-    val is_active: Boolean = true
+    val id: String = "",
+    val name: String = "",
+    val code: String = "",
+    val tax_office: String = "",
+    val tax_number: String = "",
+    val phone: String = "",
+    val email: String = "",
+    val address: String = "",
+    val branch_count: Int = 0,
+    val student_count: Int = 0,
+    val is_active: Boolean = false,
+    val legal_name: String = "",
+    val city: String = "",
+    val country: String = ""
 )
 
 @JsonClass(generateAdapter = true)

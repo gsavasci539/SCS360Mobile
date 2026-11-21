@@ -998,14 +998,11 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             SubScreen.ORGANIZATIONS -> OrganizationsBranchesScreen(
                                 state = state,
                                 onBack = { currentSubScreen = SubScreen.NONE },
-                                onAddBranch = { branch -> viewModel.createBranch(branch) },
+                                onReloadOrganizations = viewModel::loadOrganizations,
+                                onReloadBranches = viewModel::loadBranches,
                                 onSwitchBranch = { bId -> viewModel.switchBranch(bId) },
-                                onUpdateOrganizationContacts = { orgId, name, taxOffice, taxNumber, phone, email, address ->
-                                    viewModel.updateOrganizationContacts(orgId, name, taxOffice, taxNumber, phone, email, address)
-                                },
-                                onUpdateBranchDetails = { updatedBranch ->
-                                    viewModel.updateBranchDetails(updatedBranch)
-                                }
+                                onSaveOrganization = viewModel::saveRegistryOrganization,
+                                onSaveBranch = viewModel::saveRegistryBranch
                             )
                             SubScreen.RFID_DEVICES -> RfidDevicesScreen(
                                 state = state,

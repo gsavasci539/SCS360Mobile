@@ -124,7 +124,6 @@ class Okul360Repository(private val context: Context) {
     private val defaultSystemUsers = emptyList<AppUser>()
 
     private val localOrganizations = mutableListOf<Organization>()
-    private val localBranches = mutableListOf<Branch>()
     private val localClasses = mutableListOf<ClassGroup>()
     private val localRfidCards = mutableListOf<RfidCard>()
     private val localDevices = mutableListOf<HardwareDevice>()
@@ -192,17 +191,19 @@ class Okul360Repository(private val context: Context) {
 
 
     suspend fun createBranch(branch: Branch): Branch = requestContext {
-        try {
-            val created = apiService.createBranch(branch)
-            localBranches.add(created)
-            created
-        } catch (failure: Exception) { throw failure }
+        com.example.data.remote.NativeRegistryClient().saveBranch(null, branch)
     }
 
     suspend fun getOrganizations(): List<Organization> = requestContext {
-        try {
-            apiService.getOrganizations()
-        } catch (failure: Exception) { throw failure }
+        com.example.data.remote.NativeRegistryClient().organizations()
+    }
+
+    suspend fun updateOrganization(original: Organization, draft: Organization): Organization = requestContext {
+        com.example.data.remote.NativeRegistryClient().saveOrganization(original, draft)
+    }
+
+    suspend fun updateBranch(original: Branch, draft: Branch): Branch = requestContext {
+        com.example.data.remote.NativeRegistryClient().saveBranch(original, draft)
     }
 
     suspend fun getClasses(branchId: String?): List<ClassGroup> = requestContext {

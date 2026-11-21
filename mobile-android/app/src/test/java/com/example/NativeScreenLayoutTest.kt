@@ -28,6 +28,41 @@ class NativeScreenLayoutTest {
     private val state = Okul360UiState(currentUser = User(id = "synthetic-user", full_name = "Örnek kullanıcı", role = "ADMIN"), students = students)
 
     @OptIn(ExperimentalTestApi::class)
+    @Test fun scopedBranchEditorUsesTheSelectedOrganizationOnLargeTextLandscape() {
+        val owner = User(id = "owner", organization_id = "school", roles = listOf(UserRoleInfo("owner")))
+        val expected = state.copy(currentUser = owner,
+            organizations = listOf(Organization(id = "school", name = "Yetkili kurum"), Organization(id = "other", name = "Başka kurum")),
+            branches = listOf(Branch(id = "branch", organization_id = "school", name = "Yetkili şube"),
+                Branch(id = "other-branch", organization_id = "other", name = "Başka şube")))
+        var attempted: Branch? = null
+        compose.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(780.dp, 360.dp)) then DeviceConfigurationOverride.FontScale(2f)) {
+                Okul360Theme {
+                    OrganizationsBranchesScreen(expected, onBack = {}, onReloadOrganizations = {}, onReloadBranches = {},
+                        onSwitchBranch = {}, onSaveOrganization = { _, _ -> null }, onSaveBranch = { _, draft ->
+                            attempted = draft
+                            "Bağlantı kurulamadı"
+                        })
+                }
+            }
+        }
+        compose.onNodeWithText("Yetkili kurum").assertIsDisplayed()
+        compose.onNodeWithText("Başka kurum").assertDoesNotExist()
+        compose.onNodeWithTag("registry_tab_1").performClick()
+        compose.onNodeWithText("Başka şube").assertDoesNotExist()
+        compose.onNodeWithTag("fab_add_branch").performClick()
+        compose.onNodeWithTag("registry_field_name").performScrollTo().performTextInput("Yeni şube")
+        compose.onNodeWithTag("registry_field_capacity").performScrollTo().performTextInput("35")
+        compose.onNodeWithTag("registry_save").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithTag("registry_save_error").performScrollTo().assertTextEquals("Bağlantı kurulamadı")
+        compose.onNodeWithTag("registry_field_name").performScrollTo().assertTextContains("Yeni şube")
+        assertEquals("school", attempted?.organization_id)
+        assertEquals("", attempted?.id)
+        assertEquals("", attempted?.code)
+        assertEquals(35, attempted?.capacity)
+    }
+
+    @OptIn(ExperimentalTestApi::class)
     @Test fun ownerBillingActionsFitLargeFontAndKeepTheFreeRequestIdentity() {
         val free = SubscriptionPlan(id = "free-plan", name = "Ücretsiz paket", currency = "TRY", is_active = true)
         val paid = free.copy(id = "paid-plan", name = "Ücretli paket", price = 5.25)

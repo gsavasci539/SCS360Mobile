@@ -713,28 +713,71 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
 
     // Organizations, Branch & Class Loaders
     fun loadOrganizations() {
+        val organization = registryOrganizationId() ?: return
+        val scope = com.example.data.remote.ApiClientProvider.interceptor.captureScope()
         viewModelScope.launch(requestFailures) {
-            val orgList = repository.getOrganizations()
-            _uiState.update { it.copy(organizations = orgList) }
+            val records = repository.getOrganizations().filter { it.id == organization }
+            if (scope.current()) _uiState.update { it.copy(organizations = records) }
         }
     }
 
     fun loadBranches() {
+        val organization = registryOrganizationId() ?: return
+        val scope = com.example.data.remote.ApiClientProvider.interceptor.captureScope()
         viewModelScope.launch(requestFailures) {
-            val branchList = repository.getBranches()
-            _uiState.update { it.copy(branches = branchList) }
+            val records = repository.getBranches().filter { it.organization_id == organization }
+            if (scope.current()) _uiState.update { it.copy(branches = records) }
         }
     }
 
-    fun createBranch(branch: Branch) {
-        viewModelScope.launch(requestFailures) {
-            val created = repository.createBranch(branch)
-            _uiState.update {
-                it.copy(
-                    branches = it.branches + created,
-                    toastMessage = "${created.name} şubesi başarıyla eklendi."
-                )
+    private fun registryOrganizationId(): String? {
+        val state = _uiState.value
+        return if (state.currentUser.is_super_admin == true) state.workspaceOrganizationId else state.currentUser.organization_id
+    }
+
+    suspend fun saveRegistryOrganization(original: Organization, draft: Organization): String? {
+        if (registryOrganizationId() != original.id || !NativeNavigationPolicy.has(_uiState.value.currentUser, "org.write")) {
+            return "Kurum bilgilerini düzenleme yetkisi gerekli."
+        }
+        val scope = com.example.data.remote.ApiClientProvider.interceptor.captureScope()
+        return try {
+            val saved = repository.updateOrganization(original, draft)
+            if (!scope.current()) return "Oturum değişti. Kurum bilgilerini yeniden açın."
+            _uiState.update { value ->
+                value.copy(organizations = value.organizations.map { if (it.id == saved.id) saved else it },
+                    toastMessage = "Kurum kaydı doğrulandı.")
             }
+            null
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (changed: com.example.data.remote.RegistryRecordChangedException) {
+            changed.message
+        } catch (_: Exception) {
+            "Kurum kaydı doğrulanamadı. Bilgiler korunuyor."
+        }
+    }
+
+    suspend fun saveRegistryBranch(original: Branch?, draft: Branch): String? {
+        if (registryOrganizationId() != draft.organization_id || !NativeNavigationPolicy.has(_uiState.value.currentUser, "branch.write")) {
+            return "Şube bilgilerini düzenleme yetkisi gerekli."
+        }
+        val scope = com.example.data.remote.ApiClientProvider.interceptor.captureScope()
+        return try {
+            val saved = if (original == null) repository.createBranch(draft) else repository.updateBranch(original, draft)
+            if (!scope.current()) return "Oturum değişti. Şube listesini yeniden açın."
+            _uiState.update { current ->
+                val branches = (current.branches.filterNot { it.id == saved.id } + saved).sortedBy { it.name }
+                current.copy(branches = branches, toastMessage = "Şube kaydı doğrulandı.")
+            }
+            null
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (changed: com.example.data.remote.RegistryRecordChangedException) {
+            changed.message
+        } catch (failure: com.example.data.remote.RegistryHttpException) {
+            if (failure.code == 409) "Şube kodu, adı veya paket kotası için sunucuda çakışma var." else "Şube kaydı doğrulanamadı."
+        } catch (_: Exception) {
+            "Şube kaydı doğrulanamadı. Bilgiler korunuyor."
         }
     }
 
@@ -2289,61 +2332,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         billingPeriod: String
     ) {
         _uiState.update { it.copy(toastMessage = "Kurum kaydını web sitesindeki güvenli üyelik formundan tamamlayın. Örnek hesap veya üyelik oluşturulmadı.") }
-    }
-
-    fun updateOrganizationContacts(
-        orgId: String,
-        name: String,
-        taxOffice: String,
-        taxNumber: String,
-        phone: String,
-        email: String,
-        address: String
-    ) {
-        _uiState.update { state ->
-            val updatedOrgs = if (state.organizations.isEmpty()) {
-                listOf(
-                    Organization(
-                        id = orgId,
-                        name = name.ifBlank { "SCS360 Eğitim Kurumları" },
-                        tax_office = taxOffice.trim(),
-                        tax_number = taxNumber.trim(),
-                        phone = phone.trim(),
-                        email = email.trim(),
-                        address = address.trim()
-                    )
-                )
-            } else {
-                state.organizations.map { org ->
-                    if (org.id == orgId || state.organizations.size == 1) {
-                        org.copy(
-                            name = name.ifBlank { org.name },
-                            tax_office = taxOffice.trim(),
-                            tax_number = taxNumber.trim(),
-                            phone = phone.trim(),
-                            email = email.trim(),
-                            address = address.trim()
-                        )
-                    } else org
-                }
-            }
-            state.copy(
-                organizations = updatedOrgs,
-                toastMessage = "Kurum iletişim ve vergi bilgileri güncellendi (boş bırakılan alanlar temizlendi)."
-            )
-        }
-    }
-
-    fun updateBranchDetails(updatedBranch: Branch) {
-        _uiState.update { state ->
-            val updatedList = state.branches.map { br ->
-                if (br.id == updatedBranch.id) updatedBranch else br
-            }
-            state.copy(
-                branches = updatedList,
-                toastMessage = "${updatedBranch.name} şube iletişim bilgileri güncellendi."
-            )
-        }
     }
 
     fun clearToast() {

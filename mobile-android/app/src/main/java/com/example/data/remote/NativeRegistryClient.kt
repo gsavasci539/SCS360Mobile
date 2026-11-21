@@ -55,6 +55,52 @@ class NativeRegistryClient {
         }
     }
     suspend fun branches() = pages("branches").map(::branch)
+    suspend fun organizations() = pages("organizations").map(::organization)
+
+    suspend fun saveOrganization(original: Organization, draft: Organization): Organization {
+        val id = uuid(original.id)
+        require(id == uuid(draft.id))
+        val path = "organizations/$id"
+        val current = request(path) as JSONObject
+        val before = organizationWrite(original)
+        check(current.getString("id") == id)
+        if (diff(before, organizationWrite(organization(current))).length() != 0) throw RegistryRecordChangedException()
+        val change = diff(organizationWrite(draft), before)
+        if (change.length() == 0) return organization(current)
+        fun verifies(row: JSONObject) = row.getString("id") == id && matchesRow(row, change)
+        check(verifies(request(path, "PUT", change) as JSONObject)) { "Kurum işlem yanıtı doğrulanamadı." }
+        val saved = request(path) as JSONObject
+        check(verifies(saved)) { "Kurum kaydı sunucudan doğrulanamadı." }
+        return organization(saved)
+    }
+
+    suspend fun saveBranch(original: Branch?, draft: Branch): Branch {
+        val organization = uuid(draft.organization_id)
+        val payload = branchWrite(draft)
+        val written = if (original == null) {
+            payload.put("organization_id", organization)
+            request("branches", "POST", payload) as JSONObject
+        } else {
+            val id = uuid(original.id)
+            require(id == uuid(draft.id) && organization == uuid(original.organization_id))
+            val current = request("branches/$id") as JSONObject
+            check(current.getString("id") == id && current.getString("organization_id") == organization)
+            val before = branchWrite(original)
+            if (diff(before, branchWrite(branch(current))).length() != 0) throw RegistryRecordChangedException()
+            val change = diff(payload, before)
+            if (change.length() == 0) return branch(current)
+            (request("branches/$id", "PUT", change) as JSONObject).also { check(it.getString("id") == id) }
+        }
+        val id = uuid(written.getString("id"))
+        check(written.getString("organization_id") == organization && matchesRow(written, payload)) {
+            "Şube işlem yanıtı doğrulanamadı."
+        }
+        val saved = request("branches/$id") as JSONObject
+        check(saved.getString("id") == id && saved.getString("organization_id") == organization && matchesRow(saved, payload)) {
+            "Şube kaydı sunucudan doğrulanamadı."
+        }
+        return branch(saved)
+    }
     suspend fun classes(branchId: String?) = pages("classes" + query("branch_id" to branchId)).map(::classroom).also { rows ->
         check(branchId == null || rows.all { it.branch_id == branchId })
     }
@@ -162,7 +208,26 @@ class NativeRegistryClient {
     ).let { it.copy(registry_snapshot = fingerprint(classWrite(it, false).put("id", it.id).put("organization_id", it.organization_id).put("branch_id", it.branch_id))) }
     private fun branch(j: JSONObject) = Branch(id = uuid(j.getString("id")), organization_id = uuid(j.getString("organization_id")),
         name = j.getString("name"), code = nullable(j, "code").orEmpty(), address = nullable(j, "address").orEmpty(),
-        phone = nullable(j, "phone").orEmpty(), email = nullable(j, "email"), is_active = j.getBoolean("is_active"))
+        phone = nullable(j, "phone").orEmpty(), email = nullable(j, "email"), is_active = j.getBoolean("is_active"),
+        student_count = j.optInt("student_count"), city = nullable(j, "city").orEmpty(), capacity = j.optInt("capacity"))
+    private fun organization(j: JSONObject) = Organization(id = uuid(j.getString("id")), name = j.getString("name"),
+        tax_office = nullable(j, "tax_office").orEmpty(), tax_number = nullable(j, "tax_number").orEmpty(),
+        phone = nullable(j, "phone").orEmpty(), email = nullable(j, "email").orEmpty(), address = nullable(j, "address").orEmpty(),
+        legal_name = nullable(j, "legal_name").orEmpty(), city = nullable(j, "city").orEmpty(), country = nullable(j, "country").orEmpty(),
+        is_active = j.getBoolean("is_active"))
+    private fun branchWrite(row: Branch) = JSONObject().put("name", checkedLocationName(row.name))
+        .nullable("code", nonBlank(row.code)).nullable("address", nonBlank(row.address))
+        .nullable("phone", nonBlank(row.phone)).nullable("email", row.email?.let(::nonBlank))
+        .nullable("city", nonBlank(row.city)).put("capacity", row.capacity).put("is_active", row.is_active)
+    private fun organizationWrite(row: Organization) = JSONObject().put("name", checkedLocationName(row.name))
+        .nullable("legal_name", nonBlank(row.legal_name)).nullable("tax_office", nonBlank(row.tax_office))
+        .nullable("tax_number", nonBlank(row.tax_number)).nullable("phone", nonBlank(row.phone))
+        .nullable("email", nonBlank(row.email)).nullable("address", nonBlank(row.address)).nullable("city", nonBlank(row.city))
+        .apply { row.country.trim().takeIf(String::isNotEmpty)?.let { put("country", it) } }
+    private fun nonBlank(value: String) = value.trim().takeIf(String::isNotEmpty)
+    private fun checkedLocationName(value: String) = value.trim().also { require(it.length in 2..255) { "Geçerli bir ad girin." } }
+    private fun matchesRow(row: JSONObject, expected: JSONObject) =
+        expected.keys().asSequence().all { row.has(it) && row.get(it) == expected.get(it) }
     private fun diff(after: JSONObject, before: JSONObject) = JSONObject().apply {
         after.keys().forEach { key -> if (after.get(key) != before.opt(key)) put(key, after.get(key)) }
     }

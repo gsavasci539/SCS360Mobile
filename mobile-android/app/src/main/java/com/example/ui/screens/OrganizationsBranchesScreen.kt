@@ -1,631 +1,182 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.data.model.Branch
 import com.example.data.model.Organization
-import com.example.ui.components.RoleContextualAiCard
-import com.example.ui.theme.*
+import com.example.ui.navigation.NativeNavigationPolicy
 import com.example.ui.viewmodel.Okul360UiState
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun OrganizationsBranchesScreen(
     state: Okul360UiState,
     onBack: () -> Unit,
-    onAddBranch: (Branch) -> Unit,
+    onReloadOrganizations: () -> Unit,
+    onReloadBranches: () -> Unit,
     onSwitchBranch: (String) -> Unit,
-    onUpdateOrganizationContacts: (orgId: String, name: String, taxOffice: String, taxNumber: String, phone: String, email: String, address: String) -> Unit = { _, _, _, _, _, _, _ -> },
-    onUpdateBranchDetails: (Branch) -> Unit = {}
+    onSaveOrganization: suspend (Organization, Organization) -> String?,
+    onSaveBranch: suspend (Branch?, Branch) -> String?,
 ) {
-    var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Kurum & Organizasyon", "Şubeler & Kampüsler")
-    var showAddBranchDialog by remember { mutableStateOf(false) }
-    var editingOrganization by remember { mutableStateOf<Organization?>(null) }
-    var editingBranch by remember { mutableStateOf<Branch?>(null) }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = "Kurum & Şube Yönetimi",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            color = BrandNavy
-                        )
-                        Text(
-                            text = "/organizations • /branches",
-                            fontSize = 11.sp,
-                            color = NeutralGrayDark
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(
-                        onClick = onBack,
-                        modifier = Modifier.testTag("btn_org_back")
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Geri",
-                            tint = PrimaryBlue
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
-            )
-        },
-        floatingActionButton = {
-            if (selectedTabIndex == 1) {
-                ExtendedFloatingActionButton(
-                    onClick = { showAddBranchDialog = true },
-                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                    text = { Text("Yeni Şube Ekle") },
-                    containerColor = PrimaryBlue,
-                    contentColor = Color.White,
-                    modifier = Modifier.testTag("fab_add_branch")
-                )
-            }
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .background(BackgroundLight)
-        ) {
-            // Tab Selector
-            TabRow(
-                selectedTabIndex = selectedTabIndex,
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = PrimaryBlue,
-                indicator = { tabPositions ->
-                    TabRowDefaults.SecondaryIndicator(
-                        Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
-                        color = PrimaryBlue
-                    )
-                }
-            ) {
-                tabs.forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTabIndex == index,
-                        onClick = { selectedTabIndex = index },
-                        text = {
-                            Text(
-                                text = title,
-                                fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = 14.sp
-                            )
-                        },
-                        icon = {
-                            Icon(
-                                imageVector = if (index == 0) Icons.Outlined.CorporateFare else Icons.Outlined.LocationOn,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    )
-                }
-            }
-
-            if (selectedTabIndex == 0) {
-                OrganizationInfoTab(
-                    organizations = state.organizations,
-                    state = state,
-                    onEditOrganization = { org -> editingOrganization = org }
-                )
-            } else {
-                BranchesListTab(
-                    branches = state.branches,
-                    selectedBranchId = state.selectedBranchId,
-                    onSelectBranch = onSwitchBranch,
-                    onEditBranch = { br -> editingBranch = br }
-                )
-            }
-        }
-    }
-
-    if (showAddBranchDialog) {
-        AddBranchDialog(
-            onDismiss = { showAddBranchDialog = false },
-            onConfirm = { branch ->
-                onAddBranch(branch)
-                showAddBranchDialog = false
-            }
-        )
-    }
-
-    editingOrganization?.let { org ->
-        var name by remember(org) { mutableStateOf(org.name) }
-        var taxOffice by remember(org) { mutableStateOf(org.tax_office) }
-        var taxNumber by remember(org) { mutableStateOf(org.tax_number) }
-        var phone by remember(org) { mutableStateOf(org.phone) }
-        var email by remember(org) { mutableStateOf(org.email) }
-        var address by remember(org) { mutableStateOf(org.address) }
-
-        AlertDialog(
-            onDismissRequest = { editingOrganization = null },
-            title = {
-                Column {
-                    Text("Kurum İletişim & Vergi Bilgileri", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("Kurum oluşturma/silme/durum değiştirme yalnız Root yetkisindedir; iletişim alanlarını boş bırakarak temizleyebilirsiniz.", fontSize = 11.sp, color = NeutralGrayDark)
-                }
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Kurum Unvanı") }, singleLine = true)
-                    OutlinedTextField(value = taxOffice, onValueChange = { taxOffice = it }, label = { Text("Vergi Dairesi (Boş bırakılırsa temizlenir)") }, singleLine = true)
-                    OutlinedTextField(value = taxNumber, onValueChange = { taxNumber = it }, label = { Text("Vergi Numarası (Boş bırakılırsa temizlenir)") }, singleLine = true)
-                    OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Telefon (Boş bırakılırsa temizlenir)") }, singleLine = true)
-                    OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("E-Posta (Boş bırakılırsa temizlenir)") }, singleLine = true)
-                    OutlinedTextField(value = address, onValueChange = { address = it }, label = { Text("Merkez Adres (Boş bırakılırsa temizlenir)") }, minLines = 2)
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onUpdateOrganizationContacts(org.id, name, taxOffice, taxNumber, phone, email, address)
-                        editingOrganization = null
-                    }
-                ) {
-                    Text("Kaydet")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { editingOrganization = null }) { Text("İptal") }
-            }
-        )
-    }
-
-    editingBranch?.let { branch ->
-        var name by remember(branch) { mutableStateOf(branch.name) }
-        var address by remember(branch) { mutableStateOf(branch.address) }
-        var phone by remember(branch) { mutableStateOf(branch.phone) }
-        var email by remember(branch) { mutableStateOf(branch.email ?: "") }
-
-        AlertDialog(
-            onDismissRequest = { editingBranch = null },
-            title = { Text("${branch.name} • Şube İletişim Düzenle", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Şube Adı") }, singleLine = true)
-                    OutlinedTextField(value = address, onValueChange = { address = it }, label = { Text("Adres (Boş bırakılırsa temizlenir)") }, singleLine = true)
-                    OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Telefon (Boş bırakılırsa temizlenir)") }, singleLine = true)
-                    OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("E-Posta (Boş bırakılırsa temizlenir)") }, singleLine = true)
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onUpdateBranchDetails(
-                            branch.copy(
-                                name = name.ifBlank { branch.name },
-                                address = address.trim(),
-                                phone = phone.trim(),
-                                email = email.trim().takeIf { it.isNotBlank() }
-                            )
-                        )
-                        editingBranch = null
-                    }
-                ) {
-                    Text("Şubeyi Güncelle")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { editingBranch = null }) { Text("İptal") }
-            }
-        )
-    }
-}
-
-@Composable
-private fun OrganizationInfoTab(
-    organizations: List<Organization>,
-    state: Okul360UiState,
-    onEditOrganization: (Organization) -> Unit
-) {
-    val org = organizations.firstOrNull() ?: Organization()
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // AI Kurumsal Büyüme & Şubeleşme Analiz Kartı
-        item {
-            RoleContextualAiCard(
-                screenName = "DASHBOARD",
-                state = state,
-                initialExpanded = false
-            )
-        }
-
-        item {
-            // Main Org Card
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(PrimaryBlue.copy(alpha = 0.12f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Business,
-                                contentDescription = null,
-                                tint = PrimaryBlue,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(
-                                    text = org.name,
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = BrandNavy
-                                )
-                                SuggestionChip(
-                                    onClick = {},
-                                    label = { Text(if (org.is_active) "AKTİF" else "PASİF", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
-                                    colors = SuggestionChipDefaults.suggestionChipColors(
-                                        containerColor = if (org.is_active) StatusGreen.copy(alpha = 0.12f) else StatusRed.copy(alpha = 0.12f),
-                                        labelColor = if (org.is_active) StatusGreen else StatusRed
-                                    ),
-                                    border = null
-                                )
-                            }
-                            Text(
-                                text = "Kurum Kodu: ${org.code}",
-                                fontSize = 13.sp,
-                                color = NeutralGrayDark
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(20.dp))
-                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Detail rows
-                    DetailItem(icon = Icons.Outlined.AccountBalance, title = "Vergi Dairesi", value = org.tax_office.ifBlank { "Belirtilmedi (Temizlendi)" })
-                    DetailItem(icon = Icons.Outlined.Badge, title = "Vergi Numarası", value = org.tax_number.ifBlank { "Belirtilmedi (Temizlendi)" })
-                    DetailItem(icon = Icons.Outlined.Phone, title = "Merkez Telefon", value = org.phone.ifBlank { "Belirtilmedi (Temizlendi)" })
-                    DetailItem(icon = Icons.Outlined.Email, title = "Kurumsal E-Posta", value = org.email.ifBlank { "Belirtilmedi (Temizlendi)" })
-                    DetailItem(icon = Icons.Outlined.Place, title = "Merkez Adres", value = org.address.ifBlank { "Belirtilmedi (Temizlendi)" })
-
-                    Spacer(modifier = Modifier.height(10.dp))
-                    OutlinedButton(
-                        onClick = { onEditOrganization(org) },
-                        modifier = Modifier.fillMaxWidth().testTag("edit_org_contacts_btn"),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Kurum İletişim & Vergi Bilgilerini Düzenle (org.write)", fontSize = 12.sp)
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Stats row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        StatBadge(
-                            title = "Toplam Şube",
-                            value = "${org.branch_count}",
-                            color = PrimaryBlue,
-                            modifier = Modifier.weight(1f)
-                        )
-                        StatBadge(
-                            title = "Kayıtlı Öğrenci",
-                            value = "${org.student_count}",
-                            color = AccentTeal,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-        }
-
-        item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Default.Security, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(20.dp))
-                        Text(
-                            text = "Yetki & Lisans Bilgileri",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = BrandNavy
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "• İzin Seviyesi: org.read / org.write\n• Çoklu Şube Desteği (Multi-Campus Tenant): Aktif\n• API Erişimi: Doğrudan & Yerel Senkronizasyon Destekli",
-                        fontSize = 13.sp,
-                        color = NeutralGrayDark,
-                        lineHeight = 20.sp
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BranchesListTab(
-    branches: List<Branch>,
-    selectedBranchId: String,
-    onSelectBranch: (String) -> Unit,
-    onEditBranch: (Branch) -> Unit
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            Text(
-                text = "Kayıtlı Kampüsler (${branches.size})",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = NeutralGrayDark,
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
-            )
-        }
-
-        items(branches, key = { it.id }) { branch ->
-            val isSelected = branch.id == selectedBranchId
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isSelected) PrimaryBlue.copy(alpha = 0.05f) else MaterialTheme.colorScheme.surface
-                ),
-                shape = RoundedCornerShape(14.dp),
-                border = if (isSelected) CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(PrimaryBlue)) else null,
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("branch_card_${branch.id}")
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(if (isSelected) PrimaryBlue else NeutralGrayLight),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.School,
-                                contentDescription = null,
-                                tint = if (isSelected) Color.White else PrimaryBlue,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = branch.name,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = BrandNavy
-                            )
-                            Text(
-                                text = branch.address.ifBlank { "Adres belirtilmedi" },
-                                fontSize = 12.sp,
-                                color = NeutralGrayDark
-                            )
-                        }
-                        IconButton(onClick = { onEditBranch(branch) }) {
-                            Icon(Icons.Default.Edit, contentDescription = "Şube Düzenle", tint = PrimaryBlue, modifier = Modifier.size(18.dp))
-                        }
-                        if (isSelected) {
-                            AssistChip(
-                                onClick = {},
-                                label = { Text("Seçili", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                                colors = AssistChipDefaults.assistChipColors(
-                                    containerColor = PrimaryBlue.copy(alpha = 0.15f),
-                                    labelColor = PrimaryBlue
-                                ),
-                                border = null
-                            )
-                        } else {
-                            OutlinedButton(
-                                onClick = { onSelectBranch(branch.id) },
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                            ) {
-                                Text("Seç", fontSize = 12.sp)
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Icon(Icons.Outlined.Person, contentDescription = null, modifier = Modifier.size(15.dp), tint = PrimaryBlue)
-                            Text(text = "${branch.student_count} Öğrenci", fontSize = 11.5.sp, color = NeutralGrayDark, maxLines = 1)
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Icon(Icons.Outlined.School, contentDescription = null, modifier = Modifier.size(15.dp), tint = AccentTeal)
-                            Text(text = "${branch.class_count} Sınıf", fontSize = 11.5.sp, color = NeutralGrayDark, maxLines = 1)
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.weight(1f, fill = false)
-                        ) {
-                            Icon(Icons.Outlined.Phone, contentDescription = null, modifier = Modifier.size(15.dp), tint = NeutralGrayDark)
-                            Text(text = branch.phone, fontSize = 11.5.sp, color = NeutralGrayDark, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DetailItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    value: String
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Icon(imageVector = icon, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(18.dp))
-        Text(text = title, fontSize = 13.sp, color = NeutralGrayDark, modifier = Modifier.width(130.dp))
-        Text(text = value, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = BrandNavy, modifier = Modifier.weight(1f))
-    }
-}
-
-@Composable
-private fun StatBadge(
-    title: String,
-    value: String,
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        color = color.copy(alpha = 0.08f),
-        shape = RoundedCornerShape(12.dp),
-        modifier = modifier
-    ) {
-        Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(text = value, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = color)
-            Text(text = title, fontSize = 11.sp, color = NeutralGrayDark)
-        }
-    }
-}
-
-@Composable
-private fun AddBranchDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (Branch) -> Unit
-) {
-    var name by remember { mutableStateOf("") }
-    var address by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Yeni Şube Ekle", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Şube / Kampüs Adı") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = address,
-                    onValueChange = { address = it },
-                    label = { Text("Adres & İlçe") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = phone,
-                    onValueChange = { phone = it },
-                    label = { Text("Telefon Numarası") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = { Text("İletişim E-Postası") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (name.isNotBlank()) {
-                        val newBranch = Branch(
-                            id = "branch-${System.currentTimeMillis()}",
-                            name = name,
-                            code = name.take(3).uppercase(),
-                            address = address,
-                            phone = phone,
-                            student_count = 0,
-                            class_count = 0,
-                            is_active = true
-                        )
-                        onConfirm(newBranch)
-                    }
-                },
-                enabled = name.isNotBlank()
-            ) {
-                Text("Kaydet")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("İptal") }
-        }
+    val actor = state.currentUser
+    val organizationId = if (actor.is_super_admin == true) state.workspaceOrganizationId else actor.organization_id
+    val canReadOrg = NativeNavigationPolicy.has(actor, "org.read")
+    val canReadBranches = NativeNavigationPolicy.has(actor, "branch.read")
+    val canEditOrg = canReadOrg && NativeNavigationPolicy.has(actor, "org.write")
+    val canEditBranches = canReadBranches && NativeNavigationPolicy.has(actor, "branch.write")
+    val organization = state.organizations.singleOrNull { it.id == organizationId }
+    val visibleBranches = state.branches.filter { it.organization_id == organizationId }
+    var selected by remember(organizationId, canReadOrg, canReadBranches) { mutableIntStateOf(if (canReadOrg) 0 else 1) }
+    var editingOrganization by remember(organizationId) { mutableStateOf<Organization?>(null) }
+    var editingBranch by remember(organizationId) { mutableStateOf<Branch?>(null) }
+    var addingBranch by remember(organizationId) { mutableStateOf(false) }
+    val tabs = listOfNotNull(
+        0.takeIf { canReadOrg }?.let { it to "Kurum" },
+        1.takeIf { canReadBranches }?.let { it to "Şubeler" },
     )
+
+    Scaffold(topBar = {
+        TopAppBar(title = { Text("Kurum ve Şube Yönetimi") }, navigationIcon = {
+            IconButton(onClick = onBack, modifier = Modifier.testTag("btn_org_back")) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
+            }
+        })
+    }, floatingActionButton = {
+        if (selected == 1 && canEditBranches && !organizationId.isNullOrBlank()) {
+            FloatingActionButton(onClick = { addingBranch = true }, modifier = Modifier.testTag("fab_add_branch")) {
+                Icon(Icons.Default.Add, contentDescription = "Şube ekle")
+            }
+        }
+    }) { padding ->
+        Column(Modifier.padding(padding).fillMaxSize()) {
+            if (organizationId.isNullOrBlank() || tabs.isEmpty()) {
+                Text(if (actor.is_super_admin == true) "Platform yönetiminden bir kurum seçin." else "Kurum yönetimi erişimi bulunamadı.",
+                    modifier = Modifier.padding(16.dp))
+                return@Column
+            }
+            ScrollableTabRow(selectedTabIndex = tabs.indexOfFirst { it.first == selected }.coerceAtLeast(0), edgePadding = 8.dp) {
+                tabs.forEach { (index, title) ->
+                    Tab(selected = selected == index, onClick = { selected = index },
+                        text = { Text(title) }, modifier = Modifier.testTag("registry_tab_$index"))
+                }
+            }
+            if (selected == 0) {
+                LazyColumn(Modifier.fillMaxSize().testTag("registry_organization_list"), contentPadding = PaddingValues(16.dp)) {
+                    item {
+                        if (organization == null) {
+                            Text("Kurum bilgisi alınamadı.")
+                            TextButton(onClick = onReloadOrganizations) { Text("Kurum bilgisini yenile") }
+                        } else {
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(organization.name, style = MaterialTheme.typography.titleLarge)
+                                    if (organization.legal_name.isNotBlank()) Text(organization.legal_name)
+                                    Text(if (organization.is_active) "Etkin" else "Kapalı")
+                                    RegistryContactLine("Vergi dairesi", organization.tax_office)
+                                    RegistryContactLine("Vergi numarası", organization.tax_number)
+                                    RegistryContactLine("Telefon", organization.phone)
+                                    RegistryContactLine("E-posta", organization.email)
+                                    RegistryContactLine("Adres", organization.address)
+                                    RegistryContactLine("Şehir", organization.city)
+                                    RegistryContactLine("Ülke", organization.country)
+                                    if (canEditOrg) {
+                                        OutlinedButton(onClick = { editingOrganization = organization },
+                                            modifier = Modifier.testTag("edit_org_contacts_btn")) { Text("Kurum bilgilerini düzenle") }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                LazyColumn(Modifier.fillMaxSize().testTag("registry_branches_list"),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 80.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    item {
+                        TextButton(onClick = onReloadBranches) { Text("Şube listesini yenile") }
+                        if (visibleBranches.isEmpty()) Text("Gösterilecek şube yok.")
+                    }
+                    items(visibleBranches, key = { it.id }) { branch ->
+                        Card(Modifier.fillMaxWidth().testTag("branch_card_${branch.id}")) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Text(branch.name, style = MaterialTheme.typography.titleMedium)
+                                if (branch.code.isNotBlank()) Text("Kod ${branch.code}")
+                                Text("${branch.student_count} öğrenci · Kapasite ${branch.capacity}")
+                                Text(if (branch.is_active) "Etkin" else "Pasif")
+                                if (branch.address.isNotBlank()) Text(branch.address)
+                                if (branch.city.isNotBlank()) Text(branch.city)
+                                if (branch.phone.isNotBlank()) Text(branch.phone)
+                                branch.email?.takeIf(String::isNotBlank)?.let { Text(it) }
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (branch.id == state.selectedBranchId) {
+                                        Text("Seçili şube")
+                                    } else if (branch.is_active) {
+                                        OutlinedButton(onClick = { onSwitchBranch(branch.id) }) { Text("Şubeyi seç") }
+                                    }
+                                    if (canEditBranches) {
+                                        OutlinedButton(onClick = { editingBranch = branch },
+                                            modifier = Modifier.testTag("edit_branch_${branch.id}")) { Text("Şubeyi düzenle") }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    editingOrganization?.let { original ->
+        RegistryLocationEditor("Kurum bilgileri", listOf(
+            RegistryEditorField("name", "Kurum adı", original.name),
+            RegistryEditorField("legal_name", "Resmî unvan", original.legal_name),
+            RegistryEditorField("tax_office", "Vergi dairesi", original.tax_office),
+            RegistryEditorField("tax_number", "Vergi numarası", original.tax_number),
+            RegistryEditorField("phone", "Telefon", original.phone, KeyboardType.Phone),
+            RegistryEditorField("email", "E-posta", original.email, KeyboardType.Email),
+            RegistryEditorField("address", "Adres", original.address),
+            RegistryEditorField("city", "Şehir", original.city),
+            RegistryEditorField("country", "Ülke", original.country),
+        ), onSave = { form, _ ->
+            val country = form.getValue("country")
+            if (country.isBlank() && original.country.isNotBlank()) "Ülke alanını doldurun."
+            else onSaveOrganization(original, original.copy(
+                name = form.getValue("name"), legal_name = form.getValue("legal_name"), tax_office = form.getValue("tax_office"),
+                tax_number = form.getValue("tax_number"), phone = form.getValue("phone"), email = form.getValue("email"),
+                address = form.getValue("address"), city = form.getValue("city"), country = country
+            ))
+        }) { editingOrganization = null }
+    }
+    if ((addingBranch || editingBranch != null) && !organizationId.isNullOrBlank()) {
+        val original = editingBranch
+        val initial = original ?: Branch(organization_id = organizationId)
+        RegistryLocationEditor(if (original == null) "Yeni şube" else "Şube bilgileri", listOf(
+            RegistryEditorField("name", "Şube adı", initial.name), RegistryEditorField("code", "Şube kodu", initial.code),
+            RegistryEditorField("phone", "Telefon", initial.phone, KeyboardType.Phone),
+            RegistryEditorField("email", "E-posta", initial.email.orEmpty(), KeyboardType.Email),
+            RegistryEditorField("address", "Adres", initial.address), RegistryEditorField("city", "Şehir", initial.city),
+            RegistryEditorField("capacity", "Kapasite", original?.capacity?.toString().orEmpty(), KeyboardType.Number),
+        ), active = initial.is_active, onSave = { form, active ->
+            val capacity = form.getValue("capacity").trim().ifBlank { "0" }.toIntOrNull()
+            if (capacity == null || capacity < 0) "Kapasiteye sıfır veya pozitif bir tam sayı girin."
+            else onSaveBranch(original, initial.copy(name = form.getValue("name"), code = form.getValue("code"),
+                phone = form.getValue("phone"), email = form.getValue("email"), address = form.getValue("address"),
+                city = form.getValue("city"), capacity = capacity, is_active = active == true))
+        }) { addingBranch = false; editingBranch = null }
+    }
+}
+
+@Composable
+private fun RegistryContactLine(label: String, value: String) {
+    Text("$label · ${value.ifBlank { "Belirtilmedi" }}")
 }
