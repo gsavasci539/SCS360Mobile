@@ -58,6 +58,43 @@ class SaasApi {
     fun planBody(plan: SubscriptionPlan) = JSONObject().put("code", plan.code).put("name", plan.name).put("price", plan.price)
         .put("currency", plan.currency).put("period_months", if (plan.billing_period == "YEARLY") 12 else 1)
         .put("branch_limit", plan.branch_limit).put("student_limit", plan.student_limit).put("user_limit", plan.user_limit).put("is_active", plan.is_active)
+    suspend fun savePlan(draft: SubscriptionPlan): SubscriptionPlan {
+        val identifier = draft.id.takeIf(String::isNotBlank)?.let(UUID::fromString)
+        val path = identifier?.let { "platform/plans/$it" } ?: "platform/plans"
+        val written = plan(request(path, if (identifier == null) "POST" else "PUT", planBody(draft)) as JSONObject)
+        val actualId = UUID.fromString(written.id)
+        val expected = draft.copy(id = actualId.toString())
+        check((identifier == null || identifier == actualId) && written == expected) { "Paket yanıtı doğrulanamadı." }
+        val rows = request("platform/plans") as JSONArray
+        val matching = (0 until rows.length()).map(rows::getJSONObject).filter { it.getString("id") == actualId.toString() }
+        val saved = plan(matching.single())
+        check(saved == expected) { "Kaydedilen paket doğrulanamadı." }
+        return saved
+    }
+    suspend fun saveInvoiceOperation(target: SubscriptionInvoice, draft: PlatformInvoiceDraft): SubscriptionInvoice {
+        val id = UUID.fromString(target.id)
+        val organization = UUID.fromString(target.organization_id)
+        val endpoint = if (draft.operation == PlatformInvoiceOperation.SETTLE) "settle" else "review"
+        val acknowledged = invoice(request("platform/invoices/$id/$endpoint", "POST", draft.payload(target)) as JSONObject)
+        fun hasSameIdentityAndAmount(row: SubscriptionInvoice) =
+            row.id == id.toString() && row.organization_id == organization.toString() &&
+                row.amount == target.amount && row.currency == target.currency
+        val expectedStatus = when (draft.operation) {
+            PlatformInvoiceOperation.SETTLE -> acknowledged.status == "PAID"
+            PlatformInvoiceOperation.APPLY -> acknowledged.status == "PAID" && acknowledged.checkout_status == "PAID"
+            PlatformInvoiceOperation.REFUND_RECORDED ->
+                acknowledged.status in setOf("PAID", "REFUNDED") && acknowledged.checkout_status == "REFUNDED"
+        }
+        check(hasSameIdentityAndAmount(acknowledged) && expectedStatus) { "Fatura işlem yanıtı doğrulanamadı." }
+        val rows = request("platform/invoices?record_id=$id&organization_id=$organization&limit=1") as JSONArray
+        check(rows.length() == 1) { "Kaydedilen fatura yeniden okunamadı." }
+        val saved = invoice(rows.getJSONObject(0))
+        check(hasSameIdentityAndAmount(saved) && saved.status == acknowledged.status &&
+            (draft.operation == PlatformInvoiceOperation.SETTLE || saved.checkout_status == acknowledged.checkout_status)) {
+            "Kaydedilen fatura durumu doğrulanamadı."
+        }
+        return saved
+    }
     suspend fun updateMembership(tenant: PlatformTenantSummary, planId: String, start: String, end: String): JSONObject {
         val organization = UUID.fromString(tenant.organization_id)
         val body = membershipBody(tenant, planId, start, end)
@@ -86,7 +123,10 @@ class SaasApi {
         fun invoice(row: JSONObject) = SubscriptionInvoice(id = row.getString("id"), invoice_no = row.getString("id"), organization_id = row.getString("organization_id"),
             organization_name = row.optString("organization_name", ""), plan_id = row.getString("plan_id"), plan_name = row.optString("package_name", ""),
             amount = row.getString("amount").toDouble(), currency = row.getString("currency"), status = row.getString("status"),
-            valid_until = row.optString("valid_until", ""), paid_at = if (row.isNull("paid_at")) null else row.optString("paid_at"), created_at = row.optString("created_at", ""))
+            valid_until = row.optString("valid_until", ""), paid_at = if (row.isNull("paid_at")) null else row.optString("paid_at"),
+            provider_payment_id = if (row.isNull("provider_payment_id")) null else row.optString("provider_payment_id"),
+            created_at = row.optString("created_at", ""), checkout_status = if (row.isNull("checkout_status")) null else row.optString("checkout_status"),
+            can_cancel = row.optBoolean("can_cancel"))
         fun access(row: JSONObject): OrganizationAccessStatus {
             val state = row.getJSONObject("access")
             val usage = row.optJSONObject("usage") ?: JSONObject()

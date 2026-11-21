@@ -2104,11 +2104,21 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     // ==========================================
     // SaaS Platformu, Üyelik, Kota, Teslim Masası & Kapı Güvenliği İşlemleri
     // ==========================================
-    fun createPlatformPlan(plan: SubscriptionPlan) {
-        viewModelScope.launch(requestFailures) {
-            val api = com.example.data.remote.SaasApi()
-            try { api.request("platform/plans", "POST", api.planBody(plan)); refreshSubscriptionAccessStatus() }
-            catch (e: Exception) { if (api.current()) _uiState.update { it.copy(toastMessage = "Paket sunucuda kaydedilemedi.") } }
+    suspend fun savePlatformPlan(plan: SubscriptionPlan): String? {
+        val api = com.example.data.remote.SaasApi()
+        return try {
+            val saved = api.savePlan(plan)
+            if (!api.current()) return "Oturum değişti; paket listesini yeniden açın."
+            _uiState.update { current ->
+                val next = (current.subscriptionPlans.filterNot { it.id == saved.id } + saved)
+                    .sortedWith(compareBy({ it.name }, { it.id }))
+                current.copy(subscriptionPlans = next, toastMessage = "Paket kaydı doğrulandı.")
+            }
+            null
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            "Paket kaydı doğrulanamadı. Taslak korunuyor."
         }
     }
 
@@ -2144,16 +2154,26 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun updateSubscriptionPlan(updatedPlan: SubscriptionPlan) {
-        viewModelScope.launch(requestFailures) {
-            val api = com.example.data.remote.SaasApi()
-            try { api.request("platform/plans/${java.util.UUID.fromString(updatedPlan.id)}", "PUT", api.planBody(updatedPlan)); refreshSubscriptionAccessStatus() }
-            catch (e: Exception) { if (api.current()) _uiState.update { it.copy(toastMessage = "Paket değişikliği sunucuda doğrulanamadı.") } }
+    suspend fun savePlatformInvoiceOperation(invoice: SubscriptionInvoice, draft: com.example.data.remote.PlatformInvoiceDraft): String? {
+        val api = com.example.data.remote.SaasApi()
+        return try {
+            val saved = api.saveInvoiceOperation(invoice, draft)
+            if (!api.current()) return "Oturum değişti. Fatura listesini yeniden açın."
+            _uiState.update { state ->
+                state.copy(
+                    subscriptionInvoices = state.subscriptionInvoices.map { if (it.id == saved.id) saved else it },
+                    toastMessage = "Fatura kaydı doğrulandı."
+                )
+            }
+            refreshSubscriptionAccessStatus()
+            null
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (invalid: IllegalArgumentException) {
+            invalid.message ?: "İşlem bilgilerini kontrol edin."
+        } catch (_: Exception) {
+            "Fatura kaydı doğrulanamadı. Taslak korunuyor."
         }
-    }
-
-    fun verifyPlatformInvoicePayment(invoiceId: String, amount: Double, currency: String, bankRef: String, paidAt: String) {
-        _uiState.update { it.copy(toastMessage = "Bu işlem web yönetim panelinden yapılmalıdır; yerel ödeme veya üyelik kaydı oluşturulmadı.") }
     }
 
     fun refreshSubscriptionAccessStatus() {
@@ -2227,14 +2247,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             try { api.request("subscription/invoices/${java.util.UUID.fromString(invoiceId)}/cancel", "POST", org.json.JSONObject()); refreshSubscriptionAccessStatus() }
             catch (e: Exception) { if (api.current()) _uiState.update { it.copy(toastMessage = "İptal sunucuda doğrulanamadı; fatura değiştirilmedi.") } }
         }
-    }
-
-    fun reconcilePaidReviewInvoice(invoiceId: String, periodStart: String, periodEnd: String, note: String) {
-        _uiState.update { it.copy(toastMessage = "Bu işlem web yönetim panelinden yapılmalıdır; yerel ödeme veya üyelik kaydı oluşturulmadı.") }
-    }
-
-    fun recordSubscriptionRefund(invoiceId: String, refundRef: String, note: String) {
-        _uiState.update { it.copy(toastMessage = "Bu işlem web yönetim panelinden yapılmalıdır; yerel ödeme veya üyelik kaydı oluşturulmadı.") }
     }
 
     fun registerPublicTenantSignup(

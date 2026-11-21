@@ -18,7 +18,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.*
+import com.example.data.remote.PlatformInvoiceDraft
+import com.example.data.remote.PlatformInvoiceOperation
 import com.example.ui.theme.*
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -28,24 +31,23 @@ fun PlatformSaasScreen(
     plans: List<SubscriptionPlan>,
     tenants: List<PlatformTenantSummary>,
     invoices: List<SubscriptionInvoice>,
-    onCreatePlan: (SubscriptionPlan) -> Unit,
+    onCreatePlan: suspend (SubscriptionPlan) -> String?,
     onCreateTenantWithOwner: suspend (com.example.data.remote.TenantProvisionDraft) -> String?,
     onUpdateTenantSubscription: suspend (orgId: String, planId: String, periodStart: String, periodEnd: String) -> String?,
     onToggleTenantActive: (orgId: String, isActive: Boolean) -> Unit,
-    onVerifyInvoicePayment: (invoiceId: String, amount: Double, currency: String, bankRef: String, paidAt: String) -> Unit,
+    onSaveInvoice: suspend (SubscriptionInvoice, PlatformInvoiceDraft) -> String?,
     onOpenTenantWorkspace: (orgId: String, orgName: String) -> Unit = { _, _ -> },
-    onReconcilePaidReviewInvoice: (invoiceId: String, periodStart: String, periodEnd: String, note: String) -> Unit = { _, _, _, _ -> },
-    onRecordSubscriptionRefund: (invoiceId: String, refundRef: String, note: String) -> Unit = { _, _, _ -> },
-    onUpdatePlan: (SubscriptionPlan) -> Unit = {}
+    onUpdatePlan: suspend (SubscriptionPlan) -> String? = { "Paket düzenleme kullanılamıyor." }
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var showCreatePlanDialog by remember { mutableStateOf(false) }
     var editingPlan by remember { mutableStateOf<SubscriptionPlan?>(null) }
     var showCreateTenantDialog by remember { mutableStateOf(false) }
     var editingTenant by remember { mutableStateOf<PlatformTenantSummary?>(null) }
-    var verifyingInvoice by remember { mutableStateOf<SubscriptionInvoice?>(null) }
-    var reconcilingInvoice by remember { mutableStateOf<SubscriptionInvoice?>(null) }
-    var refundingInvoice by remember { mutableStateOf<SubscriptionInvoice?>(null) }
+    var invoiceAction by remember { mutableStateOf<Pair<SubscriptionInvoice, PlatformInvoiceOperation>?>(null) }
+    val actionScope = rememberCoroutineScope()
+    var savingPlanId by remember { mutableStateOf<String?>(null) }
+    var failedPlanAction by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     if (currentUserRole != UserRole.SUPERADMIN) {
         Box(
@@ -304,7 +306,7 @@ fun PlatformSaasScreen(
                                         Text("Kod: ${plan.code} • ${plan.description}", fontSize = 12.sp, color = NeutralTextSecondary)
                                     }
                                     Text(
-                                        "${plan.currency} ${String.format(Locale.US, "%,.0f", plan.price)} / ${if (plan.billing_period == "YEARLY") "Yıl" else "Ay"}",
+                                        "${plan.currency} ${String.format(Locale.US, "%,.2f", plan.price)} / ${if (plan.billing_period == "YEARLY") "Yıl" else "Ay"}",
                                         fontWeight = FontWeight.ExtraBold,
                                         color = ScsPetrolGreen,
                                         fontSize = 15.sp
@@ -324,6 +326,7 @@ fun PlatformSaasScreen(
                                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         OutlinedButton(
                                             onClick = { editingPlan = plan },
+                                            enabled = savingPlanId == null,
                                             modifier = Modifier.testTag("edit_plan_${plan.id}")
                                         ) {
                                             Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
@@ -331,12 +334,29 @@ fun PlatformSaasScreen(
                                             Text("Düzenle", fontSize = 12.sp)
                                         }
                                         FilledTonalButton(
-                                            onClick = { onUpdatePlan(plan.copy(is_active = !plan.is_active)) },
+                                            enabled = savingPlanId == null,
+                                            onClick = {
+                                                if (savingPlanId == null) {
+                                                    failedPlanAction = null
+                                                    savingPlanId = plan.id
+                                                    actionScope.launch {
+                                                        try {
+                                                            failedPlanAction = onUpdatePlan(plan.copy(is_active = !plan.is_active))
+                                                                ?.let { plan.id to it }
+                                                        } finally {
+                                                            savingPlanId = null
+                                                        }
+                                                    }
+                                                }
+                                            },
                                             modifier = Modifier.testTag("toggle_plan_active_${plan.id}")
                                         ) {
                                             Text(if (plan.is_active) "Pasife Al" else "Aktifleştir", fontSize = 12.sp)
                                         }
                                     }
+                                }
+                                failedPlanAction?.takeIf { it.first == plan.id }?.let {
+                                    Text(it.second, color = MaterialTheme.colorScheme.error)
                                 }
                             }
                         }
@@ -398,7 +418,7 @@ fun PlatformSaasScreen(
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    "Durum: ${inv.status} ${inv.bank_reference?.let { "• Ref: $it" } ?: ""} ${inv.refund_reference?.let { "• İade Ref: $it" } ?: ""}",
+                                    "Fatura: ${inv.status}",
                                     fontSize = 12.sp,
                                     color = when (inv.status) {
                                         "PAID" -> StatusSuccess
@@ -407,13 +427,14 @@ fun PlatformSaasScreen(
                                     },
                                     fontWeight = FontWeight.SemiBold
                                 )
+                                inv.checkout_status?.let { Text("Online ödeme: $it", fontSize = 12.sp) }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 FlowRow(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    if (inv.status == "OPEN" || inv.status == "PENDING_VERIFICATION") {
+                                    if (inv.status == "PENDING" && inv.can_cancel) {
                                         Button(
-                                            onClick = { verifyingInvoice = inv },
+                                            onClick = { invoiceAction = inv to PlatformInvoiceOperation.SETTLE },
                                             modifier = Modifier.testTag("verify_invoice_btn_${inv.id}")
                                         ) {
                                             Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -423,7 +444,7 @@ fun PlatformSaasScreen(
                                     }
                                     if (inv.status == "PAID_REVIEW") {
                                         Button(
-                                            onClick = { reconcilingInvoice = inv },
+                                            onClick = { invoiceAction = inv to PlatformInvoiceOperation.APPLY },
                                             colors = ButtonDefaults.buttonColors(containerColor = ScsPetrolGreen),
                                             modifier = Modifier.testTag("reconcile_invoice_btn_${inv.id}")
                                         ) {
@@ -432,9 +453,9 @@ fun PlatformSaasScreen(
                                             Text("Ödemeyi Uzlaştır (PAID_REVIEW)", fontSize = 11.5.sp)
                                         }
                                     }
-                                    if (inv.status == "PAID" || inv.status == "PAID_REVIEW") {
+                                    if (inv.status == "PAID_REVIEW") {
                                         OutlinedButton(
-                                            onClick = { refundingInvoice = inv },
+                                            onClick = { invoiceAction = inv to PlatformInvoiceOperation.REFUND_RECORDED },
                                             modifier = Modifier.testTag("refund_invoice_btn_${inv.id}")
                                         ) {
                                             Icon(Icons.Default.Replay, contentDescription = null, modifier = Modifier.size(15.dp))
@@ -452,86 +473,7 @@ fun PlatformSaasScreen(
     }
 
     if (showCreatePlanDialog) {
-        var name by remember { mutableStateOf("") }
-        var code by remember { mutableStateOf("KURUMSAL_PLUS") }
-        var price by remember { mutableStateOf("18500") }
-        var billingPeriod by remember { mutableStateOf("MONTHLY") }
-        var branchLimit by remember { mutableStateOf("5") }
-        var studentLimit by remember { mutableStateOf("2000") }
-        var userLimit by remember { mutableStateOf("350") }
-
-        AlertDialog(
-            onDismissRequest = { showCreatePlanDialog = false },
-            title = { Text("Yeni SaaS Paketi Oluştur", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Paket Adı") }, singleLine = true)
-                    OutlinedTextField(value = code, onValueChange = { code = it }, label = { Text("Paket Kodu") }, singleLine = true)
-                    OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("Fiyat (TRY)") }, singleLine = true)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = billingPeriod == "MONTHLY",
-                            onClick = { billingPeriod = "MONTHLY" },
-                            label = { Text("Aylık (MONTHLY)") }
-                        )
-                        FilterChip(
-                            selected = billingPeriod == "YEARLY",
-                            onClick = { billingPeriod = "YEARLY" },
-                            label = { Text("Yıllık (YEARLY)") }
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = branchLimit,
-                            onValueChange = { branchLimit = it },
-                            label = { Text("Şube") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true
-                        )
-                        OutlinedTextField(
-                            value = studentLimit,
-                            onValueChange = { studentLimit = it },
-                            label = { Text("Öğrenci") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true
-                        )
-                        OutlinedTextField(
-                            value = userLimit,
-                            onValueChange = { userLimit = it },
-                            label = { Text("Kullanıcı") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (name.isNotBlank()) {
-                            onCreatePlan(
-                                SubscriptionPlan(
-                                    id = "plan-${System.currentTimeMillis()}",
-                                    code = code.uppercase(),
-                                    name = name.trim(),
-                                    price = price.toDoubleOrNull() ?: 15000.0,
-                                    billing_period = billingPeriod,
-                                    branch_limit = branchLimit.toIntOrNull() ?: 5,
-                                    student_limit = studentLimit.toIntOrNull() ?: 1000,
-                                    user_limit = userLimit.toIntOrNull() ?: 200
-                                )
-                            )
-                            showCreatePlanDialog = false
-                        }
-                    }
-                ) {
-                    Text("Paketi Kaydet")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCreatePlanDialog = false }) { Text("İptal") }
-            }
-        )
+        PlatformPlanEditor(null, onCreatePlan) { showCreatePlanDialog = false }
     }
 
     if (showCreateTenantDialog) {
@@ -542,157 +484,12 @@ fun PlatformSaasScreen(
         MembershipEditorDialog(tenant, plans, onUpdateTenantSubscription, onDismiss = { editingTenant = null })
     }
 
-    verifyingInvoice?.let { inv ->
-        var amount by remember { mutableStateOf(inv.amount.toString()) }
-        var bankRef by remember { mutableStateOf("TR-EFT-${System.currentTimeMillis() % 100000}") }
-        var paidAt by remember { mutableStateOf("") }
-
-        AlertDialog(
-            onDismissRequest = { verifyingInvoice = null },
-            title = { Text("Manuel Ödeme Doğrula (${inv.invoice_no})", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Kurum: ${inv.organization_name}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                    OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("Ödenen Tutar (${inv.currency})") }, singleLine = true)
-                    OutlinedTextField(value = bankRef, onValueChange = { bankRef = it }, label = { Text("Banka Dekont / Referans No") }, singleLine = true)
-                    OutlinedTextField(value = paidAt, onValueChange = { paidAt = it }, label = { Text("Ödeme Zamanı (UTC)") }, singleLine = true)
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onVerifyInvoicePayment(inv.id, amount.toDoubleOrNull() ?: inv.amount, inv.currency, bankRef.trim(), paidAt.trim())
-                        verifyingInvoice = null
-                    }
-                ) {
-                    Text("Doğrula ve Dönemi Uzat")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { verifyingInvoice = null }) { Text("Vazgeç") }
-            }
-        )
-    }
-
-    reconcilingInvoice?.let { inv ->
-        var periodStart by remember { mutableStateOf("") }
-        var periodEnd by remember { mutableStateOf("") }
-        var note by remember { mutableStateOf("Tahsilat onaylandı; çakışan üyelik dönem tarihleri kontrol edilerek uzlaştırıldı.") }
-
-        AlertDialog(
-            onDismissRequest = { reconcilingInvoice = null },
-            title = { Text("PAID_REVIEW Ödeme Uzlaştırma (${inv.invoice_no})", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "Ödeme alınmış ancak üyelik penceresi çakışması nedeniyle incelemeye ayrılmış faturayı dönem tarihlerini belirleyerek PAID durumuna geçirin.",
-                        fontSize = 12.sp,
-                        color = NeutralTextSecondary
-                    )
-                    OutlinedTextField(value = periodStart, onValueChange = { periodStart = it }, label = { Text("Dönem Başlangıç (YYYY-MM-DD)") }, singleLine = true)
-                    OutlinedTextField(value = periodEnd, onValueChange = { periodEnd = it }, label = { Text("Dönem Bitiş (YYYY-MM-DD)") }, singleLine = true)
-                    OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Uzlaştırma Açıklaması") }, minLines = 2)
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onReconcilePaidReviewInvoice(inv.id, periodStart.trim(), periodEnd.trim(), note.trim())
-                        reconcilingInvoice = null
-                    }
-                ) {
-                    Text("Uzlaştır ve Aktifleştir")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { reconcilingInvoice = null }) { Text("Vazgeç") }
-            }
-        )
-    }
-
-    refundingInvoice?.let { inv ->
-        var refundRef by remember { mutableStateOf("IYZ-REF-${System.currentTimeMillis() % 100000}") }
-        var note by remember { mutableStateOf("Banka/ödeme sağlayıcısı panelinde tamamlanan iade referansı kaydedildi.") }
-
-        AlertDialog(
-            onDismissRequest = { refundingInvoice = null },
-            title = { Text("Dış İade Kaydet (${inv.invoice_no})", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "Not: Bu işlem banka veya ödeme sağlayıcısında para transferi başlatmaz; yalnızca doğrulanmış dış iade referansını muhasebe kaydı olarak işler.",
-                        fontSize = 12.sp,
-                        color = NeutralTextSecondary
-                    )
-                    OutlinedTextField(value = refundRef, onValueChange = { refundRef = it }, label = { Text("Dış İade Referans No") }, singleLine = true)
-                    OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("İade Notu") }, minLines = 2)
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (refundRef.isNotBlank()) {
-                            onRecordSubscriptionRefund(inv.id, refundRef.trim(), note.trim())
-                            refundingInvoice = null
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = StatusError)
-                ) {
-                    Text("İade Kaydını İşle")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { refundingInvoice = null }) { Text("Vazgeç") }
-            }
-        )
+    invoiceAction?.let { (invoice, operation) ->
+        PlatformInvoiceEditor(invoice, operation, onSaveInvoice) { invoiceAction = null }
     }
 
     editingPlan?.let { plan ->
-        var planName by remember(plan) { mutableStateOf(plan.name) }
-        var planPrice by remember(plan) { mutableStateOf(plan.price.toInt().toString()) }
-        var branchLimit by remember(plan) { mutableStateOf(plan.branch_limit.toString()) }
-        var studentLimit by remember(plan) { mutableStateOf(plan.student_limit.toString()) }
-        var userLimit by remember(plan) { mutableStateOf(plan.user_limit.toString()) }
-        var planDesc by remember(plan) { mutableStateOf(plan.description) }
-
-        AlertDialog(
-            onDismissRequest = { editingPlan = null },
-            title = { Text("${plan.name} • Paketi Düzenle", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = planName, onValueChange = { planName = it }, label = { Text("Paket Adı") }, singleLine = true)
-                    OutlinedTextField(value = planPrice, onValueChange = { planPrice = it }, label = { Text("Fiyat (TRY)") }, singleLine = true)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(value = branchLimit, onValueChange = { branchLimit = it }, label = { Text("Şube") }, modifier = Modifier.weight(1f), singleLine = true)
-                        OutlinedTextField(value = studentLimit, onValueChange = { studentLimit = it }, label = { Text("Öğrenci") }, modifier = Modifier.weight(1f), singleLine = true)
-                        OutlinedTextField(value = userLimit, onValueChange = { userLimit = it }, label = { Text("Kullanıcı") }, modifier = Modifier.weight(1f), singleLine = true)
-                    }
-                    OutlinedTextField(value = planDesc, onValueChange = { planDesc = it }, label = { Text("Açıklama") }, minLines = 2)
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onUpdatePlan(
-                            plan.copy(
-                                name = planName.ifBlank { plan.name },
-                                price = planPrice.toDoubleOrNull() ?: plan.price,
-                                branch_limit = (branchLimit.toIntOrNull() ?: plan.branch_limit).coerceAtLeast(1),
-                                student_limit = (studentLimit.toIntOrNull() ?: plan.student_limit).coerceAtLeast(1),
-                                user_limit = (userLimit.toIntOrNull() ?: plan.user_limit).coerceAtLeast(1),
-                                description = planDesc
-                            )
-                        )
-                        editingPlan = null
-                    }
-                ) {
-                    Text("Kaydet")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { editingPlan = null }) { Text("İptal") }
-            }
-        )
+        PlatformPlanEditor(plan, onUpdatePlan) { editingPlan = null }
     }
 }
 

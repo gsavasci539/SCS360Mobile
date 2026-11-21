@@ -1074,7 +1074,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 plans = state.subscriptionPlans,
                                 tenants = state.platformTenants,
                                 invoices = state.subscriptionInvoices,
-                                onCreatePlan = { plan -> viewModel.createPlatformPlan(plan) },
+                                onCreatePlan = viewModel::savePlatformPlan,
                                 onCreateTenantWithOwner = { draft ->
                                     viewModel.createTenantWithOwner(draft)
                                 },
@@ -1084,23 +1084,13 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onToggleTenantActive = { orgId, isActive ->
                                     viewModel.toggleTenantActive(orgId, isActive)
                                 },
-                                onVerifyInvoicePayment = { invoiceId, amount, currency, bankRef, paidAt ->
-                                    viewModel.verifyPlatformInvoicePayment(invoiceId, amount, currency, bankRef, paidAt)
-                                },
+                                onSaveInvoice = viewModel::savePlatformInvoiceOperation,
                                 onOpenTenantWorkspace = { orgId, orgName ->
                                     viewModel.openTenantWorkspace(orgId, orgName)
                                     currentSubScreen = SubScreen.NONE
                                     currentTab = MainTab.HOME
                                 },
-                                onReconcilePaidReviewInvoice = { invoiceId, periodStart, periodEnd, note ->
-                                    viewModel.reconcilePaidReviewInvoice(invoiceId, periodStart, periodEnd, note)
-                                },
-                                onRecordSubscriptionRefund = { invoiceId, refundRef, note ->
-                                    viewModel.recordSubscriptionRefund(invoiceId, refundRef, note)
-                                },
-                                onUpdatePlan = { plan ->
-                                    viewModel.updateSubscriptionPlan(plan)
-                                }
+                                onUpdatePlan = viewModel::savePlatformPlan
                             )
                             SubScreen.SUBSCRIPTION_BILLING -> SubscriptionBillingScreen(
                                 currentUserRole = state.selectedRole,

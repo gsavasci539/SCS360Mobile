@@ -1582,7 +1582,7 @@ data class SubscriptionInvoice(
     val billing_period: String = "",
     val amount: Double = 0.0,
     val currency: String = "",
-    val status: String = "UNAVAILABLE", // OPEN, PENDING_VERIFICATION, PAID, PAID_REVIEW, REFUNDED, EXPIRED, CANCELLED
+    val status: String = "UNAVAILABLE",
     val valid_until: String = "",
     val bank_reference: String? = null,
     val paid_at: String? = null,
@@ -1591,7 +1591,9 @@ data class SubscriptionInvoice(
     val refund_reference: String? = null,
     val refund_note: String? = null,
     val reconcile_note: String? = null,
-    val created_at: String = ""
+    val created_at: String = "",
+    val checkout_status: String? = null,
+    val can_cancel: Boolean = false
 )
 
 @JsonClass(generateAdapter = true)
