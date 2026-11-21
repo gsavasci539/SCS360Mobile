@@ -194,7 +194,6 @@ data class Okul360UiState(
     val showFeedbackDialog: Boolean = false,
     val isOffline: Boolean = false,
     val isSyncing: Boolean = false,
-    val isDemoMode: Boolean = false,
     val isTestingBackend: Boolean = false,
     val backendStatusMessage: String? = null,
     val systemHealth: SystemHealth? = null,
@@ -1364,17 +1363,23 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun testBackendConnection() {
+        if (_uiState.value.isTestingBackend) return
+        val scope = com.example.data.remote.ApiClientProvider.interceptor.captureScope()
         viewModelScope.launch(requestFailures) {
-            _uiState.update { it.copy(isTestingBackend = true, toastMessage = "Backend sunucusuna bağlanılıyor...") }
-            val (success, message) = repository.testBackendConnection()
-            _uiState.update {
-                it.copy(
-                    isTestingBackend = false,
-                    backendStatusMessage = message,
-                    toastMessage = if (success) "🟢 $message" else "🔴 $message"
-                )
+            _uiState.update { it.copy(isTestingBackend = true, backendStatusMessage = null) }
+            try {
+                val health = repository.checkHealth()
+                scope.ensureCurrent()
+                val message = when {
+                    !health.apiVerified -> "API yanıtı doğrulanamadı."
+                    health.databaseReady == true -> "API ve veritabanı doğrulandı."
+                    health.databaseReady == false -> "API yanıtlıyor. Veritabanı veya şema hazır değil."
+                    else -> "API yanıtlıyor. Veritabanı durumu doğrulanamadı."
+                }
+                _uiState.update { it.copy(systemHealth = health, backendStatusMessage = message) }
+            } finally {
+                if (scope.current()) _uiState.update { it.copy(isTestingBackend = false) }
             }
-            checkSystemHealth()
         }
     }
 

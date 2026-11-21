@@ -286,8 +286,7 @@ fun Okul360NavHost(
         composable(Screen.AiChatAudit.route) {
             AiChatAuditScreen(
                 state = state,
-                onNavigateBack = { navController.popBackStack() },
-                onSwitchToSuperAdmin = { viewModel.switchRole(UserRole.SUPERADMIN) }
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 

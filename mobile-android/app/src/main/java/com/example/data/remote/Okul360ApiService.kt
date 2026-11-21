@@ -17,7 +17,7 @@ interface Okul360ApiService {
 
     // System Health & Ready
     @GET("health")
-    suspend fun getHealth(): SystemHealth
+    suspend fun getHealth(): SystemCheckStatus
 
     @GET("health")
     suspend fun getApiHealth(): SystemHealth
@@ -26,7 +26,7 @@ interface Okul360ApiService {
     suspend fun getApiV1Health(): SystemHealth
 
     @GET("ready")
-    suspend fun getReady(): Map<String, Any>
+    suspend fun getReady(): SystemCheckStatus
 
     @GET("/")
     suspend fun getRoot(): Map<String, Any>

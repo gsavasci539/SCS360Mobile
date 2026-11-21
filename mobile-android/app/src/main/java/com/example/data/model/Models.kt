@@ -411,16 +411,14 @@ data class OutboxNotificationLog(
     val tenant_id: String? = null
 )
 
-@JsonClass(generateAdapter = true)
 data class SystemHealth(
-    val api_status: String = "ONLINE",
-    val database_connection: String = "PostgreSQL Connected (Pool: 12/20)",
-    val latency_ms: Long = 28,
-    val outbox_worker_status: String = "RUNNING (Active Jobs: 0)",
-    val tenant_id: String? = null,
-    val subscription_tier: String = "Enterprise Franchise Edition",
-    val server_time: String = "2026-08-20 09:37:42"
+    val apiVerified: Boolean,
+    val databaseReady: Boolean? = null,
+    val latencyMs: Long? = null,
 )
+
+@JsonClass(generateAdapter = true)
+data class SystemCheckStatus(val status: String, val database: String? = null)
 
 @JsonClass(generateAdapter = true)
 data class SchoolResource(

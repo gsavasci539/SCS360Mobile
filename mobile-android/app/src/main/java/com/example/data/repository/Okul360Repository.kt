@@ -137,17 +137,6 @@ class Okul360Repository(private val context: Context) {
         // No-op: zero mock seed data
     }
 
-    suspend fun testBackendConnection(): Pair<Boolean, String> = requestContext {
-        val startTime = System.currentTimeMillis()
-        try {
-            val readyResponse = try {
-                apiService.getReady()
-            } catch (failure: Exception) { throw failure }
-            val elapsed = System.currentTimeMillis() - startTime
-            Pair(true, "Canlı Backend Bağlantısı Başarılı: HTTP 200 OK (${elapsed}ms) - $baseUrl")
-        } catch (failure: Exception) { throw failure }
-    }
-
     suspend fun login(email: String, password: String): User? =
         com.example.data.remote.NativeAuthentication(apiService).login(email, password)
 
@@ -181,9 +170,7 @@ class Okul360Repository(private val context: Context) {
     }
 
     suspend fun checkHealth(): SystemHealth = requestContext {
-        try {
-            apiService.getHealth()
-        } catch (failure: Exception) { throw failure }
+        com.example.data.remote.NativeSystemHealth(apiService).load()
     }
 
     suspend fun getDashboardSummary(branchId: String): DashboardSummary = requestContext {

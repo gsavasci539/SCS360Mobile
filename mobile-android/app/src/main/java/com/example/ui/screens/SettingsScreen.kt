@@ -38,7 +38,6 @@ import com.example.ui.dialogs.ChangePasswordDialog
 fun SettingsScreen(
     state: Okul360UiState,
     onRoleSelected: (UserRole) -> Unit,
-    onToggleDemoMode: ((Boolean) -> Unit)? = null,
     onTestBackendConnection: () -> Unit,
     onUpdateServerConfig: (url: String, tenant: String) -> Unit,
     onThemeSelected: ((String) -> Unit)? = null,
@@ -51,11 +50,20 @@ fun SettingsScreen(
 ) {
     val haptic = LocalHapticFeedback.current
     var serverUrl by remember(state.serverBaseUrl) { mutableStateOf(state.serverBaseUrl) }
-    var tenantId by remember(state.tenantId) { mutableStateOf(state.tenantId) }
     var showClearCacheConfirmDialog by remember { mutableStateOf(false) }
     var showChangePasswordDialog by remember { mutableStateOf(false) }
 
     val health = state.systemHealth
+    val apiLabel = when (health?.apiVerified) {
+        true -> "API doğrulandı"
+        false -> "API doğrulanamadı"
+        null -> "Kontrol bekleniyor"
+    }
+    val apiColor = when (health?.apiVerified) {
+        true -> SecondaryEmerald
+        false -> MaterialTheme.colorScheme.error
+        null -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
     val currentUser = state.currentUser
     val organizationId = if (currentUser.is_super_admin == true) {
         ApiClientProvider.interceptor.workspaceOrganizationId
@@ -257,15 +265,15 @@ fun SettingsScreen(
                                     color = BrandNavy
                                 )
                                 Text(
-                                    text = "Canlı REST API uç noktası ve Multi-Tenant",
+                                    text = "API adresi ve bağlantı durumu",
                                     fontSize = 11.5.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
                         StatusBadge(
-                            label = health?.api_status ?: "ONLINE",
-                            color = SecondaryEmerald
+                            label = apiLabel,
+                            color = apiColor
                         )
                     }
 
@@ -274,7 +282,7 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = serverUrl,
                         onValueChange = { serverUrl = it },
-                        label = { Text("FastAPI Sunucu URL (Canlı)") },
+                        label = { Text("API adresi") },
                         placeholder = { Text("https://scs360.com.tr/api") },
                         leadingIcon = { Icon(Icons.Default.Language, contentDescription = null, tint = PrimaryBlue) },
                         singleLine = true,
@@ -283,26 +291,6 @@ fun SettingsScreen(
                     )
 
                     Spacer(modifier = Modifier.height(10.dp))
-
-                    OutlinedTextField(
-                        value = tenantId,
-                        onValueChange = { tenantId = it },
-                        label = { Text("Tenant ID (Opsiyonel - Boş Bırakabilirsiniz)") },
-                        placeholder = { Text("Kullanılmıyor (Boş)") },
-                        leadingIcon = { Icon(Icons.Default.Domain, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "ℹ️ Tenant ID kullanılmıyorsa boş bırakınız. Doğrudan API istekleri gönderilir.",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Spacer(modifier = Modifier.height(14.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -326,7 +314,7 @@ fun SettingsScreen(
                         }
 
                         Button(
-                            onClick = { onUpdateServerConfig(serverUrl, tenantId) },
+                            onClick = { onUpdateServerConfig(serverUrl, "") },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
@@ -752,7 +740,7 @@ fun SettingsScreen(
             }
         }
 
-        // 5. Rol Değiştirme (Simülasyon)
+        // Etkin oturum rolü
         item {
             Surface(
                 shape = RoundedCornerShape(18.dp),
@@ -817,19 +805,26 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                         )
                         StatusBadge(
-                            label = health?.api_status ?: "ONLINE",
-                            color = SecondaryEmerald
+                            label = apiLabel,
+                            color = apiColor
                         )
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    SystemMetricRow(label = "Çalışma Modu", value = if (state.isDemoMode) "🧪 Demo Modu" else "⚡ Canlı Backend")
-                    SystemMetricRow(label = "Abonelik Paketi", value = health?.subscription_tier ?: "SCS360 Enterprise")
-                    SystemMetricRow(label = "Veritabanı", value = health?.database_connection ?: "PostgreSQL 16 Multi-Tenant")
-                    SystemMetricRow(label = "Outbox Worker", value = health?.outbox_worker_status ?: "Aktif (Async SMS/Push)")
-                    SystemMetricRow(label = "API Yanıt Süresi", value = "${health?.latency_ms ?: 24} ms")
-                    SystemMetricRow(label = "Tenant Kimliği", value = if (state.tenantId.isNotBlank()) state.tenantId else "Kullanılmıyor (Doğrudan Tekil Kurum)")
+                    SystemMetricRow(label = "Veritabanı ve şema", value = when (health?.databaseReady) {
+                        true -> "Hazır"
+                        false -> "Hazır değil"
+                        null -> "Doğrulanmadı"
+                    })
+                    health?.latencyMs?.let { SystemMetricRow(label = "API yanıt süresi", value = "$it ms") }
+                    if (!organizationId.isNullOrBlank()) {
+                        SystemMetricRow(label = "Kurum kimliği", value = organizationId)
+                        val access = state.organizationAccess
+                        if (access.organization_id == organizationId && access.plan_name.isNotBlank()) {
+                            SystemMetricRow(label = "Abonelik paketi", value = access.plan_name)
+                        }
+                    }
                 }
             }
         }
@@ -884,14 +879,11 @@ fun SystemMetricRow(
     label: String,
     value: String
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        Text(text = label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(text = value, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Text(text = label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(text = value, fontWeight = FontWeight.SemiBold)
     }
 }
