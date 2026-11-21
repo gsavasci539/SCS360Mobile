@@ -134,7 +134,6 @@ class Okul360Repository(private val context: Context) {
     private val localAnnouncements = mutableListOf<Announcement>()
     private val localConsents = mutableListOf<StudentConsent>()
     private val localGuidance = mutableListOf<GuidanceRecord>()
-    private val localTutoring = mutableListOf<TutoringSession>()
     private val localPayrolls = mutableListOf<PayrollRecord>()
     private val localAuditLogs = mutableListOf<AuditLogEntry>()
 
@@ -920,24 +919,6 @@ class Okul360Repository(private val context: Context) {
         try { apiService.deleteGuidanceRecord(id) } catch (failure: Exception) { throw failure }
         localGuidance.removeAll { it.id == id }
         true
-    }
-
-    // 6. Birebir Etüt (Tutoring)
-    suspend fun getTutoringSessions(studentId: String? = null): List<TutoringSession> = requestContext {
-        try {
-            val remote = apiService.getTutoringSessions(studentId)
-            localTutoring.clear()
-            localTutoring.addAll(remote)
-            localTutoring.toList()
-        } catch (failure: Exception) { throw failure }
-    }
-
-    suspend fun createTutoringSession(session: TutoringSession): TutoringSession = requestContext {
-        try {
-            val res = apiService.createTutoringSession(session)
-            localTutoring.add(0, res)
-            res
-        } catch (failure: Exception) { throw failure }
     }
 
     // 7. Personel Maaş & Bordro (Payroll)

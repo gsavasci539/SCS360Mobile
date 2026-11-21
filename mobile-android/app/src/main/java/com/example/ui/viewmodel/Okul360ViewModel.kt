@@ -185,7 +185,6 @@ data class Okul360UiState(
 
     // 7. Okul360 Ek Modüller State
     val consents: List<StudentConsent> = emptyList(),
-    val tutoringSessions: List<TutoringSession> = emptyList(),
     val payrollRecords: List<PayrollRecord> = emptyList(),
     val medicineRequests: List<MedicineRequest> = emptyList(),
     val excuseRequests: List<ExcuseRequest> = emptyList(),
@@ -531,7 +530,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             if (allowed("users.read")) { loadRoles(); loadUsers() }
             if (allowed("settings.read")) { loadRfidCards(); loadHardwareDevices(); checkSystemHealth() }
             if (actor.is_super_admin == true) loadAiAnalyticsData()
-            if (allowed("tutoring.read")) loadTutoringSessions()
             if (allowed("payroll.read")) loadPayrollRecords()
             if (allowed("exam.read", "exam.write")) loadExams()
             refreshSubscriptionAccessStatus()
@@ -2221,22 +2219,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     // ==========================================
     // Okul360 Yeni Modül Metotları
     // ==========================================
-
-    // 6. Tutoring (Birebir Etüt)
-    fun loadTutoringSessions(studentId: String? = null) {
-        viewModelScope.launch(requestFailures) {
-            val list = repository.getTutoringSessions(studentId)
-            _uiState.update { it.copy(tutoringSessions = list) }
-        }
-    }
-
-    fun createTutoringSession(session: TutoringSession) {
-        viewModelScope.launch(requestFailures) {
-            repository.createTutoringSession(session)
-            loadTutoringSessions()
-            _uiState.update { it.copy(toastMessage = "Birebir etüt randevusu planlandı.") }
-        }
-    }
 
     // 7. Payroll (Personel Bordro & Maaş)
     fun loadPayrollRecords(period: String? = null) {
