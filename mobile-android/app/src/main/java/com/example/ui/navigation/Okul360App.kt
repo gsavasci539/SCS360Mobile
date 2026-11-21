@@ -1028,16 +1028,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             SubScreen.APPOINTMENTS -> NativeAppointmentScreen(state, onBack = { currentSubScreen = SubScreen.NONE })
                             SubScreen.TRANSPORT -> TransportScreen(state) { currentSubScreen = SubScreen.NONE }
                             SubScreen.CANTEEN -> CanteenWalletScreen(state) { currentSubScreen = SubScreen.NONE }
-                            SubScreen.HOMEWORK -> HomeworkGradingScreen(
-                                state = state,
-                                onNavigateBack = { currentSubScreen = SubScreen.NONE },
-                                onSubmitHomework = { matId, title, text, fileName, fileSize ->
-                                    viewModel.submitHomework(matId, title, text, fileName, fileSize)
-                                },
-                                onGradeSubmission = { subId, score, feedback ->
-                                    viewModel.gradeHomeworkSubmission(subId, score, feedback)
-                                }
-                            )
+                            SubScreen.HOMEWORK -> HomeworkGradingScreen(state) { currentSubScreen = SubScreen.NONE }
                             SubScreen.LIBRARY -> NativeLibraryScreen(state, onNavigateBack = { currentSubScreen = SubScreen.NONE })
                             SubScreen.STAFF -> NativeStaffScreen(
                                 state = state,

@@ -178,9 +178,6 @@ data class Okul360UiState(
     // 2. Transport & Bus Tracking State
     val busRoutes: List<BusRoute> = emptyList(),
 
-    // 4. Homework Submissions State
-    val homeworkSubmissions: List<HomeworkSubmission> = emptyList(),
-
     // 5. Library & Book Loans State
     val libraryBooks: List<LibraryBook> = emptyList(),
     val bookLoans: List<BookLoanRecord> = emptyList(),
@@ -2004,74 +2001,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             schoolName = _uiState.value.currentUser.institution_name,
             campusName = _uiState.value.currentUser.branch_name,
             gradeList = gradeList
-        )
-    }
-
-    // ==========================================
-    // 4. Homework Submissions & Grading Management
-    // ==========================================
-    fun submitHomework(materialId: String, assignmentTitle: String, submissionText: String, fileName: String? = null, fileSize: String? = null) {
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
-        val newSub = HomeworkSubmission(
-            id = "sub-${System.currentTimeMillis()}",
-            material_id = materialId,
-            assignment_title = assignmentTitle,
-            student_id = "std-1",
-            student_name = "Ali Demir",
-            student_number = "101",
-            class_name = "8-A",
-            submitted_at = now,
-            submission_text = submissionText,
-            attachment_file_name = fileName ?: "ali_demir_odev_belgesi.pdf",
-            attachment_file_size = fileSize ?: "2.4 MB",
-            status = "SUBMITTED",
-            grade_score = null,
-            teacher_feedback = null,
-            graded_at = null,
-            teacher_name = "Ahmet Yılmaz"
-        )
-
-        _uiState.update { current ->
-            current.copy(
-                homeworkSubmissions = listOf(newSub) + current.homeworkSubmissions,
-                toastMessage = "'$assignmentTitle' ödeviniz başarıyla yüklendi."
-            )
-        }
-
-        NotificationHelper.showPushNotification(
-            context = getApplication(),
-            title = "📝 Ödev Teslim Edildi",
-            message = "'$assignmentTitle' öğretmeninizin onayına ve notlandırmasına gönderildi.",
-            channelId = NotificationHelper.CHANNEL_MESSAGES
-        )
-    }
-
-    fun gradeHomeworkSubmission(submissionId: String, score: Int, feedback: String) {
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
-        _uiState.update { current ->
-            val updated = current.homeworkSubmissions.map { sub ->
-                if (sub.id == submissionId) {
-                    sub.copy(
-                        status = "GRADED",
-                        grade_score = score,
-                        teacher_feedback = feedback,
-                        graded_at = now
-                    )
-                } else sub
-            }
-            current.copy(
-                homeworkSubmissions = updated,
-                toastMessage = "Ödev notu ($score Puan) ve geri bildirimi kaydedildi."
-            )
-        }
-
-        val targetSub = _uiState.value.homeworkSubmissions.find { it.id == submissionId }
-        val studentName = targetSub?.student_name ?: "Öğrenci"
-        NotificationHelper.showPushNotification(
-            context = getApplication(),
-            title = "🌟 Ödev Notlandırıldı ($score/100)",
-            message = "$studentName için '${targetSub?.assignment_title ?: "Ödev"}' notlandırıldı.",
-            channelId = NotificationHelper.CHANNEL_ANNOUNCEMENT
         )
     }
 

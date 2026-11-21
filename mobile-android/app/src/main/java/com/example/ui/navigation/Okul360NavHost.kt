@@ -309,16 +309,7 @@ fun Okul360NavHost(
 
         // 17. Homework Grading & Submissions Destination
         composable(Screen.HomeworkGrading.route) {
-            HomeworkGradingScreen(
-                state = state,
-                onNavigateBack = { navController.popBackStack() },
-                onSubmitHomework = { matId, title, text, fileName, fileSize ->
-                    viewModel.submitHomework(matId, title, text, fileName, fileSize)
-                },
-                onGradeSubmission = { subId, score, feedback ->
-                    viewModel.gradeHomeworkSubmission(subId, score, feedback)
-                }
-            )
+            HomeworkGradingScreen(state) { navController.popBackStack() }
         }
 
         // 18. Library Catalog & Book Loans Destination
