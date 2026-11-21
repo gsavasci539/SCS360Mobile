@@ -182,7 +182,6 @@ object SchoolAiSystemInstructions {
         val overdueInvoices = state.invoices.filter { it.status == "OVERDUE" || (it.status == "PENDING" && it.due_date < "2026-08-25") }
         val overdueAmount = overdueInvoices.sumOf { it.amount - it.paid_amount }
         val activeStaffCount = state.users.size.coerceAtLeast(18)
-        val canteenBalance = state.canteenWallet.current_balance
 
         val queryNormalized = userQuery.lowercase(Locale("tr", "TR"))
         val dynamicContext = StringBuilder()
@@ -359,7 +358,6 @@ Türkiye'deki özel okullar, kolejler ve MEB'e bağlı eğitim kurumlarının ku
 - Aktif Şube & Derslik: $totalClasses
 - Personel / Kadro: $activeStaffCount Kişi (Öğretmen, İdare, Rehberlik, Muhasebe)
 - Canlı Mali Durum: ₺${String.format(Locale.US, "%,.0f", totalCollected)} Tahsilat (%${String.format(Locale.US, "%.1f", collectionRate)} Tahsilat Başarısı), ₺${String.format(Locale.US, "%,.0f", overdueAmount)} Vadesi Geçen Alacak
-- Kantin Cüzdan Kasası: ₺${String.format(Locale.US, "%.2f", canteenBalance)}
 - Donanım & IoT: ESP32 Turnike RFID/NFC Aktif (08:38 Yoklama Senkron), e-Okul Entegrasyonu Aktif
 - Canlı Öğrenci Örnekleri: $studentSample
 - Canlı Sınıf Örnekleri: $classSample

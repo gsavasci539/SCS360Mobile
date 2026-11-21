@@ -178,20 +178,6 @@ data class Okul360UiState(
     // 2. Transport & Bus Tracking State
     val busRoutes: List<BusRoute> = emptyList(),
 
-    // 3. Canteen & Digital Wallet State
-    val canteenWallet: CanteenWallet = CanteenWallet(
-        student_id = "",
-        student_name = "",
-        current_balance = 0.0,
-        daily_spending_limit = 0.0,
-        today_spent = 0.0,
-        is_wallet_active = false,
-        restricted_categories = emptyList(),
-        allergen_warnings = emptyList(),
-        transactions = emptyList()
-    ),
-    val canteenProducts: List<CanteenProduct> = emptyList(),
-
     // 4. Homework Submissions State
     val homeworkSubmissions: List<HomeworkSubmission> = emptyList(),
 
@@ -859,48 +845,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
                 rfidCards = updated,
                 toastMessage = "Kart durumu güncellendi."
             )
-        }
-    }
-
-    fun addCanteenProduct(product: CanteenProduct) {
-        _uiState.update { current ->
-            current.copy(
-                canteenProducts = listOf(product) + current.canteenProducts,
-                toastMessage = "${product.name} kantin menüsüne eklendi."
-            )
-        }
-    }
-
-    fun updateCanteenProduct(product: CanteenProduct) {
-        _uiState.update { current ->
-            val updated = current.canteenProducts.map {
-                if (it.id == product.id) product else it
-            }
-            current.copy(
-                canteenProducts = updated,
-                toastMessage = "${product.name} güncellendi."
-            )
-        }
-    }
-
-    fun deleteCanteenProduct(productId: String) {
-        _uiState.update { current ->
-            current.copy(
-                canteenProducts = current.canteenProducts.filterNot { it.id == productId },
-                toastMessage = "Ürün silindi."
-            )
-        }
-    }
-
-    fun updateProductStock(productId: String, delta: Int) {
-        _uiState.update { current ->
-            val updated = current.canteenProducts.map {
-                if (it.id == productId) {
-                    val newStock = (it.stock_count + delta).coerceAtLeast(0)
-                    it.copy(stock_count = newStock)
-                } else it
-            }
-            current.copy(canteenProducts = updated)
         }
     }
 
@@ -2061,92 +2005,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
             campusName = _uiState.value.currentUser.branch_name,
             gradeList = gradeList
         )
-    }
-
-    // ==========================================
-    // 3. Canteen & Digital Wallet Management
-    // ==========================================
-    fun topupCanteenWallet(amount: Double, paymentMethodName: String = "Kredi Kartı") {
-        val now = SimpleDateFormat("d MMMM HH:mm", Locale("tr")).format(Date())
-        val newTx = CanteenTransaction(
-            id = "ctx-${System.currentTimeMillis()}",
-            student_id = _uiState.value.canteenWallet.student_id,
-            amount = amount,
-            transaction_type = "TOPUP",
-            items_summary = "$paymentMethodName ile Bakiye Yükleme",
-            date_time = "Bugün ${now.substringAfter(" ")}",
-            balance_after = _uiState.value.canteenWallet.current_balance + amount
-        )
-
-        _uiState.update { current ->
-            val updatedWallet = current.canteenWallet.copy(
-                current_balance = current.canteenWallet.current_balance + amount,
-                transactions = listOf(newTx) + current.canteenWallet.transactions
-            )
-            current.copy(
-                canteenWallet = updatedWallet,
-                toastMessage = "₺${amount.toInt()} cüzdana başarıyla yüklendi."
-            )
-        }
-
-        NotificationHelper.showPushNotification(
-            context = getApplication(),
-            title = "💳 Kantin Cüzdan Yüklemesi",
-            message = "Öğrenci cüzdanına ₺${amount.toInt()} bakiye eklendi. Güncel bakiye: ₺${_uiState.value.canteenWallet.current_balance.toInt()}",
-            channelId = NotificationHelper.CHANNEL_FINANCE
-        )
-    }
-
-    fun updateCanteenRestrictions(dailyLimit: Double, restrictedCategories: List<String>, allergenWarnings: List<String>) {
-        _uiState.update { current ->
-            val updatedWallet = current.canteenWallet.copy(
-                daily_spending_limit = dailyLimit,
-                restricted_categories = restrictedCategories,
-                allergen_warnings = allergenWarnings
-            )
-            current.copy(
-                canteenWallet = updatedWallet,
-                toastMessage = "Kantin harcama ve alerjen kısıtlamaları güncellendi."
-            )
-        }
-    }
-
-    fun processCanteenPOSPurchase(product: CanteenProduct, quantity: Int = 1) {
-        val totalPrice = product.price * quantity
-        val currentWallet = _uiState.value.canteenWallet
-
-        if (currentWallet.restricted_categories.any { it.equals(product.category, ignoreCase = true) }) {
-            _uiState.update { it.copy(toastMessage = "UYARI: Bu ürün veli tarafından kısıtlanmıştır (${product.category})!") }
-            return
-        }
-
-        if (currentWallet.current_balance < totalPrice) {
-            _uiState.update { it.copy(toastMessage = "HATA: Yetersiz cüzdan bakiyesi (Mevcut: ₺${currentWallet.current_balance})!") }
-            return
-        }
-
-        val nowTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
-        val newTx = CanteenTransaction(
-            id = "ctx-${System.currentTimeMillis()}",
-            student_id = currentWallet.student_id,
-            amount = totalPrice,
-            transaction_type = "PURCHASE",
-            items_summary = "${quantity}x ${product.name}",
-            date_time = "Bugün $nowTime",
-            balance_after = currentWallet.current_balance - totalPrice
-        )
-
-        _uiState.update { current ->
-            val updatedWallet = current.canteenWallet.copy(
-                current_balance = current.canteenWallet.current_balance - totalPrice,
-                today_spent = current.canteenWallet.today_spent + totalPrice,
-                transactions = listOf(newTx) + current.canteenWallet.transactions
-            )
-            current.copy(
-                canteenWallet = updatedWallet,
-                toastMessage = "${quantity}x ${product.name} satışı yapıldı (₺$totalPrice)."
-            )
-        }
     }
 
     // ==========================================

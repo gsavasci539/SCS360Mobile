@@ -304,19 +304,7 @@ fun Okul360NavHost(
 
         // 16. Canteen & Digital Wallet Destination
         composable(Screen.CanteenWallet.route) {
-            CanteenWalletScreen(
-                state = state,
-                onNavigateBack = { navController.popBackStack() },
-                onTopup = { amount, method ->
-                    viewModel.topupCanteenWallet(amount, method)
-                },
-                onUpdateRestrictions = { limit, categories, allergens ->
-                    viewModel.updateCanteenRestrictions(limit, categories, allergens)
-                },
-                onProcessPurchase = { product, quantity ->
-                    viewModel.processCanteenPOSPurchase(product, quantity)
-                }
-            )
+            CanteenWalletScreen(state) { navController.popBackStack() }
         }
 
         // 17. Homework Grading & Submissions Destination

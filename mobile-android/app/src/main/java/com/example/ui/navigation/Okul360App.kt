@@ -348,17 +348,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             )
                         }
                         UserRole.CANTEEN -> {
-                            CanteenStaffPortalScreen(
-                                state = state,
-                                onAddProduct = { prod -> viewModel.addCanteenProduct(prod) },
-                                onUpdateProduct = { prod -> viewModel.updateCanteenProduct(prod) },
-                                onDeleteProduct = { id -> viewModel.deleteCanteenProduct(id) },
-                                onProcessPurchase = { prod, qty -> viewModel.processCanteenPOSPurchase(prod, qty) },
-                                onTopup = { amt, method -> viewModel.topupCanteenWallet(amt, method) },
-                                onRoleSelected = { role -> viewModel.switchRole(role) },
-                                onOpenChatbot = { showChatbotDialog = true },
-                                onLogout = { viewModel.logout() }
-                            )
+                            CanteenStaffPortalScreen(state, onLogout = { viewModel.logout() })
                         }
                         UserRole.OWNER -> {
                             OwnerPortalScreen(
@@ -1037,19 +1027,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             )
                             SubScreen.APPOINTMENTS -> NativeAppointmentScreen(state, onBack = { currentSubScreen = SubScreen.NONE })
                             SubScreen.TRANSPORT -> TransportScreen(state) { currentSubScreen = SubScreen.NONE }
-                            SubScreen.CANTEEN -> CanteenWalletScreen(
-                                state = state,
-                                onNavigateBack = { currentSubScreen = SubScreen.NONE },
-                                onTopup = { amount, method ->
-                                    viewModel.topupCanteenWallet(amount, method)
-                                },
-                                onUpdateRestrictions = { limit, categories, allergens ->
-                                    viewModel.updateCanteenRestrictions(limit, categories, allergens)
-                                },
-                                onProcessPurchase = { product, quantity ->
-                                    viewModel.processCanteenPOSPurchase(product, quantity)
-                                }
-                            )
+                            SubScreen.CANTEEN -> CanteenWalletScreen(state) { currentSubScreen = SubScreen.NONE }
                             SubScreen.HOMEWORK -> HomeworkGradingScreen(
                                 state = state,
                                 onNavigateBack = { currentSubScreen = SubScreen.NONE },
@@ -1195,12 +1173,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                             )
                             SubScreen.CANTEEN_PORTAL -> CanteenStaffPortalScreen(
                                 state = state,
-                                onAddProduct = { prod -> viewModel.addCanteenProduct(prod) },
-                                onUpdateProduct = { prod -> viewModel.updateCanteenProduct(prod) },
-                                onDeleteProduct = { id -> viewModel.deleteCanteenProduct(id) },
-                                onProcessPurchase = { prod, qty -> viewModel.processCanteenPOSPurchase(prod, qty) },
-                                onTopup = { amt, method -> viewModel.topupCanteenWallet(amt, method) },
-                                onLogout = { currentSubScreen = SubScreen.NONE }
+                                onBack = { currentSubScreen = SubScreen.NONE }
                             )
                             SubScreen.SETTINGS -> SettingsScreen(
                                 state = state,
