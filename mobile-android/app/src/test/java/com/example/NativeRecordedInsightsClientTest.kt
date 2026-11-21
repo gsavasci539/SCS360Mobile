@@ -32,7 +32,7 @@ class NativeRecordedInsightsClientTest {
         val oldBranch = auth.branchId
         val oldWorkspace = auth.workspaceOrganizationId
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        server.createContext("/api/ai/academic-performance") { request ->
+        server.createContext("/api/ai/ai-academic-predictions") { request ->
             count.incrementAndGet()
             val data = JSONObject().put("analysis_kind", "RECORDED_GRADES")
                 .put("prediction_available", predictions.get()).put("ai_model", JSONObject.NULL)

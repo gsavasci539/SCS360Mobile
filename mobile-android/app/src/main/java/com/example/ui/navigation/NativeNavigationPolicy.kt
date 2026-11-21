@@ -1,6 +1,21 @@
 package com.example.ui.navigation
 
 import com.example.data.model.User
+import com.example.data.remote.RecordedInsight
+
+internal fun RecordedInsight.availableTo(user: User, branch: String): Boolean {
+    if (this != RecordedInsight.FINANCE && branch.isNotBlank() && branch != "all") return false
+    fun has(vararg permissions: String) = NativeNavigationPolicy.has(user, *permissions)
+    return when (this) {
+        RecordedInsight.OVERVIEW -> has("report.read") && has("academic.read") &&
+            has("attendance.read", "teacher.view_attendance") && has("finance.read") && has("parents.read")
+        RecordedInsight.GRADES -> has("academic.read")
+        RecordedInsight.ATTENDANCE -> has("attendance.read", "teacher.view_attendance")
+        RecordedInsight.FINANCE -> has("finance.read")
+        RecordedInsight.PARENTS -> has("parents.read") && has("notification.read")
+        RecordedInsight.OPERATIONS -> has("classes.read") && has("students.read") && has("users.read")
+    }
+}
 
 /** Same canonical permission codes as web navigation. Role names grant no powers. */
 object NativeNavigationPolicy {
@@ -51,7 +66,7 @@ object NativeNavigationPolicy {
         SubScreen.SECURITY -> has(user, "security.read", "audit.read")
         SubScreen.OUTBOX -> has(user, "outbox.read", "notification.read", "communications.read")
         SubScreen.DISMISSAL -> has(user, "dismissal.read")
-        SubScreen.AI_ANALYTICS -> user.is_super_admin == true || has(user, "dashboard.read")
+        SubScreen.AI_ANALYTICS -> RecordedInsight.entries.any { it.availableTo(user, "all") }
         SubScreen.AI_CHAT_AUDIT, SubScreen.PLATFORM_SAAS -> user.is_super_admin == true
     }
 }

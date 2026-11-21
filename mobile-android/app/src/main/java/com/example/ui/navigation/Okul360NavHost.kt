@@ -302,37 +302,7 @@ fun Okul360NavHost(
 
         // 20. AI Analytics & Intelligence Hub Destination
         composable(Screen.AiAnalytics.route) {
-            AiAnalyticsHubScreen(
-                state = state,
-                onGenerateOwnerForecast = { viewModel.generateAiOwnerForecast() },
-                onGenerateBranchHealth = { viewModel.generateAiBranchHealthReport() },
-                onGenerateChurnRisk = { viewModel.generateAiStudentChurnRisk() },
-                onOpenHomeworkGenerator = {
-                    viewModel.generateAiTeacherHomework(
-                        subject = "Matematik",
-                        topic = "Birinci Dereceden Denklemler",
-                        gradeLevel = "8. Sınıf",
-                        questionCount = 3,
-                        difficulty = "Orta"
-                    )
-                },
-                onOpenNarrativeGenerator = {
-                    viewModel.generateAiTeacherDailyNarrative(
-                        studentName = "Ali Demir",
-                        meal = "Tam Bitirdi",
-                        sleep = "1.5 Saat Uyudu",
-                        mood = "Neşeli & Paylaşımcı",
-                        activities = "Robotik Kodlama ve Resim"
-                    )
-                },
-                onOpenParentDigest = {
-                    val student = state.students.firstOrNull() ?: com.example.data.model.Student(id = "std-1", first_name = "Ali", last_name = "Demir", student_number = "101", class_name = "8-A")
-                    viewModel.generateAiParentWeeklyDigest(student)
-                },
-                onSelectReport = { report ->
-                    viewModel.openAiReportDetail(report)
-                }
-            )
+            AiAnalyticsHubScreen(state) { navController.popBackStack() }
         }
 
         // 22. AI Chat Audit & LLM Training Destination

@@ -18,11 +18,12 @@ class NativeFinanceSummaryClient {
     private val branch = ApiClientProvider.interceptor.branchId
     private val client = ApiClientProvider.createOkHttpClient()
 
-    suspend fun load(branchId: String?): RecordedFinanceSummary = scope.io {
+    suspend fun load(branchId: String?, months: Int = 6): RecordedFinanceSummary = scope.io {
         val selected = branchId?.takeUnless { it == "all" || it.isBlank() }
         require(selected == branch) { "Şube seçimi değişti; yeniden yükleyin" }
         selected?.let { UUID.fromString(it) }
-        val url = base + "ai/payment-forecast?months=6" + (selected?.let { "&branch_id=$it" } ?: "")
+        require(months in 1..24)
+        val url = base + "ai/payment-forecast?months=$months" + (selected?.let { "&branch_id=$it" } ?: "")
         client.newCall(Request.Builder().url(url).tag(NativeRequestScope::class.java, scope).build()).execute().use { reply ->
             if (!reply.isSuccessful) throw FinanceSummaryHttpException(reply.code)
             val envelope = JSONObject(reply.body?.string() ?: "null")
@@ -31,6 +32,7 @@ class NativeFinanceSummaryClient {
                 envelope.getJSONObject("data")
             } else envelope
             check(data.getString("analysis_type") == "recorded_finance" && !data.getBoolean("forecast_available"))
+            check(data.optInt("months", months) == months)
             val echoed = if (data.isNull("branch_id")) null else data.getString("branch_id")
             check(data.has("branch_id") && echoed == selected) { "Finans özeti şubesi doğrulanamadı" }
             val asOf = LocalDate.parse(data.getString("as_of"))

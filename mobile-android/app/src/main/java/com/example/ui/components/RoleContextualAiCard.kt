@@ -22,7 +22,9 @@ import androidx.compose.ui.unit.dp
 import com.example.data.remote.NativeFinanceSummaryClient
 import com.example.data.remote.NativeRecordedInsightsClient
 import com.example.data.remote.RecordedInsight
+import com.example.data.model.RecordedFinanceSummary
 import com.example.ui.navigation.NativeNavigationPolicy
+import com.example.ui.navigation.availableTo
 import com.example.ui.viewmodel.Okul360UiState
 import java.math.BigDecimal
 import java.text.NumberFormat
@@ -50,16 +52,8 @@ fun RoleContextualAiCard(
         else -> return
     }
     val branch = state.selectedBranchId
-    if (insight != RecordedInsight.FINANCE && branch.isNotBlank() && branch != "all") return
     fun has(vararg permissions: String) = NativeNavigationPolicy.has(user, *permissions)
-    val allowed = when (insight) {
-        RecordedInsight.OVERVIEW -> has("report.read") && has("academic.read") &&
-            has("attendance.read", "teacher.view_attendance") && has("finance.read") && has("parents.read")
-        RecordedInsight.GRADES -> has("academic.read")
-        RecordedInsight.OPERATIONS -> has("classes.read") && has("students.read") && has("users.read")
-        RecordedInsight.FINANCE -> has("finance.read")
-    }
-    if (!allowed) return
+    if (!insight.availableTo(user, branch)) return
     if (isLoading) {
         RoleContextualAiCardSkeleton(modifier = modifier)
         return
@@ -77,14 +71,7 @@ fun RoleContextualAiCard(
                         value = null
                         value = try {
                             Result.success(if (insight == RecordedInsight.FINANCE) {
-                                val summary = NativeFinanceSummaryClient().load(branch)
-                                listOf(
-                                    summary.asOf,
-                                    "Borç kaydı ${summary.debtCount}",
-                                    "Tamamlanan tahsilat ${summary.paymentCount}",
-                                    "Açık borç ${money(summary.outstandingDebt)}",
-                                    "Tahsilat oranı ${summary.collectionRate?.let { "%$it" } ?: "—"}"
-                                )
+                                financeFigures(NativeFinanceSummaryClient().load(branch))
                             } else formatFigures(insight, NativeRecordedInsightsClient().load(insight)))
                         } catch (failure: Exception) {
                             if (failure is CancellationException) throw failure
@@ -115,6 +102,18 @@ fun RoleContextualAiCard(
 private fun money(amount: BigDecimal?): String =
     amount?.let { NumberFormat.getCurrencyInstance(Locale.forLanguageTag("tr-TR")).format(it) } ?: "—"
 
+internal fun financeFigures(summary: RecordedFinanceSummary): List<String> = buildList {
+    add(summary.asOf)
+    add("Borç kaydı ${summary.debtCount}")
+    add("Tamamlanan tahsilat ${summary.paymentCount}")
+    add("Açık borç ${money(summary.outstandingDebt)}")
+    add("Tahsilat oranı ${summary.collectionRate?.let { "%$it" } ?: "—"}")
+    if (summary.requiresReview) add("Bazı finans kayıtları incelenmeli.")
+    summary.historicalMonthly.forEach { row ->
+        add("${row.month} · ${money(row.amount)} · ${row.paymentCount} tahsilat")
+    }
+}
+
 private fun JSONObject.number(key: String, suffix: String = "", prefix: String = ""): String {
     check(has(key))
     if (isNull(key)) return "—"
@@ -122,7 +121,7 @@ private fun JSONObject.number(key: String, suffix: String = "", prefix: String =
     return prefix + value.stripTrailingZeros().toPlainString() + suffix
 }
 
-private fun formatFigures(insight: RecordedInsight, data: JSONObject): List<String> = when (insight) {
+internal fun formatFigures(insight: RecordedInsight, data: JSONObject): List<String> = when (insight) {
     RecordedInsight.OVERVIEW -> {
         val metrics = data.getJSONObject("insights")
         listOf("${data.getString("period_start")} – ${data.getString("period_end")}",
@@ -135,6 +134,19 @@ private fun formatFigures(insight: RecordedInsight, data: JSONObject): List<Stri
         "Geçerli not kaydı ${data.getInt("valid_grade_count")}",
         "Not ortalaması ${data.number("average_grade", "/100")}",
         "Notu bulunmayan öğrenci ${data.getInt("students_without_grades")}")
+    RecordedInsight.ATTENDANCE -> listOf("${data.getString("period_start")} – ${data.getString("period_end")}",
+        "Yoklama kaydı ${data.getInt("total_records")}",
+        "Devam oranı ${data.number("current_rate", prefix = "%")}",
+        "Yoklaması bulunmayan öğrenci ${data.getInt("students_without_records")}")
+    RecordedInsight.PARENTS -> {
+        val records = data.getJSONObject("registration_metrics")
+        val communication = data.getJSONObject("communication_metrics")
+        listOf("Veli kaydı ${records.getInt("total_records")}",
+            "İletişim bilgisi olan ${records.getInt("records_with_contact")}",
+            "Gönderimi kayıtlı ${communication.getInt("sent_count")}",
+            "Başarısız ${communication.getInt("failed_count")}",
+            "Bekleyen ${communication.getInt("pending_count")}")
+    }
     RecordedInsight.OPERATIONS -> {
         val counts = data.getJSONObject("counts")
         listOf("Etkin sınıf ${counts.getInt("class_count")}",

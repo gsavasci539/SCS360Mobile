@@ -1004,72 +1004,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onNavigateBack = { currentSubScreen = SubScreen.NONE }
 
                             )
-                            SubScreen.AI_ANALYTICS -> AiAnalyticsHubScreen(
-                                state = state,
-                                onGenerateOwnerForecast = { viewModel.generateAiOwnerForecast() },
-                                onGenerateBranchHealth = { viewModel.generateAiBranchHealthReport() },
-                                onGenerateChurnRisk = { viewModel.generateAiStudentChurnRisk() },
-                                onOpenHomeworkGenerator = {
-                                    viewModel.generateAiTeacherHomework(
-                                        subject = "Matematik",
-                                        topic = "Birinci Dereceden Denklemler",
-                                        gradeLevel = "8. Sınıf",
-                                        questionCount = 3,
-                                        difficulty = "Orta"
-                                    )
-                                },
-                                onOpenNarrativeGenerator = {
-                                    viewModel.generateAiTeacherDailyNarrative(
-                                        studentName = "Ali Demir",
-                                        meal = "Tam Bitirdi",
-                                        sleep = "1.5 Saat Uyudu",
-                                        mood = "Neşeli & Paylaşımcı",
-                                        activities = "Robotik Kodlama ve Resim"
-                                    )
-                                },
-                                onOpenParentDigest = {
-                                    val student = state.students.firstOrNull() ?: com.example.data.model.Student(id = "std-1", first_name = "Ali", last_name = "Demir", student_number = "101", class_name = "8-A")
-                                    viewModel.generateAiParentWeeklyDigest(student)
-                                },
-                                onSelectReport = { report ->
-                                    viewModel.openAiReportDetail(report)
-                                },
-                                onRefreshAiAnalysis = {
-                                    viewModel.generateFullInstitutionalAnalysis(isGeminiApi = true)
-                                },
-                                onFilterBranch = { branch ->
-                                    viewModel.filterAnalyticsBranch(branch)
-                                },
-                                onFilterTimeframe = { timeframe ->
-                                    viewModel.filterAnalyticsTimeframe(timeframe)
-                                },
-                                onSetAnalyticsTab = { tabIdx ->
-                                    viewModel.setAnalyticsTab(tabIdx)
-                                },
-                                onPrintPdfReport = {
-                                    viewModel.printInstitutionalPerformanceReport(context)
-                                },
-                                onSendStudentAction = { item, actionType ->
-                                    if (actionType == "PARENT_NOTE") {
-                                        viewModel.generateAiTeacherDailyNarrative(
-                                            studentName = item.student_name,
-                                            meal = "Normal",
-                                            sleep = "Düzenli",
-                                            mood = "Motivasyonu Yüksek",
-                                            activities = item.primary_strength,
-                                            customNote = "Pedagojik tavsiye: ${item.ai_pedagogical_advice}"
-                                        )
-                                    } else if (actionType == "HOMEWORK") {
-                                        viewModel.generateAiTeacherHomework(
-                                            subject = "Matematik & Problem Çözme",
-                                            topic = item.improvement_area,
-                                            gradeLevel = item.class_name,
-                                            questionCount = 4,
-                                            difficulty = "Orta"
-                                        )
-                                    }
-                                }
-                            )
+                            SubScreen.AI_ANALYTICS -> AiAnalyticsHubScreen(state) { currentSubScreen = SubScreen.NONE }
                             SubScreen.NOTIFICATIONS -> NotificationCenterScreen(
                                 state = state,
                                 onBack = { currentSubScreen = SubScreen.NONE },
