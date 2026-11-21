@@ -91,6 +91,7 @@ class NativeAppointmentContractTest {
                         .put("feedback_notes", note).put("duration_minutes", 30))
                 }
                 val bytes = JSONObject().put("success", true).put("data", data).toString().toByteArray()
+                request.responseHeaders.set("Content-Type", "application/json")
                 request.sendResponseHeaders(200, bytes.size.toLong())
                 request.responseBody.use { it.write(bytes) }
             } finally {

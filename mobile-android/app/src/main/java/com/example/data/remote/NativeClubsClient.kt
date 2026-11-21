@@ -20,7 +20,7 @@ internal data class ClubChoices(val branches: List<ClubChoice>, val students: Li
 internal class NativeClubsClient {
     private val scope = ApiClientProvider.interceptor.captureScope()
     private val base = ApiClientProvider.activeBaseUrl
-    private val http = ApiClientProvider.createOkHttpClient()
+    private val http = ApiClientProvider.createOkHttpClient(unwrapApiData = false)
     private fun id(value: String) = UUID.fromString(value).toString()
     fun ensureCurrent() = scope.ensureCurrent()
 

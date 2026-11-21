@@ -61,6 +61,7 @@ class NativeMessagingContractTest {
                     else -> error("Unexpected test route")
                 }
                 val bytes = JSONObject().put("success", true).put("data", data).toString().toByteArray()
+                call.responseHeaders.set("Content-Type", "application/json")
                 call.sendResponseHeaders(200, bytes.size.toLong())
                 call.responseBody.use { it.write(bytes) }
             } finally {

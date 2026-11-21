@@ -48,6 +48,7 @@ class NativeClubsClientTest {
                     .put("student_id", if (valid.get()) student else wrongChild))
             }
             val bytes = JSONObject().put("success", true).put("data", data).toString().toByteArray()
+            exchange.responseHeaders.set("Content-Type", "application/json")
             exchange.sendResponseHeaders(200, bytes.size.toLong())
             exchange.responseBody.use { it.write(bytes) }
         }

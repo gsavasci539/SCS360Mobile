@@ -16,7 +16,7 @@ internal data class ExamGradeDraft(val score: String, val scale: String, val not
 internal class NativeExamsClient(selectedBranch: String) {
     private val scope = ApiClientProvider.interceptor.captureScope()
     private val base = ApiClientProvider.activeBaseUrl
-    private val http = ApiClientProvider.createOkHttpClient()
+    private val http = ApiClientProvider.createOkHttpClient(unwrapApiData = false)
     private val branch = selectedBranch.takeUnless { it.isBlank() || it == "all" }?.let(::uuid)
 
     private fun uuid(value: String) = UUID.fromString(value).toString()

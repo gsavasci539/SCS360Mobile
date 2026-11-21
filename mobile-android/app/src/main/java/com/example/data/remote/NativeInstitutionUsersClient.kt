@@ -24,7 +24,7 @@ internal class NativeInstitutionUsersClient(organizationId: String, selectedBran
     private val branch = selectedBranch.takeUnless { it.isBlank() || it == "all" }?.let(::uuid)
     private val scope = ApiClientProvider.interceptor.captureScope()
     private val base = ApiClientProvider.activeBaseUrl
-    private val http = ApiClientProvider.createOkHttpClient()
+    private val http = ApiClientProvider.createOkHttpClient(unwrapApiData = false)
 
     private fun uuid(value: String) = UUID.fromString(value).toString()
     private fun JSONArray.objects() = (0 until length()).map(::getJSONObject)

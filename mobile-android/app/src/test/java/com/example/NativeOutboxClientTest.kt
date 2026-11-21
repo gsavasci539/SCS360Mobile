@@ -40,6 +40,7 @@ class NativeOutboxClientTest {
                 .put("status", status).put("channel", "EMAIL").put("retry_count", 0)
             if (post) queued.set(true)
             val bytes = JSONObject().put("success", true).put("data", record).toString().toByteArray()
+            request.responseHeaders.set("Content-Type", "application/json")
             request.sendResponseHeaders(200, bytes.size.toLong())
             request.responseBody.use { it.write(bytes) }
         }

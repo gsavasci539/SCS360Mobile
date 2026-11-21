@@ -42,6 +42,7 @@ class NativePayrollClientTest {
                 approval.put("staff_id", savedStaff.get()).put("net_salary", amount.get())
             )
             val bytes = JSONObject().put("success", true).put("data", payload).toString().toByteArray()
+            request.responseHeaders.set("Content-Type", "application/json")
             request.sendResponseHeaders(200, bytes.size.toLong())
             request.responseBody.use { it.write(bytes) }
         }

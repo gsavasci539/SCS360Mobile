@@ -30,7 +30,7 @@ internal class NativeInventoryClient(
 ) {
     private val scope = ApiClientProvider.interceptor.captureScope()
     private val base = ApiClientProvider.activeBaseUrl
-    private val http = ApiClientProvider.createOkHttpClient()
+    private val http = ApiClientProvider.createOkHttpClient(unwrapApiData = false)
     private val pending = context.getSharedPreferences("inventory_create_requests_v1", Context.MODE_PRIVATE)
     val activeBranch = selectedBranch.takeUnless { it.isBlank() || it == "all" }?.let(::uuid)
 

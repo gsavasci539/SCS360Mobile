@@ -15,7 +15,7 @@ internal data class RecordedOutboxMessage(val id: String, val job: String, val s
 internal class NativeOutboxClient(selectedBranch: String) {
     private val scope = ApiClientProvider.interceptor.captureScope()
     private val base = ApiClientProvider.activeBaseUrl
-    private val http = ApiClientProvider.createOkHttpClient()
+    private val http = ApiClientProvider.createOkHttpClient(unwrapApiData = false)
     private val branch = selectedBranch.takeUnless { it.isBlank() || it == "all" }?.let(::id)
     private fun id(value: String) = UUID.fromString(value).toString()
     private fun JSONObject.text(key: String) = if (isNull(key)) "" else getString(key)

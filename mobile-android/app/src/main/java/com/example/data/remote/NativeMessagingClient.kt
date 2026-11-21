@@ -29,7 +29,7 @@ data class DirectMessageDraft(
 class NativeMessagingClient(actorId: String, branchId: String?) {
     private val scope = NativeRequestScope.bound() ?: ApiClientProvider.interceptor.captureScope()
     private val base = ApiClientProvider.activeBaseUrl
-    private val http = ApiClientProvider.createOkHttpClient().newBuilder()
+    private val http = ApiClientProvider.createOkHttpClient(unwrapApiData = false).newBuilder()
         .retryOnConnectionFailure(false).followRedirects(false).followSslRedirects(false).build()
     private val actor = uuid(actorId)
     private val branch = branchId?.let(::uuid)

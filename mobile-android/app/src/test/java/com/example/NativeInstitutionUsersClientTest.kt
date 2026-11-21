@@ -48,6 +48,7 @@ class NativeInstitutionUsersClientTest {
                 else -> JSONArray().put(JSONObject().put("id", role))
             }
             val bytes = JSONObject().put("success", true).put("data", answer).toString().toByteArray()
+            request.responseHeaders.set("Content-Type", "application/json")
             request.sendResponseHeaders(200, bytes.size.toLong())
             request.responseBody.use { it.write(bytes) }
         }

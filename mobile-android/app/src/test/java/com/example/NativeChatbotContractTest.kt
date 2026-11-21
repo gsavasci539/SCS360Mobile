@@ -41,6 +41,7 @@ class NativeChatbotContractTest {
             try {
                 requests += call.requestURI.path to JSONObject(call.requestBody.readBytes().toString(Charsets.UTF_8))
                 val bytes = """{"success":true,"data":{"response_markdown":"Sunucudan kayıtlı yanıt","intent":"GENERAL","suggested_actions":[{"action_tag":"NAV_MESSAGING","label":"Sohbetleri aç"}]}}""".toByteArray()
+                call.responseHeaders.set("Content-Type", "application/json")
                 call.sendResponseHeaders(200, bytes.size.toLong())
                 call.responseBody.use { it.write(bytes) }
             } finally {

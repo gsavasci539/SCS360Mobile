@@ -22,7 +22,7 @@ internal data class SurveyQuestionDraft(val text: String = "", val type: String 
 internal class NativeSurveyClient(private val organization: String, student: String? = null) {
     private val scope = ApiClientProvider.interceptor.captureScope()
     private val base = ApiClientProvider.activeBaseUrl
-    private val http = ApiClientProvider.createOkHttpClient()
+    private val http = ApiClientProvider.createOkHttpClient(unwrapApiData = false)
     private val parentPath = student?.let { "parent/child/${id(it)}/surveys" }
     private fun id(value: String) = UUID.fromString(value).toString()
     private fun JSONObject.text(key: String) = if (isNull(key)) "" else getString(key)

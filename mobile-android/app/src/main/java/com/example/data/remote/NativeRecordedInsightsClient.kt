@@ -16,7 +16,7 @@ internal enum class RecordedInsight(val route: String, val kind: String, val tit
 internal class NativeRecordedInsightsClient {
     private val scope = ApiClientProvider.interceptor.captureScope()
     private val base = ApiClientProvider.activeBaseUrl
-    private val client = ApiClientProvider.createOkHttpClient()
+    private val client = ApiClientProvider.createOkHttpClient(unwrapApiData = false)
 
     suspend fun load(insight: RecordedInsight, days: Int = 30): JSONObject = scope.io {
         require(insight != RecordedInsight.FINANCE)

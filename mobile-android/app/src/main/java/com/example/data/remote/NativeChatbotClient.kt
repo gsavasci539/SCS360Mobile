@@ -14,7 +14,7 @@ data class ChatbotAnswer(val text: String, val intent: String, val actions: List
 class NativeChatbotClient {
     private val scope = NativeRequestScope.bound() ?: ApiClientProvider.interceptor.captureScope()
     private val base = ApiClientProvider.activeBaseUrl
-    private val http = ApiClientProvider.createOkHttpClient().newBuilder().retryOnConnectionFailure(false).build()
+    private val http = ApiClientProvider.createOkHttpClient(unwrapApiData = false).newBuilder().retryOnConnectionFailure(false).build()
 
     suspend fun ask(query: String, role: UserRole, studentId: String?, history: List<ChatbotTurn>): ChatbotAnswer = scope.io {
         val route = if (role == UserRole.PARENT) "parent/chatbot" else "v1/chatbot/process-query"

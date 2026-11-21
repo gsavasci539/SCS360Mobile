@@ -38,6 +38,7 @@ class NativeRecordedInsightsClientTest {
                 .put("prediction_available", predictions.get()).put("ai_model", JSONObject.NULL)
                 .put("valid_grade_count", 3)
             val bytes = JSONObject().put("success", true).put("data", data).toString().toByteArray()
+            request.responseHeaders.set("Content-Type", "application/json")
             request.sendResponseHeaders(200, bytes.size.toLong())
             request.responseBody.use { it.write(bytes) }
         }

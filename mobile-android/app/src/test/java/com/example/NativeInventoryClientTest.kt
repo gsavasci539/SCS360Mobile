@@ -45,6 +45,7 @@ class NativeInventoryClientTest {
                 .put("location_name", if (creationIds.size == 1) "Different room" else "Verified room")
             val payload = if (request.requestMethod == "POST") record else JSONArray().put(record)
             val bytes = JSONObject().put("success", true).put("data", payload).toString().toByteArray()
+            request.responseHeaders.set("Content-Type", "application/json")
             request.sendResponseHeaders(200, bytes.size.toLong())
             request.responseBody.use { it.write(bytes) }
         }
@@ -88,6 +89,7 @@ class NativeInventoryClientTest {
                 status.put("branch_id", branch).put("item_id", if (confirmed.get()) asset else UUID(72, 4).toString())
             )
             val bytes = JSONObject().put("success", true).put("data", data).toString().toByteArray()
+            request.responseHeaders.set("Content-Type", "application/json")
             request.sendResponseHeaders(200, bytes.size.toLong())
             request.responseBody.use { it.write(bytes) }
         }

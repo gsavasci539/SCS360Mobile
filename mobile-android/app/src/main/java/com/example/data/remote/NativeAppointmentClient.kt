@@ -34,7 +34,7 @@ data class AppointmentDecision(val id: String, val status: String, val note: Str
 class NativeAppointmentClient(private val branchId: String? = null) {
     private val scope = NativeRequestScope.bound() ?: ApiClientProvider.interceptor.captureScope()
     private val base = ApiClientProvider.activeBaseUrl
-    private val http = ApiClientProvider.createOkHttpClient()
+    private val http = ApiClientProvider.createOkHttpClient(unwrapApiData = false)
     fun current() = scope.current()
 
     private suspend fun exchange(path: String, method: String = "GET", body: JSONObject? = null): Any = scope.io {

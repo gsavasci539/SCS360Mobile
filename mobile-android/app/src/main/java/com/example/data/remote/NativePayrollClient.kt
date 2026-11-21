@@ -16,7 +16,7 @@ internal enum class PayrollRecords(val path: String, val label: String) {
 
 internal class NativePayrollClient(selectedBranch: String) {
     private val scope = ApiClientProvider.interceptor.captureScope()
-    private val http = ApiClientProvider.createOkHttpClient()
+    private val http = ApiClientProvider.createOkHttpClient(unwrapApiData = false)
     private val base = ApiClientProvider.activeBaseUrl
     private val branch = selectedBranch.takeUnless { it.isBlank() || it == "all" }?.let(::id)
     private fun id(value: String) = UUID.fromString(value).toString()

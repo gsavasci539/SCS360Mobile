@@ -15,7 +15,7 @@ internal enum class TutoringRecords(val path: String, val label: String) {
 internal class NativeTutoringClient(selectedBranch: String) {
     private val scope = ApiClientProvider.interceptor.captureScope()
     private val base = ApiClientProvider.activeBaseUrl
-    private val http = ApiClientProvider.createOkHttpClient()
+    private val http = ApiClientProvider.createOkHttpClient(unwrapApiData = false)
     private val branch = selectedBranch.takeUnless { it.isBlank() || it == "all" }?.let(::id)
     private fun id(value: String) = UUID.fromString(value).toString()
     private fun JSONArray.objects() = (0 until length()).map(::getJSONObject)

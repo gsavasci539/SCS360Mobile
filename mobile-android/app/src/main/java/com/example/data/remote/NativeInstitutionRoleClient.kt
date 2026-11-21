@@ -20,7 +20,7 @@ internal class NativeInstitutionRoleClient(organizationId: String) {
     private val organization = uuid(organizationId)
     private val scope = ApiClientProvider.interceptor.captureScope()
     private val base = ApiClientProvider.activeBaseUrl
-    private val http = ApiClientProvider.createOkHttpClient()
+    private val http = ApiClientProvider.createOkHttpClient(unwrapApiData = false)
 
     private fun uuid(value: String) = UUID.fromString(value).toString()
     private fun JSONArray.objects() = (0 until length()).map(::getJSONObject)

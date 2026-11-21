@@ -22,7 +22,7 @@ internal const val MATERIALS_FILE_LIMIT = 10L * 1024 * 1024
 
 internal class NativeMaterialsClient(selectedBranch: String, private val student: String? = null) {
     private val scope = ApiClientProvider.interceptor.captureScope()
-    private val http = ApiClientProvider.createOkHttpClient()
+    private val http = ApiClientProvider.createOkHttpClient(unwrapApiData = false)
     private val base = ApiClientProvider.activeBaseUrl
     private val branch = selectedBranch.takeUnless { student != null || it == "all" || it.isBlank() }?.let(::id)
     val requiresClass get() = branch != null

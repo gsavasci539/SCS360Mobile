@@ -46,6 +46,7 @@ class NativeSurveyClientTest {
                 JSONObject().put("survey_id", survey).put("submitted", confirmed.get())
             }
             val bytes = JSONObject().put("success", true).put("data", data).toString().toByteArray()
+            exchange.responseHeaders.set("Content-Type", "application/json")
             exchange.sendResponseHeaders(200, bytes.size.toLong())
             exchange.responseBody.use { it.write(bytes) }
         }

@@ -39,6 +39,7 @@ class NativeMaterialsClientTest {
                 JSONObject().put("success", true).put("data", JSONArray().put(JSONObject()
                     .put("id", material).put("title", "İzole materyal").put("type", "PDF")
                     .put("file_url", "$path/$material/download").put("file_name", "izole.pdf"))).toString().toByteArray()
+            exchange.responseHeaders.set("Content-Type", "application/json")
             exchange.sendResponseHeaders(200, bytes.size.toLong())
             exchange.responseBody.use { it.write(bytes) }
         }

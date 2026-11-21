@@ -20,9 +20,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.remote.ApiClientProvider
 import com.example.data.model.UserRole
 import com.example.ui.components.RoleContextualAiCard
 import com.example.ui.components.StatusBadge
+import com.example.ui.navigation.NativeNavigationPolicy
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.Okul360UiState
 
@@ -55,6 +57,9 @@ fun SettingsScreen(
 
     val health = state.systemHealth
     val currentUser = state.currentUser
+    val organizationId = if (currentUser.is_super_admin == true) {
+        ApiClientProvider.interceptor.workspaceOrganizationId
+    } else currentUser.organization_id
 
     if (showClearCacheConfirmDialog) {
         AlertDialog(
@@ -116,6 +121,14 @@ fun SettingsScreen(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 120.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        if (!organizationId.isNullOrBlank() && NativeNavigationPolicy.has(currentUser, "settings.read")) {
+            item {
+                OrganizationPreferencesCard(organizationId, NativeNavigationPolicy.has(currentUser, "settings.write"))
+            }
+            item {
+                OrganizationIntegrationsCard(organizationId, NativeNavigationPolicy.has(currentUser, "settings.write"))
+            }
+        }
 
         // 1. Profil Bilgileri & Oturum Yönetimi
         item {

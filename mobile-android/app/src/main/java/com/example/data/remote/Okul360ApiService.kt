@@ -1436,9 +1436,9 @@ object ApiClientProvider {
         .addLast(KotlinJsonAdapterFactory())
         .build()
 
-    fun createOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
+    fun createOkHttpClient(unwrapApiData: Boolean = true): OkHttpClient = OkHttpClient.Builder()
         .addInterceptor(interceptor)
-        .addInterceptor(UnwrapApiResponseInterceptor())
+        .apply { if (unwrapApiData) addInterceptor(UnwrapApiResponseInterceptor()) }
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)

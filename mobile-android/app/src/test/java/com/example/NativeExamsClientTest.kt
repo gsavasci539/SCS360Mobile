@@ -42,6 +42,7 @@ class NativeExamsClientTest {
                 .put("grade_scale", JSONObject.NULL).put("notes", JSONObject.NULL)
             val data = if (request.requestMethod == "POST") JSONObject().put("items", JSONArray().put(row)) else JSONArray().put(row)
             val bytes = JSONObject().put("success", true).put("data", data).toString().toByteArray()
+            request.responseHeaders.set("Content-Type", "application/json")
             request.sendResponseHeaders(200, bytes.size.toLong())
             request.responseBody.use { it.write(bytes) }
         }

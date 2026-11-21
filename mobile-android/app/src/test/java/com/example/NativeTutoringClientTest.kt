@@ -40,6 +40,7 @@ class NativeTutoringClientTest {
                 .put("attendance_status", "PRESENT").put("progress_score", if (confirmed.get()) 87 else 80)
             val payload = if (request.requestMethod == "POST") record else JSONArray().put(record)
             val bytes = JSONObject().put("success", true).put("data", payload).toString().toByteArray()
+            request.responseHeaders.set("Content-Type", "application/json")
             request.sendResponseHeaders(200, bytes.size.toLong())
             request.responseBody.use { it.write(bytes) }
         }
