@@ -9,11 +9,15 @@ import org.json.JSONObject
 import org.json.JSONTokener
 import java.io.IOException
 import java.time.LocalDate
+import java.time.YearMonth
 import java.util.UUID
 
 data class RegistryChoice(val id: String, val name: String)
 class RegistryHttpException(val code: Int) : IOException("İstek reddedildi (HTTP $code)")
 class RegistryRecordChangedException : IllegalStateException("Kayıt değişmiş. Güncel listeyi inceleyip formu yeniden açın; taslağınız otomatik uygulanmadı.")
+data class AttendanceMonthDay(val day: LocalDate, val statusCounts: Map<AttendanceStatus, Int>) {
+    val total: Int get() = statusCounts.values.sum()
+}
 
 /** Canonical wire contracts; display models are never serialized as mutations. */
 class NativeRegistryClient {
@@ -56,6 +60,25 @@ class NativeRegistryClient {
     }
     suspend fun branches() = pages("branches").map(::branch)
     suspend fun organizations() = pages("organizations").map(::organization)
+
+    suspend fun attendanceMonth(classId: String, month: YearMonth): List<AttendanceMonthDay> {
+        val selected = uuid(classId)
+        val payload = request("attendance/reports/monthly?year=${month.year}&month=${month.monthValue}&class_id=$selected") as JSONObject
+        check(payload.getInt("year") == month.year && payload.getInt("month") == month.monthValue &&
+            payload.getString("class_id") == selected) { "Aylık yoklama kapsamı doğrulanamadı." }
+        val rows = payload.getJSONArray("rows")
+        val days = (0 until rows.length()).map { index ->
+            val row = rows.getJSONObject(index)
+            val day = LocalDate.parse(row.getString("date"))
+            check(YearMonth.from(day) == month && row.getString("class_id") == selected)
+            val counts = AttendanceStatus.entries.associateWith { row.getInt(it.name.lowercase(java.util.Locale.ROOT)) }
+            AttendanceMonthDay(day, counts).also {
+                check(counts.values.all { count -> count >= 0 } && it.total > 0 && row.getInt("total_students") == it.total)
+            }
+        }.sortedBy(AttendanceMonthDay::day)
+        check(days.distinctBy(AttendanceMonthDay::day).size == days.size && days.sumOf(AttendanceMonthDay::total) == payload.getInt("total"))
+        return days
+    }
 
     suspend fun saveOrganization(original: Organization, draft: Organization): Organization {
         val id = uuid(original.id)

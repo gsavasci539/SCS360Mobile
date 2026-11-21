@@ -2,6 +2,7 @@ package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.example.data.model.AttendanceStatus
 import com.example.data.remote.*
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
@@ -15,6 +16,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.net.InetSocketAddress
+import java.time.YearMonth
 import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
@@ -45,6 +47,27 @@ class NativeAttendanceApiTest {
         try { work() } finally { server.stop(0); ApiClientProvider.createService(base); ApiClientProvider.interceptor.setSession(token, workspace = workspace) }
     }
     @Before fun clearNonces() { context.getSharedPreferences("attendance_requests_v1", Context.MODE_PRIVATE).edit().clear().commit() }
+
+    @Test fun monthlyAttendanceReadsExactClassMonthAndPersistedCounts() = runBlocking {
+        var wrongClass = true
+        server({ exchange ->
+            assertEquals("/api/attendance/reports/monthly", exchange.requestURI.path)
+            assertEquals("year=2026&month=11&class_id=$classroom", exchange.requestURI.rawQuery)
+            val row = JSONObject().put("date", day).put("class_id", if (wrongClass) actor else classroom)
+                .put("present", 2).put("absent", 1).put("late", 0).put("excused", 0).put("half_day", 1).put("total_students", 4)
+            reply(exchange, JSONObject().put("year", 2026).put("month", 11).put("class_id", classroom).put("total", 4)
+                .put("rows", JSONArray().put(row)))
+        }) {
+            val client = NativeRegistryClient()
+            val month = YearMonth.of(2026, 11)
+            assertTrue(runCatching { client.attendanceMonth(classroom, month) }.isFailure)
+            wrongClass = false
+            val saved = client.attendanceMonth(classroom, month).single()
+            assertEquals(day, saved.day.toString())
+            assertEquals(4, saved.total)
+            assertEquals(1, saved.statusCounts[AttendanceStatus.HALF_DAY])
+        }
+    }
 
     @Test fun loadsEveryPageAndLeavesMissingRecordsUnmarkedWithoutInventedMeasurements() = runBlocking {
         val queries = mutableListOf<String>()

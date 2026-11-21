@@ -19,11 +19,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.model.AttendanceRecord
 import com.example.data.model.AttendanceStatus
+import com.example.data.remote.AttendanceMonthDay
+import com.example.data.remote.NativeRegistryClient
 import com.example.ui.components.*
 import com.example.ui.theme.PrimaryBlue
 import com.example.ui.theme.SecondaryEmerald
 import com.example.ui.viewmodel.Okul360UiState
 import java.time.LocalDate
+import java.time.YearMonth
+import kotlinx.coroutines.CancellationException
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -47,6 +51,29 @@ fun AttendanceScreen(
     val editable = state.attendanceCanWrite && state.attendanceReady && !locked
     val canSave = state.attendanceCanWrite && state.attendanceReady && !state.isAttendanceSaving && state.attendanceRecords.any { it.status != "UNRECORDED" }
     val currentClass = state.classes.find { it.id == state.attendanceClassId }
+    val reportMonth = runCatching { YearMonth.from(LocalDate.parse(state.attendanceDate)) }.getOrNull()
+    val reportClass = currentClass?.id
+    val monthlyView = viewMode != 0
+    val reportScope = listOf(state.currentUser.id, state.workspaceOrganizationId, state.selectedBranchId, reportClass, reportMonth)
+    var reportRows by remember(reportScope) { mutableStateOf<List<AttendanceMonthDay>?>(null) }
+    var reportLoading by remember(reportScope) { mutableStateOf(false) }
+    var reportError by remember(reportScope) { mutableStateOf<String?>(null) }
+    var reportRevision by remember(reportScope) { mutableIntStateOf(0) }
+    LaunchedEffect(monthlyView, reportScope, reportRevision) {
+        if (!monthlyView || reportClass == null || reportMonth == null) return@LaunchedEffect
+        reportLoading = true
+        reportError = null
+        reportRows = null
+        try {
+            reportRows = NativeRegistryClient().attendanceMonth(reportClass, reportMonth)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            reportError = "Aylık yoklama alınamadı."
+        } finally {
+            reportLoading = false
+        }
+    }
     val mode = rememberResolvedTableMode()
     val cards = isCompactCardMode(mode.value)
     val columns = remember { listOf(TableColumnSpec("Öğrenci / Not", 1.4f, minWidth = 160.dp),
@@ -60,7 +87,7 @@ fun AttendanceScreen(
             onClick = { expanded = false; onMarkAllPresent() }))
     }
     Scaffold(modifier = modifier.fillMaxSize(), floatingActionButton = {
-        if (actions.isNotEmpty()) RoleSpeedDialFab(actions = actions, expanded = expanded,
+        if (!monthlyView && actions.isNotEmpty()) RoleSpeedDialFab(actions = actions, expanded = expanded,
             onExpandedChange = { expanded = it }, fabColor = SecondaryEmerald, fabLabel = "Yoklama",
             testTag = "attendance_speed_dial_fab")
     }) { padding ->
@@ -91,15 +118,50 @@ fun AttendanceScreen(
                         }
                     }
                 }
-                if (state.attendanceError != null) item {
+                if (!monthlyView && state.attendanceError != null) item {
                     Text(state.attendanceError, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("attendance_error"))
                     TextButton(onClick = onRetry, enabled = !state.isAttendanceSaving, modifier = Modifier.testTag("attendance_retry")) {
                         Text(if (state.attendanceSavePending) "Aynı isteği yeniden dene" else "Yeniden yükle")
                     }
                 }
-                if (viewMode != 0) item {
-                    Text(if (viewMode == 1) "Aylık kayıtlar bu ekranda henüz sunucudan yüklenmiyor. Gün seçerek mevcut yoklamayı düzenleyin."
-                        else "Yüklenen kayıtlar ders bilgisi taşımıyor. Ders bazlı istatistik henüz doğrulanmadı.")
+                if (monthlyView) {
+                    val rows = reportRows
+                    val failure = reportError
+                    item {
+                        Text(reportMonth?.toString().orEmpty(), style = MaterialTheme.typography.titleMedium)
+                        when {
+                            reportClass == null -> Text("Aylık yoklama için sınıf seçin.")
+                            reportLoading -> LinearProgressIndicator(Modifier.fillMaxWidth())
+                            failure != null -> {
+                                Text(failure, color = MaterialTheme.colorScheme.error)
+                                OutlinedButton(onClick = { reportRevision++ }) { Text("Yeniden dene") }
+                            }
+                            rows?.isEmpty() == true -> Text("Bu sınıf ve ayda yoklama kaydı yok.")
+                            rows != null && viewMode == 2 -> {
+                                Text("${rows.size} gün · ${rows.sumOf(AttendanceMonthDay::total)} kayıt")
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    AttendanceStatus.entries.forEach { status ->
+                                        Text("${status.label}: ${rows.sumOf { it.statusCounts.getValue(status) }}")
+                                    }
+                                }
+                            }
+                            else -> Unit
+                        }
+                    }
+                    if (viewMode == 1 && rows != null) items(rows, key = { it.day }) { day ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(day.day.toString(), fontWeight = FontWeight.Bold)
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    AttendanceStatus.entries.forEach { status -> Text("${status.label}: ${day.statusCounts.getValue(status)}") }
+                                }
+                                OutlinedButton(enabled = !locked, onClick = {
+                                    onDateSelected(day.day.toString())
+                                    viewMode = 0
+                                }) { Text("Günü aç") }
+                            }
+                        }
+                    }
                 } else {
                     item {
                         Text(currentClass?.name ?: "Yoklama için sınıf seçin", fontWeight = FontWeight.Bold)
