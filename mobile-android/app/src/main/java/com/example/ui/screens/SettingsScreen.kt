@@ -128,6 +128,9 @@ fun SettingsScreen(
             item {
                 OrganizationIntegrationsCard(organizationId, NativeNavigationPolicy.has(currentUser, "settings.write"))
             }
+            if (currentUser.is_super_admin == true || currentUser.roles.any { it.is_active && it.slug == "owner" }) {
+                item { SchoolMerchantCard(organizationId) }
+            }
         }
 
         // 1. Profil Bilgileri & Oturum Yönetimi
