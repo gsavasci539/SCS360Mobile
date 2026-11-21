@@ -102,7 +102,7 @@ fun MenuScreen(
             MenuItemData("Sınavlar & Takvim", "${state.exams.size} Sınav", Icons.Default.Assessment, Color(0xFFFEE2E2), Color(0xFFDC2626), "${state.exams.size}", onNavigateToExams),
             MenuItemData("Ders Programı", "Haftalık Derslik & Saat", Icons.Default.CalendarMonth, Color(0xFFE0F2FE), Color(0xFF0284C7), null, onNavigateToSchedule),
             MenuItemData("Dijital Karne", "Notlar ve PDF Çıktı", Icons.Default.WorkspacePremium, Color(0xFFF3E8FF), Color(0xFF7C3AED), "MEB", onNavigateToReportCard),
-            MenuItemData("Ders Materyalleri", "${state.courseMaterials.size} Föy & Doküman", Icons.Default.MenuBook, Color(0xFFE0E7FF), Color(0xFF4338CA), "${state.courseMaterials.size}", onNavigateToCourseMaterials),
+            MenuItemData("Ders Materyalleri", "Ders notları ve dosyalar", Icons.Default.MenuBook, Color(0xFFE0E7FF), Color(0xFF4338CA), null, onNavigateToCourseMaterials),
             MenuItemData("Ödev Takibi", "Teslim ve Puanlama", Icons.Default.Assignment, Color(0xFFFCE7F3), Color(0xFFBE185D), null, onNavigateToHomework),
             MenuItemData("Kütüphane", "Kitap Zimmet & İade", Icons.Default.CollectionsBookmark, Color(0xFFFFEDD5), Color(0xFFC2410C), "${state.libraryBooks.size}", onNavigateToLibrary),
             MenuItemData("Günlük Karne", "Beslenme, Uyku, Gelişim", Icons.Default.AutoStories, Color(0xFFDCFCE7), Color(0xFF15803D), null, onNavigateToDailyReports),

@@ -275,12 +275,6 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onSubmitMedicine = { stdId, med, dose, time, note -> viewModel.submitMedicineNotice(stdId, med, dose, time, note) },
                                 onSubmitLeave = { stdId, start, end, reason, note -> viewModel.submitLeaveNotice(stdId, start, end, reason, note) },
                                 onSubmitPickup = { stdId, person, rel, phone -> viewModel.submitPickupNotice(stdId, person, rel, phone) },
-                                onUploadMaterial = { title, desc, subj, cls, type, ext, size, due, req, sum ->
-                                    viewModel.createCourseMaterial(title, desc, subj, cls, type, ext, size, due, req, sum)
-                                },
-                                onDownloadMaterial = { mat -> viewModel.downloadCourseMaterial(mat) },
-                                onDeleteMaterial = { id -> viewModel.deleteCourseMaterial(id) },
-                                onAcknowledgeMaterial = { matId -> viewModel.acknowledgeCourseMaterial(matId) },
                                 onOpenThemeConfig = { viewModel.openThemeConfig(true) },
                                 onOpenAiWeeklyDigest = { std -> viewModel.generateAiParentWeeklyDigest(std) },
                                 onOpenChatbot = { showChatbotDialog = true },
@@ -305,12 +299,6 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onSaveDailyReport = { report -> viewModel.saveStudentDailyReport(report) },
                                 onMarkMedicineGiven = { noticeId -> viewModel.markMedicineGiven(noticeId) },
                                 onApproveLeave = { noticeId -> viewModel.approveLeaveNotice(noticeId) },
-                                onUploadMaterial = { title, desc, subj, cls, type, ext, size, due, req, sum ->
-                                    viewModel.createCourseMaterial(title, desc, subj, cls, type, ext, size, due, req, sum)
-                                },
-                                onDownloadMaterial = { mat -> viewModel.downloadCourseMaterial(mat) },
-                                onDeleteMaterial = { id -> viewModel.deleteCourseMaterial(id) },
-                                onSendParentReminder = { matId, title -> viewModel.sendCourseMaterialParentReminder(matId, title) },
                                 onSelectConversation = { id -> viewModel.selectConversation(id) },
                                 onOpenThemeConfig = { viewModel.openThemeConfig(true) },
                                 onRoleSelected = { role -> viewModel.switchRole(role) },
@@ -1130,16 +1118,7 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                     )
                                 }
                             }
-                            SubScreen.COURSE_MATERIALS -> CourseMaterialsScreen(
-                                state = state,
-                                onUploadMaterial = { title, desc, subj, cls, type, ext, size, due, req, sum ->
-                                    viewModel.createCourseMaterial(title, desc, subj, cls, type, ext, size, due, req, sum)
-                                },
-                                onDownloadMaterial = { mat -> viewModel.downloadCourseMaterial(mat) },
-                                onDeleteMaterial = { id -> viewModel.deleteCourseMaterial(id) },
-                                onAcknowledgeMaterial = { matId -> viewModel.acknowledgeCourseMaterial(matId) },
-                                onSendParentReminder = { matId, title -> viewModel.sendCourseMaterialParentReminder(matId, title) }
-                            )
+                            SubScreen.COURSE_MATERIALS -> CourseMaterialsScreen(state, onBack = { currentSubScreen = SubScreen.NONE })
                             SubScreen.DIRECT_MESSAGING -> DirectMessagingScreen(
                                 state = state,
                                 onSelectConversation = { id -> viewModel.selectConversation(id) }

@@ -66,10 +66,6 @@ fun TeacherPortalScreen(
     onSaveDailyReport: (DailyReportDraft) -> Unit,
     onMarkMedicineGiven: (String) -> Unit,
     onApproveLeave: (String) -> Unit,
-    onUploadMaterial: (title: String, desc: String, subject: String, className: String, type: String, ext: String, size: String, dueDate: String?, isRequired: Boolean, summary: String) -> Unit = { _, _, _, _, _, _, _, _, _, _ -> },
-    onDownloadMaterial: (CourseMaterial) -> Unit = {},
-    onDeleteMaterial: (String) -> Unit = {},
-    onSendParentReminder: ((String, String) -> Unit)? = null,
     onSelectConversation: (String?) -> Unit = {},
     onOpenThemeConfig: () -> Unit = {},
     onRoleSelected: (UserRole) -> Unit = {},
@@ -331,13 +327,7 @@ fun TeacherPortalScreen(
                     onSaveAttendance = onSaveAttendance, onDateSelected = onAttendanceDateSelected,
                     onRetry = onAttendanceRetry, onNoteChanged = onAttendanceNoteChanged
                 )
-                TeacherNavTab.MATERIALS -> CourseMaterialsScreen(
-                    state = state,
-                    onUploadMaterial = onUploadMaterial,
-                    onDownloadMaterial = onDownloadMaterial,
-                    onDeleteMaterial = onDeleteMaterial,
-                    onSendParentReminder = onSendParentReminder
-                )
+                TeacherNavTab.MATERIALS -> CourseMaterialsScreen(state)
                 TeacherNavTab.MESSAGING -> DirectMessagingScreen(
                     state = state,
                     onSelectConversation = onSelectConversation

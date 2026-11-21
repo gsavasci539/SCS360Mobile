@@ -165,9 +165,6 @@ data class Okul360UiState(
     val exams: List<ExamItem> = emptyList(),
     val timetableSlots: List<TimetableSlot> = emptyList(),
 
-    // Course Materials & Digital Documents State
-    val courseMaterials: List<CourseMaterial> = emptyList(),
-
     // Direct Messaging & Parent-Teacher Chat State
     val selectedConversationId: String? = null,
     val showThemeConfigDialog: Boolean = false,
@@ -1832,150 +1829,6 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // ==========================================
-    // Course Materials & Digital Documents
-    // ==========================================
-    fun createCourseMaterial(
-        title: String,
-        description: String,
-        subject: String,
-        className: String,
-        type: String,
-        fileExtension: String,
-        fileSizeDisplay: String,
-        dueDate: String?,
-        isRequired: Boolean,
-        topicSummary: String
-    ) {
-        val newMat = CourseMaterial(
-            id = "mat-${System.currentTimeMillis()}",
-            title = title,
-            description = description,
-            subject_name = subject,
-            class_name = className,
-            material_type = type,
-            file_name = "${title.lowercase().replace(" ", "_").take(24)}.${fileExtension.lowercase()}",
-            file_extension = fileExtension.uppercase(),
-            file_size_display = fileSizeDisplay,
-            teacher_id = _uiState.value.currentUser.id,
-            teacher_name = _uiState.value.currentUser.full_name,
-            created_at = "Bugün",
-            due_date = dueDate,
-            download_count = 0,
-            is_required = isRequired,
-            preview_pages_count = (4..16).random(),
-            topic_summary = topicSummary
-        )
-
-        _uiState.update {
-            it.copy(
-                courseMaterials = listOf(newMat) + it.courseMaterials,
-                toastMessage = "'$title' başarıyla paylaşıldı."
-            )
-        }
-
-        // Notify parents/students about new document
-        NotificationHelper.showPushNotification(
-            context = getApplication(),
-            title = "📚 Yeni Ders Materyali: $title",
-            message = "$subject dersi için yeni bir ${newMat.typeDisplayName} paylaşıldı.",
-            channelId = NotificationHelper.CHANNEL_ANNOUNCEMENT
-        )
-    }
-
-    fun deleteCourseMaterial(materialId: String) {
-        _uiState.update {
-            it.copy(
-                courseMaterials = it.courseMaterials.filter { m -> m.id != materialId },
-                toastMessage = "Ders materyali silindi."
-            )
-        }
-    }
-
-    fun downloadCourseMaterial(material: CourseMaterial) {
-        _uiState.update { current ->
-            val updatedList = current.courseMaterials.map {
-                if (it.id == material.id) it.copy(download_count = it.download_count + 1) else it
-            }
-            current.copy(
-                courseMaterials = updatedList,
-                toastMessage = "Dosya indirildi: ${material.file_name}"
-            )
-        }
-
-        NotificationHelper.showPushNotification(
-            context = getApplication(),
-            title = "📥 Dosya İndirildi",
-            message = "${material.file_name} (${material.file_size_display}) cihaz hafızasına kaydedildi.",
-            channelId = NotificationHelper.CHANNEL_ANNOUNCEMENT
-        )
-    }
-
-    fun acknowledgeCourseMaterial(materialId: String) {
-        val now = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
-        val currentParentName = _uiState.value.currentUser.full_name
-        val currentParentPhone = _uiState.value.currentUser.phone
-        val currentStudent = _uiState.value.students.find {
-            it.parent_name.contains("Zeynep", ignoreCase = true) ||
-            it.parent_name.contains("Demir", ignoreCase = true) ||
-            it.parent_phone == currentParentPhone
-        } ?: _uiState.value.students.firstOrNull()
-
-        val studentId = currentStudent?.id ?: "std-1"
-        val studentName = currentStudent?.full_name ?: "Ali Demir"
-
-        val ack = MaterialAcknowledgment(
-            student_id = studentId,
-            student_name = studentName,
-            parent_name = currentParentName,
-            parent_phone = currentParentPhone ?: "0532 555 1234",
-            acknowledged_at = now
-        )
-
-        _uiState.update { current ->
-            val updatedList = current.courseMaterials.map { mat ->
-                if (mat.id == materialId) {
-                    val alreadyAcked = mat.parent_acknowledged_student_ids.contains(studentId)
-                    val newIds = if (alreadyAcked) mat.parent_acknowledged_student_ids else mat.parent_acknowledged_student_ids + studentId
-                    val newHistory = if (alreadyAcked) mat.acknowledgment_history else mat.acknowledgment_history + ack
-                    mat.copy(
-                        parent_acknowledged_student_ids = newIds,
-                        acknowledgment_history = newHistory,
-                        is_acknowledged_by_current_parent = true,
-                        acknowledged_at_display = "Bugün ${now.substringAfter(" ")}"
-                    )
-                } else mat
-            }
-            current.copy(
-                courseMaterials = updatedList,
-                toastMessage = "Ödev & ders materyali için 'Görüldü / Onaylandı' bilgisi iletildi."
-            )
-        }
-
-        NotificationHelper.showPushNotification(
-            context = getApplication(),
-            title = "✅ Veli Onayı Kaydedildi",
-            message = "$studentName için ödev dökümanı görüldü onayı öğretmene iletildi.",
-            channelId = NotificationHelper.CHANNEL_ANNOUNCEMENT
-        )
-    }
-
-    fun sendCourseMaterialParentReminder(materialId: String, materialTitle: String) {
-        val mat = _uiState.value.courseMaterials.find { it.id == materialId }
-        val pendingCount = if (mat != null) (mat.target_students_count - mat.acknowledgedCount).coerceAtLeast(0) else 0
-
-        NotificationHelper.showPushNotification(
-            context = getApplication(),
-            title = "🔔 Ödev Hatırlatması Gönderildi",
-            message = "'$materialTitle' için onay vermeyen $pendingCount veliye anlık push bildirimi iletildi.",
-            channelId = NotificationHelper.CHANNEL_ANNOUNCEMENT
-        )
-
-        _uiState.update {
-            it.copy(toastMessage = "'$materialTitle' için velilere hatırlatma bildirimi gönderildi.")
-        }
-    }
-
-    // ==========================================
     // Direct Parent-Teacher Messaging
     // ==========================================
     fun selectConversation(conversationId: String?) {
@@ -2142,8 +1995,7 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         topic: String,
         gradeLevel: String,
         questionCount: Int = 3,
-        difficulty: String = "Orta",
-        addToMaterials: Boolean = true
+        difficulty: String = "Orta"
     ) {
         viewModelScope.launch(requestFailures) {
             _uiState.update { it.copy(isAiLoading = true, aiLoadingMessage = "Gemini 3.5 Flash: $subject '$topic' için akıllı sorular ve föy hazırlanıyor...") }
@@ -2156,27 +2008,12 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
                 difficulty = difficulty
             )
 
-            if (addToMaterials) {
-                createCourseMaterial(
-                    title = hw.title,
-                    description = "${hw.grade_level} $subject müfredatına uygun yapay zeka ile üretilmiş ${hw.questions.size} soruluk çalışma föyü.",
-                    subject = subject,
-                    className = "8-A",
-                    type = "WORKSHEET",
-                    fileExtension = "PDF",
-                    fileSizeDisplay = "1.9 MB",
-                    dueDate = "2026-09-05",
-                    isRequired = true,
-                    topicSummary = hw.instructions_for_student
-                )
-            }
-
             _uiState.update {
                 it.copy(
                     isAiLoading = false,
                     activeAiHomework = hw,
                     showAiHomeworkModal = true,
-                    toastMessage = "💡 AI Ödev Föyü oluşturuldu ve materyallere eklendi."
+                    toastMessage = "Ödev föyü taslağı hazır."
                 )
             }
         }

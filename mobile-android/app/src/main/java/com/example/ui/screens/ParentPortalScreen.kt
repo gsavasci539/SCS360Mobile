@@ -87,10 +87,6 @@ fun ParentPortalScreen(
     onSubmitMedicine: (String, String, String, String, String) -> Unit,
     onSubmitLeave: (String, String, String, String, String) -> Unit,
     onSubmitPickup: (String, String, String, String) -> Unit,
-    onUploadMaterial: (title: String, desc: String, subject: String, className: String, type: String, ext: String, size: String, dueDate: String?, isRequired: Boolean, summary: String) -> Unit = { _, _, _, _, _, _, _, _, _, _ -> },
-    onDownloadMaterial: (CourseMaterial) -> Unit = {},
-    onDeleteMaterial: (String) -> Unit = {},
-    onAcknowledgeMaterial: (String) -> Unit = {},
     onOpenThemeConfig: () -> Unit = {},
     onOpenAiWeeklyDigest: ((Student) -> Unit)? = null,
     onOpenChatbot: (() -> Unit)? = null,
@@ -485,13 +481,7 @@ fun ParentPortalScreen(
                         onOpenTransport = onOpenTransport,
                         onOpenDismissal = onOpenDismissal
                     )
-                    ParentNavTab.MATERIALS -> CourseMaterialsScreen(
-                        state = state,
-                        onUploadMaterial = onUploadMaterial,
-                        onDownloadMaterial = onDownloadMaterial,
-                        onDeleteMaterial = onDeleteMaterial,
-                        onAcknowledgeMaterial = onAcknowledgeMaterial
-                    )
+                    ParentNavTab.MATERIALS -> CourseMaterialsScreen(state, child = currentChild.id)
                     ParentNavTab.MESSAGING -> key(presentationScope, currentChild.id) { ParentVerifiedMessagingPane(currentChild.id, state.currentUser) }
                     ParentNavTab.PAYMENTS -> ParentPaymentsTab(
                         student = currentChild,
