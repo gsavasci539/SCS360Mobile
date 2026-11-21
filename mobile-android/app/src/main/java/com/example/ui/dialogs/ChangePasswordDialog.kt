@@ -20,11 +20,13 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.PrimaryBlue
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 @Composable
 fun ChangePasswordDialog(
     onDismiss: () -> Unit,
-    onConfirm: (currentPass: String, newPass: String) -> Unit
+    onConfirm: suspend (currentPass: String, newPass: String) -> Unit
 ) {
     var currentPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
@@ -35,9 +37,11 @@ fun ChangePasswordDialog(
     var showConfirmPassword by remember { mutableStateOf(false) }
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!busy) onDismiss() },
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -63,13 +67,14 @@ fun ChangePasswordDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Hesap güvenliğiniz için mevcut şifrenizi doğrulayarak en az 6 karakterden oluşan yeni bir şifre belirleyiniz.",
+                    text = "En az 8 karakter kullanın. Şifre değiştikten sonra yeniden giriş yapmanız gerekir.",
                     style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF64748B))
                 )
 
                 // Current Password
                 OutlinedTextField(
                     value = currentPassword,
+                    enabled = !busy,
                     onValueChange = {
                         currentPassword = it
                         errorMessage = null
@@ -95,6 +100,7 @@ fun ChangePasswordDialog(
                 // New Password
                 OutlinedTextField(
                     value = newPassword,
+                    enabled = !busy,
                     onValueChange = {
                         newPassword = it
                         errorMessage = null
@@ -120,6 +126,7 @@ fun ChangePasswordDialog(
                 // Confirm New Password
                 OutlinedTextField(
                     value = confirmPassword,
+                    enabled = !busy,
                     onValueChange = {
                         confirmPassword = it
                         errorMessage = null
@@ -154,25 +161,43 @@ fun ChangePasswordDialog(
         },
         confirmButton = {
             Button(
+                enabled = !busy,
                 onClick = {
                     when {
-                        currentPassword.isBlank() -> errorMessage = "Lütfen mevcut şifrenizi giriniz."
-                        newPassword.length < 6 -> errorMessage = "Yeni şifre en az 6 karakter olmalıdır."
+                        busy -> Unit
+                        currentPassword.isEmpty() -> errorMessage = "Lütfen mevcut şifrenizi giriniz."
+                        newPassword.codePointCount(0, newPassword.length) !in 8..4096 -> errorMessage = "Yeni şifre 8 ile 4096 karakter arasında olmalıdır."
                         newPassword != confirmPassword -> errorMessage = "Yeni şifreler birbiriyle uyuşmuyor."
                         newPassword == currentPassword -> errorMessage = "Yeni şifreniz mevcut şifrenizle aynı olamaz."
-                        else -> onConfirm(currentPassword, newPassword)
+                        else -> {
+                            busy = true
+                            errorMessage = null
+                            scope.launch {
+                                try {
+                                    onConfirm(currentPassword, newPassword)
+                                    onDismiss()
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (failure: Exception) {
+                                    errorMessage = accountError(failure, "Şifre değişikliği doğrulanamadı.")
+                                } finally {
+                                    busy = false
+                                }
+                            }
+                        }
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.testTag("confirm_change_password_button")
             ) {
-                Text("Şifreyi Güncelle", fontWeight = FontWeight.Bold)
+                Text(if (busy) "Kaydediliyor…" else "Şifreyi güncelle", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             TextButton(
                 onClick = onDismiss,
+                enabled = !busy,
                 shape = RoundedCornerShape(10.dp)
             ) {
                 Text("Vazgeç")

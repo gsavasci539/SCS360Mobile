@@ -672,11 +672,13 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun logout() {
+    fun logout() = clearCurrentSession("Oturum kapatıldı.")
+
+    private fun clearCurrentSession(message: String) {
         com.example.data.remote.ApiClientProvider.interceptor.setSession(null)
         cancelParentPortalRequests()
         sessionManager.clearSession()
-        _uiState.update { Okul360UiState(selectedThemeName = it.selectedThemeName, toastMessage = "Oturum kapatıldı.") }
+        _uiState.update { Okul360UiState(selectedThemeName = it.selectedThemeName, toastMessage = message) }
     }
 
     fun switchRole(role: UserRole) {
@@ -1088,11 +1090,11 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun changePassword(currentPass: String, newPass: String) {
-        viewModelScope.launch(requestFailures) {
-            repository.changePassword(currentPass, newPass)
-            _uiState.update { it.copy(toastMessage = "Hesap şifreniz başarıyla güncellendi.") }
-        }
+    suspend fun changePassword(currentPass: String, newPass: String) {
+        val accountId = _uiState.value.currentUser.id
+        check(accountId.isNotBlank())
+        repository.changePassword(accountId, currentPass, newPass)
+        clearCurrentSession("Şifre güncellendi. Yeni şifrenizle giriş yapın.")
     }
 
     fun updateInvoice(invoice: Invoice) {
@@ -1311,19 +1313,16 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun updateProfile(fullName: String, email: String, phone: String, institutionName: String = "", branchName: String = "") {
-        _uiState.update {
-            it.copy(
-                currentUser = it.currentUser.copy(
-                    full_name = fullName,
-                    email = email,
-                    phone = phone,
-                    institution_name = if (institutionName.isNotBlank()) institutionName else it.currentUser.institution_name,
-                    branch_name = if (branchName.isNotBlank()) branchName else it.currentUser.branch_name
-                ),
-                toastMessage = "Profil ve kurum bilgileri güncellendi."
-            )
-        }
+    suspend fun updateProfile(firstName: String, lastName: String, email: String, phone: String, currentPassword: String?) {
+        val accountId = _uiState.value.currentUser.id
+        check(accountId.isNotBlank())
+        val saved = repository.updateOwnProfile(accountId, firstName, lastName, email, phone, currentPassword)
+        val current = _uiState.value.currentUser
+        check(current.id == saved.id) { "Oturum değişti." }
+        val verified = current.copy(first_name = saved.first_name, last_name = saved.last_name,
+            full_name = saved.resolvedName, email = saved.email, phone = saved.phone)
+        sessionManager.saveSession(verified)
+        _uiState.update { it.copy(currentUser = verified, toastMessage = "Profil güncellendi.") }
     }
 
     private var dailyReportsJob: kotlinx.coroutines.Job? = null

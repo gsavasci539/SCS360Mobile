@@ -1268,9 +1268,8 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onNavigateToSettings = { currentSubScreen = SubScreen.SETTINGS },
                                 onRoleSelected = { viewModel.switchRole(it) },
                                 onUpdateServerConfig = { url, tenant -> viewModel.updateServerSettings(url, tenant) },
-                                onUpdateProfile = { name, email, phone, inst, branch ->
-                                    viewModel.updateProfile(name, email, phone, inst, branch)
-                                },
+                                onUpdateProfile = viewModel::updateProfile,
+                                onChangePassword = viewModel::changePassword,
                                 onLogout = { viewModel.logout() },
                                 onNavigateToDigitalId = { currentSubScreen = SubScreen.DIGITAL_ID_CARD },
                                 onNavigateToSchedule = { currentSubScreen = SubScreen.SCHEDULE },

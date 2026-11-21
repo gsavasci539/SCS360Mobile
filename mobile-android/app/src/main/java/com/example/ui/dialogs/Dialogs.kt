@@ -32,7 +32,6 @@ import androidx.compose.ui.window.Dialog
 import com.example.data.model.ClassGroup
 import com.example.data.model.Invoice
 import com.example.data.model.Student
-import com.example.data.model.User
 import com.example.ui.components.StatusBadge
 import com.example.ui.dialogs.ceppos.CepPosPaymentDialog
 import com.example.ui.dialogs.iyzico.IyzicoPaymentDialog
@@ -687,117 +686,6 @@ fun AssignStudentDialog(
                     ) {
                         Text("Öğrenciyi Sınıfa Ekle", fontWeight = FontWeight.Bold)
                     }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun EditProfileDialog(
-    currentName: String,
-    currentEmail: String,
-    currentPhone: String,
-    onDismiss: () -> Unit,
-    onConfirm: (fullName: String, email: String, phone: String) -> Unit
-) {
-    var fullName by remember { mutableStateOf(currentName) }
-    var email by remember { mutableStateOf(currentEmail) }
-    var phone by remember { mutableStateOf(currentPhone) }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp).padding(vertical = 16.dp)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(20.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Profili Düzenle", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = null) }
-                }
-
-                OutlinedTextField(value = fullName, onValueChange = { fullName = it }, label = { Text("Ad Soyad") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("E-posta") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Telefon") }, modifier = Modifier.fillMaxWidth())
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Button(
-                    onClick = {
-                        if (fullName.isNotBlank()) {
-                            onConfirm(fullName, email, phone)
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Kaydet", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ProfileDialog(
-    user: User,
-    onDismiss: () -> Unit,
-    onConfirm: (name: String, email: String, phone: String, institution: String, branch: String) -> Unit
-) {
-    var fullName by remember { mutableStateOf(user.full_name) }
-    var email by remember { mutableStateOf(user.email) }
-    var phone by remember { mutableStateOf(user.phone ?: "") }
-    var instName by remember { mutableStateOf(user.institution_name) }
-    var branchName by remember { mutableStateOf(user.branch_name) }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp).padding(vertical = 16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Kullanıcı Profilini Düzenle", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = null) }
-                }
-
-                OutlinedTextField(value = fullName, onValueChange = { fullName = it }, label = { Text("Ad Soyad") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("E-posta") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Telefon Numarası") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = instName, onValueChange = { instName = it }, label = { Text("Kurum Adı") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = branchName, onValueChange = { branchName = it }, label = { Text("Şube Adı") }, modifier = Modifier.fillMaxWidth())
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Button(
-                    onClick = {
-                        if (fullName.isNotBlank()) {
-                            onConfirm(fullName, email, phone, instName, branchName)
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Değişiklikleri Kaydet", fontWeight = FontWeight.Bold)
                 }
             }
         }

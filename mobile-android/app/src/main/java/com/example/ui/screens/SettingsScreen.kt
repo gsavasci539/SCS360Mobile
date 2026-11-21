@@ -43,7 +43,7 @@ fun SettingsScreen(
     onOpenFeedback: (() -> Unit)? = null,
     onOpenNotificationSettings: (() -> Unit)? = null,
     onClearLocalCache: (() -> Unit)? = null,
-    onChangePassword: ((String, String) -> Unit)? = null,
+    onChangePassword: (suspend (String, String) -> Unit)? = null,
     onLogout: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -624,6 +624,7 @@ fun SettingsScreen(
 
                     OutlinedButton(
                         onClick = { showChangePasswordDialog = true },
+                        enabled = onChangePassword != null,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp)
                     ) {
@@ -818,13 +819,10 @@ fun SettingsScreen(
         }
     }
 
-    if (showChangePasswordDialog) {
+    if (showChangePasswordDialog && onChangePassword != null) {
         ChangePasswordDialog(
             onDismiss = { showChangePasswordDialog = false },
-            onConfirm = { curr, newP ->
-                onChangePassword?.invoke(curr, newP)
-                showChangePasswordDialog = false
-            }
+            onConfirm = onChangePassword
         )
     }
 }

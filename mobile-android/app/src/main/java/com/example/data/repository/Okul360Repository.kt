@@ -332,9 +332,14 @@ class Okul360Repository(private val context: Context) {
         true
     }
 
-    suspend fun changePassword(currentPass: String, newPass: String): Boolean = requestContext {
-        apiService.changePassword(mapOf("current_password" to currentPass, "new_password" to newPass))
-        true
+    suspend fun changePassword(accountId: String, currentPass: String, newPass: String) = requestContext {
+        com.example.data.remote.NativeAccountClient(apiService).changePassword(accountId, currentPass, newPass)
+    }
+
+    suspend fun updateOwnProfile(accountId: String, firstName: String, lastName: String, email: String,
+        phone: String, currentPassword: String?): User = requestContext {
+        com.example.data.remote.NativeAccountClient(apiService)
+            .updateProfile(accountId, firstName, lastName, email, phone, currentPassword)
     }
 
     suspend fun recordPayment(request: RecordPaymentRequest): Boolean = requestContext {

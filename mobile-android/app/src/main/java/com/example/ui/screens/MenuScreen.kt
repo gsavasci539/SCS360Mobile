@@ -26,7 +26,8 @@ import com.example.data.model.UserRole
 import com.example.ui.components.RoleContextualAiCard
 import com.example.ui.components.SectionTitle
 import com.example.ui.components.StatusBadge
-import com.example.ui.dialogs.ProfileDialog
+import com.example.ui.dialogs.AccountProfileDialog
+import com.example.ui.dialogs.ChangePasswordDialog
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.Okul360UiState
 
@@ -54,7 +55,8 @@ fun MenuScreen(
     onNavigateToSettings: () -> Unit,
     onRoleSelected: (UserRole) -> Unit,
     onUpdateServerConfig: (url: String, tenant: String) -> Unit,
-    onUpdateProfile: (name: String, email: String, phone: String, institution: String, branch: String) -> Unit,
+    onUpdateProfile: suspend (String, String, String, String, String?) -> Unit,
+    onChangePassword: suspend (String, String) -> Unit,
     onLogout: () -> Unit,
     onNavigateToDigitalId: () -> Unit = {},
     onNavigateToSchedule: () -> Unit = {},
@@ -362,16 +364,22 @@ fun MenuScreen(
     }
 
     // Profile Dialog
+    var showPasswordDialog by remember { mutableStateOf(false) }
     if (showProfileModal) {
-        ProfileDialog(
+        AccountProfileDialog(
             user = state.currentUser,
             onDismiss = { showProfileModal = false },
-            onConfirm = { name, email, phone, inst, branch ->
-                onUpdateProfile(name, email, phone, inst, branch)
+            onChangePassword = {
                 showProfileModal = false
-            }
+                showPasswordDialog = true
+            },
+            onSave = onUpdateProfile,
         )
     }
+    if (showPasswordDialog) ChangePasswordDialog(
+        onDismiss = { showPasswordDialog = false },
+        onConfirm = onChangePassword,
+    )
 }
 
 @Composable

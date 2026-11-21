@@ -92,6 +92,9 @@ interface Okul360ApiService {
     @GET("auth/me")
     suspend fun getCurrentUserAuth(): User
 
+    @PUT("auth/me")
+    suspend fun updateOwnProfile(@Body body: Map<String, String>): Map<String, String>
+
     @POST("auth/refresh")
     suspend fun refreshToken(@Body body: Map<String, String>): AuthResponse
 
@@ -102,7 +105,7 @@ interface Okul360ApiService {
     suspend fun resetPassword(@Body body: Map<String, String>): Map<String, Any>
 
     @POST("auth/change-password")
-    suspend fun changePassword(@Body body: Map<String, String>): Map<String, Any>
+    suspend fun changePassword(@Body body: Map<String, String>): Map<String, String>
 
 
     // Dashboard
