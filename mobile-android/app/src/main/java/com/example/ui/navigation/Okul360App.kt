@@ -1002,7 +1002,8 @@ fun Okul360App(viewModel: Okul360ViewModel) {
                                 onReloadBranches = viewModel::loadBranches,
                                 onSwitchBranch = { bId -> viewModel.switchBranch(bId) },
                                 onSaveOrganization = viewModel::saveRegistryOrganization,
-                                onSaveBranch = viewModel::saveRegistryBranch
+                                onSaveBranch = viewModel::saveRegistryBranch,
+                                onRemoveBranch = viewModel::removeRegistryBranch
                             )
                             SubScreen.RFID_DEVICES -> RfidDevicesScreen(
                                 state = state,

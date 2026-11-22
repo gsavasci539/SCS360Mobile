@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -16,6 +17,7 @@ import com.example.data.model.Branch
 import com.example.data.model.Organization
 import com.example.ui.navigation.NativeNavigationPolicy
 import com.example.ui.viewmodel.Okul360UiState
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -27,6 +29,7 @@ fun OrganizationsBranchesScreen(
     onSwitchBranch: (String) -> Unit,
     onSaveOrganization: suspend (Organization, Organization) -> String?,
     onSaveBranch: suspend (Branch?, Branch) -> String?,
+    onRemoveBranch: suspend (Branch) -> String?,
 ) {
     val actor = state.currentUser
     val organizationId = if (actor.is_super_admin == true) state.workspaceOrganizationId else actor.organization_id
@@ -40,6 +43,10 @@ fun OrganizationsBranchesScreen(
     var editingOrganization by remember(organizationId) { mutableStateOf<Organization?>(null) }
     var editingBranch by remember(organizationId) { mutableStateOf<Branch?>(null) }
     var addingBranch by remember(organizationId) { mutableStateOf(false) }
+    var removing by remember(organizationId) { mutableStateOf<Branch?>(null) }
+    var removingBusy by remember(organizationId) { mutableStateOf(false) }
+    var removalError by remember(organizationId) { mutableStateOf<String?>(null) }
+    val removalScope = rememberCoroutineScope()
     val tabs = listOfNotNull(
         0.takeIf { canReadOrg }?.let { it to "Kurum" },
         1.takeIf { canReadBranches }?.let { it to "Şubeler" },
@@ -109,7 +116,15 @@ fun OrganizationsBranchesScreen(
                     items(visibleBranches, key = { it.id }) { branch ->
                         Card(Modifier.fillMaxWidth().testTag("branch_card_${branch.id}")) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Text(branch.name, style = MaterialTheme.typography.titleMedium)
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                    Text(branch.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                                    if (canEditBranches) {
+                                        IconButton(onClick = { removalError = null; removing = branch },
+                                            modifier = Modifier.testTag("remove_branch_${branch.id}")) {
+                                            Icon(Icons.Default.DeleteOutline, contentDescription = "Şubeyi kaldır")
+                                        }
+                                    }
+                                }
                                 if (branch.code.isNotBlank()) Text("Kod ${branch.code}")
                                 Text("${branch.student_count} öğrenci · Kapasite ${branch.capacity}")
                                 Text(if (branch.is_active) "Etkin" else "Pasif")
@@ -136,6 +151,33 @@ fun OrganizationsBranchesScreen(
         }
     }
 
+    removing?.let { branch ->
+        AlertDialog(
+            onDismissRequest = { if (!removingBusy) removing = null },
+            title = { Text("Şubeyi kaldır") },
+            text = { Column {
+                Text("${branch.name} şube listesinden kaldırılacak.")
+                removalError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            } },
+            confirmButton = {
+                TextButton(enabled = !removingBusy, modifier = Modifier.testTag("confirm_remove_branch"), onClick = {
+                    if (!removingBusy && canEditBranches) {
+                        removingBusy = true
+                        removalError = null
+                        removalScope.launch {
+                            try {
+                                removalError = onRemoveBranch(branch)
+                                if (removalError == null) removing = null
+                            } finally {
+                                removingBusy = false
+                            }
+                        }
+                    }
+                }) { Text(if (removingBusy) "Doğrulanıyor…" else "Şubeyi kaldır") }
+            },
+            dismissButton = { TextButton(enabled = !removingBusy, onClick = { removing = null }) { Text("Vazgeç") } },
+        )
+    }
     editingOrganization?.let { original ->
         RegistryLocationEditor("Kurum bilgileri", listOf(
             RegistryEditorField("name", "Kurum adı", original.name),

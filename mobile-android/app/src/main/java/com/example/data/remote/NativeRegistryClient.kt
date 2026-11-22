@@ -124,6 +124,23 @@ class NativeRegistryClient {
         }
         return branch(saved)
     }
+
+    suspend fun removeBranch(record: Branch) {
+        val id = uuid(record.id)
+        val organization = uuid(record.organization_id)
+        val path = "branches/$id"
+        val current = branch(request(path) as JSONObject)
+        check(current.id == id && current.organization_id == organization)
+        if (current.name != record.name) throw RegistryRecordChangedException()
+        request(path, "DELETE")
+        try {
+            request(path)
+        } catch (missing: RegistryHttpException) {
+            if (missing.code == 404) return
+            throw missing
+        }
+        error("Şubenin kaldırıldığı sunucuda doğrulanamadı.")
+    }
     suspend fun classes(branchId: String?) = pages("classes" + query("branch_id" to branchId)).map(::classroom).also { rows ->
         check(branchId == null || rows.all { it.branch_id == branchId })
     }

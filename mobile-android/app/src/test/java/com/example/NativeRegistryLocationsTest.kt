@@ -35,13 +35,21 @@ class NativeRegistryLocationsTest {
         val previousUrl = ApiClientProvider.activeBaseUrl
         val previous = listOf(api.authToken, api.tenantId, api.branchId, api.workspaceOrganizationId)
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        val removed = AtomicBoolean(false)
+        val removals = CopyOnWriteArrayList<String>()
         server.createContext("/api/") { exchange ->
             val path = exchange.requestURI.path
             val method = exchange.requestMethod
             val branch = path.startsWith("/api/branches")
             val target = if (branch) branchRow else orgRow
-            val body = if (method != "GET") JSONObject(exchange.requestBody.bufferedReader().use { it.readText() }) else null
+            val body = if (method == "POST" || method == "PUT") JSONObject(exchange.requestBody.bufferedReader().use { it.readText() }) else null
+            val status = if (branch && method == "GET" && removed.get()) 404 else 200
             val data = when {
+                method == "DELETE" -> {
+                    removals += path
+                    removed.set(!stale.get())
+                    JSONObject.NULL
+                }
                 body != null -> {
                     writes += "$method $path" to body
                     val next = JSONObject(target.get().toString())
@@ -55,7 +63,7 @@ class NativeRegistryLocationsTest {
             }
             val bytes = JSONObject().put("success", true).put("data", data).toString().toByteArray()
             exchange.responseHeaders.set("Content-Type", "application/json")
-            exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.sendResponseHeaders(status, bytes.size.toLong())
             exchange.responseBody.use { it.write(bytes) }
         }
         server.start()
@@ -78,6 +86,13 @@ class NativeRegistryLocationsTest {
                 val updated = client.saveBranch(saved, saved.copy(city = "Ankara", is_active = false))
                 assertFalse(updated.is_active)
                 assertEquals("Ankara", updated.city)
+                assertTrue(runCatching { client.removeBranch(updated.copy(organization_id = UUID(22, 9).toString())) }.isFailure)
+                assertTrue(removals.isEmpty())
+                stale.set(true)
+                assertTrue(runCatching { client.removeBranch(updated) }.isFailure)
+                stale.set(false)
+                client.removeBranch(updated)
+                assertEquals(listOf("/api/branches/$branchId", "/api/branches/$branchId"), removals.toList())
             }
             assertEquals(4, writes.size)
             assertEquals(setOf("email", "tax_number"), writes.first().second.keys().asSequence().toSet())

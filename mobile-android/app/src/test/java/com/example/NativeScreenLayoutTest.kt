@@ -35,6 +35,7 @@ class NativeScreenLayoutTest {
             branches = listOf(Branch(id = "branch", organization_id = "school", name = "Yetkili şube"),
                 Branch(id = "other-branch", organization_id = "other", name = "Başka şube")))
         var attempted: Branch? = null
+        var removal: Branch? = null
         compose.setContent {
             DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(DpSize(780.dp, 360.dp)) then DeviceConfigurationOverride.FontScale(2f)) {
                 Okul360Theme {
@@ -42,6 +43,9 @@ class NativeScreenLayoutTest {
                         onSwitchBranch = {}, onSaveOrganization = { _, _ -> null }, onSaveBranch = { _, draft ->
                             attempted = draft
                             "Bağlantı kurulamadı"
+                        }, onRemoveBranch = { branch ->
+                            removal = branch
+                            "Kaldırma doğrulanamadı"
                         })
                 }
             }
@@ -50,6 +54,12 @@ class NativeScreenLayoutTest {
         compose.onNodeWithText("Başka kurum").assertDoesNotExist()
         compose.onNodeWithTag("registry_tab_1").performClick()
         compose.onNodeWithText("Başka şube").assertDoesNotExist()
+        compose.onNodeWithTag("registry_branches_list").performScrollToNode(hasTestTag("remove_branch_branch"))
+        compose.onNodeWithTag("remove_branch_branch").assertIsDisplayed().performClick()
+        compose.onNodeWithTag("confirm_remove_branch").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Kaldırma doğrulanamadı").assertIsDisplayed()
+        assertEquals("branch", removal?.id)
+        compose.onNodeWithText("Vazgeç").performClick()
         compose.onNodeWithTag("fab_add_branch").performClick()
         compose.onNodeWithTag("registry_field_name").performScrollTo().performTextInput("Yeni şube")
         compose.onNodeWithTag("registry_field_capacity").performScrollTo().performTextInput("35")

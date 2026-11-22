@@ -781,6 +781,27 @@ class Okul360ViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    suspend fun removeRegistryBranch(record: Branch): String? {
+        if (registryOrganizationId() != record.organization_id || !NativeNavigationPolicy.has(_uiState.value.currentUser, "branch.write")) {
+            return "Bu şubeyi kaldırma yetkisi gerekli."
+        }
+        val scope = com.example.data.remote.ApiClientProvider.interceptor.captureScope()
+        return try {
+            com.example.data.remote.NativeRegistryClient().removeBranch(record)
+            if (!scope.current()) return "Oturum değişti. Şube listesini yeniden açın."
+            if (_uiState.value.selectedBranchId == record.id) switchBranch("all")
+            _uiState.update { current -> current.copy(branches = current.branches.filterNot { it.id == record.id },
+                toastMessage = "Şubenin kaldırıldığı doğrulandı.") }
+            null
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (changed: com.example.data.remote.RegistryRecordChangedException) {
+            changed.message
+        } catch (_: Exception) {
+            "Şubenin kaldırıldığı doğrulanamadı. Şube listesini yenileyin."
+        }
+    }
+
     fun loadClasses() {
         viewModelScope.launch(requestFailures) {
             val classList = repository.getClasses(_uiState.value.selectedBranchId)
