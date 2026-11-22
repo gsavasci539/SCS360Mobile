@@ -3,6 +3,7 @@ package com.example
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.model.AttendanceStatus
+import com.example.ui.screens.attendanceMonthCsv
 import com.example.data.remote.*
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
@@ -54,6 +55,7 @@ class NativeAttendanceApiTest {
             assertEquals("/api/attendance/reports/monthly", exchange.requestURI.path)
             assertEquals("year=2026&month=11&class_id=$classroom", exchange.requestURI.rawQuery)
             val row = JSONObject().put("date", day).put("class_id", if (wrongClass) actor else classroom)
+                .put("class_name", " =\"Sınıf A,B\"")
                 .put("present", 2).put("absent", 1).put("late", 0).put("excused", 0).put("half_day", 1).put("total_students", 4)
             reply(exchange, JSONObject().put("year", 2026).put("month", 11).put("class_id", classroom).put("total", 4)
                 .put("rows", JSONArray().put(row)))
@@ -66,6 +68,10 @@ class NativeAttendanceApiTest {
             assertEquals(day, saved.day.toString())
             assertEquals(4, saved.total)
             assertEquals(1, saved.statusCounts[AttendanceStatus.HALF_DAY])
+            val csv = attendanceMonthCsv(listOf(saved))
+            assertTrue(csv.startsWith("\uFEFF\"Tarih\",\"Sınıf\",\"Toplam öğrenci\""))
+            assertTrue(csv.endsWith("\"2026-11-10\",\"' =\"\"Sınıf A,B\"\"\",\"4\",\"2\",\"1\",\"0\",\"0\",\"1\""))
+            assertFalse(csv.contains(classroom))
         }
     }
 

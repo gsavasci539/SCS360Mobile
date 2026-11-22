@@ -15,7 +15,7 @@ import java.util.UUID
 data class RegistryChoice(val id: String, val name: String)
 class RegistryHttpException(val code: Int) : IOException("İstek reddedildi (HTTP $code)")
 class RegistryRecordChangedException : IllegalStateException("Kayıt değişmiş. Güncel listeyi inceleyip formu yeniden açın; taslağınız otomatik uygulanmadı.")
-data class AttendanceMonthDay(val day: LocalDate, val statusCounts: Map<AttendanceStatus, Int>) {
+data class AttendanceMonthDay(val day: LocalDate, val statusCounts: Map<AttendanceStatus, Int>, val className: String?) {
     val total: Int get() = statusCounts.values.sum()
 }
 
@@ -72,7 +72,7 @@ class NativeRegistryClient {
             val day = LocalDate.parse(row.getString("date"))
             check(YearMonth.from(day) == month && row.getString("class_id") == selected)
             val counts = AttendanceStatus.entries.associateWith { row.getInt(it.name.lowercase(java.util.Locale.ROOT)) }
-            AttendanceMonthDay(day, counts).also {
+            AttendanceMonthDay(day, counts, nullable(row, "class_name")).also {
                 check(counts.values.all { count -> count >= 0 } && it.total > 0 && row.getInt("total_students") == it.total)
             }
         }.sortedBy(AttendanceMonthDay::day)

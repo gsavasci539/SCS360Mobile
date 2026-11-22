@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,13 +16,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.model.AttendanceRecord
 import com.example.data.model.AttendanceStatus
 import com.example.data.remote.AttendanceMonthDay
+import com.example.data.remote.ApiClientProvider
 import com.example.data.remote.NativeRegistryClient
+import com.example.data.remote.NativeRequestScope
 import com.example.ui.components.*
 import com.example.ui.theme.PrimaryBlue
 import com.example.ui.theme.SecondaryEmerald
@@ -28,6 +33,9 @@ import com.example.ui.viewmodel.Okul360UiState
 import java.time.LocalDate
 import java.time.YearMonth
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+
+private data class AttendanceExport(val filters: List<Any?>, val request: NativeRequestScope, val rows: List<AttendanceMonthDay>)
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -59,13 +67,46 @@ fun AttendanceScreen(
     var reportLoading by remember(reportScope) { mutableStateOf(false) }
     var reportError by remember(reportScope) { mutableStateOf<String?>(null) }
     var reportRevision by remember(reportScope) { mutableIntStateOf(0) }
+    var reportRequest by remember(reportScope) { mutableStateOf<NativeRequestScope?>(null) }
+    var pendingExport by remember { mutableStateOf<AttendanceExport?>(null) }
+    var exportMessage by remember(reportScope) { mutableStateOf<String?>(null) }
+    val currentFilters by rememberUpdatedState(reportScope)
+    val localContext = LocalContext.current
+    val exportScope = rememberCoroutineScope()
+    val saveCsv = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        val export = pendingExport
+        if (uri == null || export == null || export.filters != currentFilters || !export.request.current()) {
+            pendingExport = null
+        } else {
+            exportScope.launch {
+                try {
+                    export.request.io {
+                        checkNotNull(localContext.contentResolver.openOutputStream(uri, "w")).use { output ->
+                            output.write(attendanceMonthCsv(export.rows).toByteArray(Charsets.UTF_8))
+                        }
+                    }
+                    if (export.filters == currentFilters) exportMessage = "Yoklama CSV dosyası kaydedildi."
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    if (export.filters == currentFilters) exportMessage = "CSV dosyası kaydedilemedi."
+                } finally {
+                    pendingExport = null
+                }
+            }
+        }
+    }
     LaunchedEffect(monthlyView, reportScope, reportRevision) {
         if (!monthlyView || reportClass == null || reportMonth == null) return@LaunchedEffect
         reportLoading = true
         reportError = null
         reportRows = null
+        reportRequest = null
         try {
+            val request = ApiClientProvider.interceptor.captureScope()
             reportRows = NativeRegistryClient().attendanceMonth(reportClass, reportMonth)
+            request.ensureCurrent()
+            reportRequest = request
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
@@ -129,6 +170,22 @@ fun AttendanceScreen(
                     val failure = reportError
                     item {
                         Text(reportMonth?.toString().orEmpty(), style = MaterialTheme.typography.titleMedium)
+                        val request = reportRequest
+                        if (!rows.isNullOrEmpty() && request != null && reportMonth != null) {
+                            OutlinedButton(enabled = pendingExport == null && request.current(), onClick = {
+                                if (pendingExport == null && request.current()) {
+                                    pendingExport = AttendanceExport(reportScope, request, rows)
+                                    exportMessage = null
+                                    try {
+                                        saveCsv.launch("aylik-yoklama-$reportMonth.csv")
+                                    } catch (_: android.content.ActivityNotFoundException) {
+                                        pendingExport = null
+                                        exportMessage = "Dosya seçici açılamadı."
+                                    }
+                                }
+                            }) { Text("CSV olarak kaydet") }
+                        }
+                        exportMessage?.let { Text(it) }
                         when {
                             reportClass == null -> Text("Aylık yoklama için sınıf seçin.")
                             reportLoading -> LinearProgressIndicator(Modifier.fillMaxWidth())
